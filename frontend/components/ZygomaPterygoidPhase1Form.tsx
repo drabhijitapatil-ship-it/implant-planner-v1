@@ -352,16 +352,108 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
   // orange banner and all zygomatic-specific sections.
   const isPterygoidLite = procedureType === 'Pterygoid and Conventional Implants';
 
-  const showSinusCaution = (() => {
-    const opening = parseFloat(value?.pre_surgical?.interincisal_opening_mm || '');
-    const sinusOK = value?.pre_surgical?.sinus_health;
-    const omcR = value?.pre_surgical?.omc_patent?.right;
-    const omcL = value?.pre_surgical?.omc_patent?.left;
-    if (!Number.isNaN(opening) && opening > 0 && opening < 35) return true;
-    if (sinusOK === 'No') return true;
-    if (omcR === 'No' || omcL === 'No') return true;
-    return false;
+  // iter-Feb-2026 (v3): Section 4 Pre-Surgical caution flags — context-
+  // specific messages for each trigger. Multiple triggers stack. Layout
+  // is vertical (icon on top, text below) to guarantee no clipping on
+  // narrow (390px) mobile viewports.
+  const cautionFlags: { key: string; message: string }[] = (() => {
+    const flags: { key: string; message: string }[] = [];
+    const openingStr = value?.pre_surgical?.interincisal_opening_mm || '';
+    const opening = parseFloat(openingStr);
+    if (!Number.isNaN(opening) && opening > 0 && opening < 35) {
+      flags.push({
+        key: 'opening',
+        message: `Limited maximum interincisal opening (${opening} mm < 35 mm). Reassess anaesthesia plan — GA nasal intubation is typically required. Verify surgical access before proceeding.`,
+      });
+    }
+    if (value?.pre_surgical?.sinus_health === 'No') {
+      flags.push({
+        key: 'sinus',
+        message: 'Sinus pathology detected. Obtain ENT clearance and consider treatment of sinusitis / mucosal disease before zygomatic implant placement.',
+      });
+    }
+    if (value?.pre_surgical?.omc_patent?.right === 'No') {
+      flags.push({
+        key: 'omc-r',
+        message: 'Right ostiomeatal complex is NOT patent. Sinus obstruction may compromise post-operative drainage and implant path safety. ENT consultation recommended.',
+      });
+    }
+    if (value?.pre_surgical?.omc_patent?.left === 'No') {
+      flags.push({
+        key: 'omc-l',
+        message: 'Left ostiomeatal complex is NOT patent. Sinus obstruction may compromise post-operative drainage and implant path safety. ENT consultation recommended.',
+      });
+    }
+    return flags;
   })();
+
+  // iter-Feb-2026 (v3): Auto-generate Diagnostic Summary from Sections 1-12.
+  // Called by the "⚡ Generate Summary" button in Section 13. Overwrites
+  // the 4 chip fields + narrative — user can still edit afterwards.
+  const generateDiagnosticSummary = () => {
+    const p1: any = value || {};
+    // Derive Cawood-Howell from residual ridge form (Section 6)
+    const cawood = p1?.intraoral?.residual_ridge_form || '';
+    // Derive ZAGA per side (Section 12)
+    const zagaR = p1?.zaga?.right || '';
+    const zagaL = p1?.zaga?.left || '';
+    // Bedrossian classification — derived from Bedrossian Zone availability
+    // (Section 11). Classic Bedrossian: Class I (bone in all zones), Class II
+    // (deficient premolar/molar), Class III (deficient premaxilla).
+    const bz: any = p1?.bedrossian_zones || {};
+    const zonesFilled = (side: 'right' | 'left') => ({
+      premax: parseFloat(bz?.zone1_premaxilla_mm?.[side] || '0') > 0,
+      premolar: parseFloat(bz?.zone1_premolar_mm?.[side] || '0') > 0,
+      molar: parseFloat(bz?.zone1_molar_mm?.[side] || '0') > 0,
+    });
+    const r = zonesFilled('right'); const l = zonesFilled('left');
+    let bedrossian = '';
+    const anyPremax = r.premax || l.premax;
+    const anyPosterior = r.premolar || l.premolar || r.molar || l.molar;
+    if (anyPremax && anyPosterior) bedrossian = 'Class I — Bone available in all zones';
+    else if (anyPremax && !anyPosterior) bedrossian = 'Class II — Posterior maxillary deficiency';
+    else if (!anyPremax && anyPosterior) bedrossian = 'Class III — Premaxillary deficiency';
+    else bedrossian = 'Class IV — Global maxillary atrophy';
+
+    // Narrative summary (5-sentence template)
+    const narrativeParts: string[] = [];
+    const cfg = p1?.configuration || value?.configuration || '';
+    if (cfg) narrativeParts.push(`Planned rehabilitation: ${cfg}.`);
+    if (cawood) narrativeParts.push(`Residual maxillary ridge classified as Cawood-Howell ${cawood}.`);
+    if (bedrossian) narrativeParts.push(`Bedrossian classification: ${bedrossian}.`);
+    if (zagaR || zagaL) {
+      const zagaText = `ZAGA classification (Aparicio): ${zagaR || 'not assessed'} right, ${zagaL || 'not assessed'} left.`;
+      narrativeParts.push(zagaText);
+    }
+    const anaes = p1?.anaesthesia_plan || '';
+    if (anaes) narrativeParts.push(`Anaesthesia plan: ${anaes}.`);
+    const opening = p1?.pre_surgical?.interincisal_opening_mm;
+    const sinus = p1?.pre_surgical?.sinus_health;
+    if (opening) narrativeParts.push(`Maximum interincisal opening: ${opening} mm.`);
+    if (sinus) narrativeParts.push(`Sinus health: ${sinus === 'Yes' ? 'unremarkable' : 'pathology present — ENT clearance advised'}.`);
+    // Design check flags
+    const dc = p1?.design_checks || {};
+    const failedChecks: string[] = [];
+    if (dc.apices_distance === 'No') failedChecks.push('inadequate apices distance');
+    if (dc.heads_within_prosthetic_envelope === 'No') failedChecks.push('heads outside prosthetic envelope');
+    if (dc.ap_spread_adequate === 'No') failedChecks.push('inadequate A-P spread');
+    if (dc.cantilever_eliminated === 'No') failedChecks.push('unresolved cantilever');
+    if (failedChecks.length) narrativeParts.push(`Design-check concerns: ${failedChecks.join(', ')}.`);
+
+    const narrative = narrativeParts.join(' ') || 'Insufficient data — please complete Sections 1-12 before regenerating.';
+
+    onChange({
+      ...(value || {}),
+      diagnostic_summary: {
+        ...(value?.diagnostic_summary || {}),
+        cawood_howell: cawood,
+        bedrossian: bedrossian,
+        zaga_right: zagaR,
+        zaga_left: zagaL,
+        overall_summary: narrative,
+      },
+    });
+  };
 
   // Section 6 helper — reused inside both variants (full + lite).
   const renderIntraoralSection = () => (
@@ -470,10 +562,17 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
         <Field label="Inter-arch Space at planned VDO">
           <TextField value={value?.pre_surgical?.interarch_space_at_vdo_mm} placeholder="mm" onChange={v => set('pre_surgical.interarch_space_at_vdo_mm', v)} keyboardType="decimal-pad" readOnly={readOnly} />
         </Field>
-        {showSinusCaution ? (
-          <View style={s.warning}>
-            <Ionicons name="warning" size={16} color="#E65100" />
-            <Text style={s.warningText}>Caution flag: limited mouth opening / sinus / OMC concern — reassess before proceeding.</Text>
+        {cautionFlags.length > 0 ? (
+          <View style={s.cautionGroup} testID="pre-surgical-caution-group">
+            {cautionFlags.map(f => (
+              <View key={f.key} style={s.warning} testID={`pre-surgical-caution-${f.key}`}>
+                <View style={s.warningHeaderRow}>
+                  <Ionicons name="warning" size={18} color="#E65100" />
+                  <Text style={s.warningTitle}>Caution</Text>
+                </View>
+                <Text style={s.warningText}>{f.message}</Text>
+              </View>
+            ))}
           </View>
         ) : null}
         <Field label="Notes / Cautions">
@@ -568,6 +667,21 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
 
       {/* 13. Diagnostic Summary */}
       <SectionCard title="13. Diagnostic Summary" icon="document-text-outline" tint="#455A64">
+        {/* iter-Feb-2026 (v3): Auto-generate button — computes 4 chip fields
+            + narrative summary from Sections 1-12. All fields remain editable. */}
+        {!readOnly ? (
+          <TouchableOpacity
+            style={s.generateBtn}
+            onPress={generateDiagnosticSummary}
+            testID="generate-diagnostic-summary-btn"
+          >
+            <Ionicons name="flash-outline" size={16} color="#fff" />
+            <Text style={s.generateBtnText}>Generate Summary from Sections 1-12</Text>
+          </TouchableOpacity>
+        ) : null}
+        <Text style={s.generateHelper}>
+          Tap to auto-populate Cawood-Howell, Bedrossian, ZAGA (R/L) and a narrative summary from the data above. You can edit any field afterwards.
+        </Text>
         <Field label="Cawood-Howell Class">
           <ChipRow options={CAWOOD_HOWELL} value={value?.diagnostic_summary?.cawood_howell} onChange={v => set('diagnostic_summary.cawood_howell', v)} readOnly={readOnly} />
           {/* iter-Feb-2026 (v2): Cawood-Howell description also here */}
@@ -586,6 +700,16 @@ const ZygomaPterygoidPhase1Form: React.FC<Props> = ({ procedureType, value, onCh
         </Field>
         <Field label="ZAGA Type — Left side">
           <ChipRow options={ZAGA_TYPES} value={value?.diagnostic_summary?.zaga_left} onChange={v => set('diagnostic_summary.zaga_left', v)} readOnly={readOnly} />
+        </Field>
+        {/* iter-Feb-2026 (v3): Narrative summary field */}
+        <Field label="Overall Diagnostic Summary (editable narrative)">
+          <TextField
+            value={value?.diagnostic_summary?.overall_summary}
+            placeholder="Tap 'Generate Summary' to auto-fill from Sections 1-12, or type your own narrative here..."
+            onChange={v => set('diagnostic_summary.overall_summary', v)}
+            multiline readOnly={readOnly}
+            testID="diagnostic-summary-narrative"
+          />
         </Field>
       </SectionCard>
 
@@ -738,16 +862,26 @@ const s = StyleSheet.create({
   bilateralHalf: { flex: 1 },
   sideLabel: { fontSize: 11, color: '#78909C', marginBottom: 4, fontWeight: '600' },
   helper: { fontSize: 11, color: '#78909C', fontStyle: 'italic', marginTop: 4 },
+  cautionGroup: { marginTop: 8, marginBottom: 8 },
   warning: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    backgroundColor: '#FFF3E0', borderRadius: 6, padding: 10, marginTop: 8, marginBottom: 8,
-    marginHorizontal: 4,
+    // iter-Feb-2026 (v3): switched to column layout — icon+title on top,
+    // wrapped text below — guarantees NO clipping on any viewport width.
+    flexDirection: 'column', alignItems: 'stretch',
+    backgroundColor: '#FFF3E0', borderRadius: 6,
+    paddingVertical: 10, paddingHorizontal: 12,
+    marginBottom: 8, marginHorizontal: 0,
     borderLeftWidth: 3, borderLeftColor: '#FB8C00',
-    flexWrap: 'wrap',
+    width: '100%',
+  },
+  warningHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 4,
+  },
+  warningTitle: {
+    fontSize: 13, fontWeight: '700', color: '#E65100', marginLeft: 6,
   },
   warningText: {
-    fontSize: 12, color: '#E65100', marginLeft: 8,
-    flex: 1, flexShrink: 1, flexWrap: 'wrap', lineHeight: 17,
+    fontSize: 12, color: '#5D4037',
+    lineHeight: 18, flexWrap: 'wrap',
   },
   // iter-Feb-2026 (v2): Cawood-Howell class description box (Section 6 + 13)
   classDescBox: {
@@ -769,6 +903,19 @@ const s = StyleSheet.create({
   },
   reasonLabel: { fontSize: 12, fontWeight: '600', color: '#5D4037', marginBottom: 4 },
   reasonAsterisk: { color: '#C62828', fontWeight: '700' },
+  // iter-Feb-2026 (v3): Auto-generate summary button (Section 13)
+  generateBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#5E35B1', paddingVertical: 10, paddingHorizontal: 12,
+    borderRadius: 8, marginBottom: 6,
+    ...Platform.select({
+      ios: { shadowColor: '#5E35B1', shadowOpacity: 0.15, shadowRadius: 3, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 2 },
+      web: { boxShadow: '0 2px 4px rgba(94,53,177,0.15)' },
+    }),
+  },
+  generateBtnText: { color: '#fff', fontWeight: '700', fontSize: 13, marginLeft: 6 },
+  generateHelper: { fontSize: 11, color: '#78909C', fontStyle: 'italic', marginBottom: 10, lineHeight: 15 },
   // iter-Feb-2026 (v2): Pterygoid-lite variant banner (blue, informational)
   liteBanner: {
     flexDirection: 'row', alignItems: 'flex-start',

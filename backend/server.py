@@ -491,6 +491,15 @@ class ProcedureCreate(BaseModel):
     #         "4 Pterygoid + conventional" |
     #         "Zygoma + pterygoid + conventional"
     zygoma_pterygoid_configuration: Optional[str] = Field("", max_length=100)
+    # iter-Feb-2026 (v3): Conventional implant placement sites for mixed
+    # advanced+conventional cases. FDI codes (e.g., ["11","12","21","22"]).
+    # Populated by the "Conventional Implant Location" FDI chart shown in
+    # Phase 1 for Pterygoid+Conventional, Zygoma+Conventional, and
+    # Zygoma,Pterygoid+Conventional procedure types. Distinct from
+    # `missing_teeth` (which captures teeth that are absent/to-be-extracted)
+    # — this list captures teeth positions where conventional implants
+    # will be placed alongside the advanced anchor implants.
+    conventional_implant_locations: Optional[List[str]] = Field(default_factory=list)
 
     @field_validator('patient_name')
     @classmethod
@@ -570,6 +579,8 @@ class ProcedureUpdate(BaseModel):
     # iter-Feb-2026: Zygoma & Pterygoid workflow data on the draft/update model.
     zygoma_pterygoid_data: Optional[Dict[str, Any]] = None
     zygoma_pterygoid_configuration: Optional[str] = Field(None, max_length=100)
+    # iter-Feb-2026 (v3): Conventional implant sites for mixed advanced+conventional cases.
+    conventional_implant_locations: Optional[List[str]] = None
 
     @field_validator('patient_name')
     @classmethod

@@ -45,6 +45,8 @@ import {
   calculateMedicalRisk,
   getProstheticOptions,
   isZygomaPterygoidProcedure,
+  isZygomaFullArchProcedure,
+  needsConventionalImplantLocation,
   PHASE1_ATTACHMENT_TYPE_OPTIONS,
 } from '../../constants/checklist';
 
@@ -434,6 +436,9 @@ export default function NewProcedureScreen() {
     // iter-Feb-2026: Zygoma & Pterygoid workflow data.
     zygoma_pterygoid_data: {} as ZygomaPterygoidPhase1Data,
     zygoma_pterygoid_configuration: '',
+    // iter-Feb-2026 (v3): Conventional implant placement sites for mixed
+    // advanced+conventional cases (Pterygoid+Conv, Zygoma+Conv, all-3).
+    conventional_implant_locations: [] as string[],
   });
 
   // Checklist state
@@ -627,6 +632,16 @@ export default function NewProcedureScreen() {
       return { ...prev, missing_teeth: fresh };
     });
   }, [isExistingImplantCase, existingImplantTeeth]);
+
+  // iter-Feb-2026 (v3): Zygoma cases are anatomically maxillary-only. When
+  // any of the 4 Zygoma procedure types is selected, auto-force the Arch
+  // to "Maxillary" (both on initial selection and if the procedure type is
+  // switched from a mandibular All-on-X to a Zygoma type).
+  useEffect(() => {
+    if (isZygomaFullArchProcedure(formData.implant_procedure_type) && formData.arch !== 'Maxillary') {
+      setFormData(prev => ({ ...prev, arch: 'Maxillary' }));
+    }
+  }, [formData.implant_procedure_type, formData.arch]);
 
 
   const FORM_STORAGE_KEY = `new_procedure_form_${user?.id || 'anon'}`;
@@ -1405,6 +1420,10 @@ export default function NewProcedureScreen() {
         ...(isZygomaPterygoidProcedure(sanitized.implant_procedure_type) ? {
           zygoma_pterygoid_data: { phase1: sanitized.zygoma_pterygoid_data || {} },
           zygoma_pterygoid_configuration: sanitized.zygoma_pterygoid_configuration || '',
+        } : {}),
+        // iter-Feb-2026 (v3): Conventional implant sites for mixed cases.
+        ...(needsConventionalImplantLocation(sanitized.implant_procedure_type) ? {
+          conventional_implant_locations: sanitized.conventional_implant_locations || [],
         } : {}),
       };
 
@@ -2258,8 +2277,21 @@ export default function NewProcedureScreen() {
             inside the ExistingImplantSection between Type of Implant Procedure
             Done and Implant Selection instead. */}
         {isFullArch && !isExistingImplantCase && (
-          <Dropdown label="Arch" value={formData.arch}
-            options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
+          isZygomaFullArchProcedure(formData.implant_procedure_type) ? (
+            // iter-Feb-2026 (v3): Zygoma implants are anatomically maxillary-
+            // only. Lock the Arch to "Maxillary" (read-only chip) and skip
+            // the Mandibular option entirely.
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Arch <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <View style={s_zyg_arch.lockedChip} testID="arch-locked-maxillary">
+                <Ionicons name="lock-closed" size={14} color="#5E35B1" />
+                <Text style={s_zyg_arch.lockedText}>Maxillary (locked — Zygoma cases are maxillary-only)</Text>
+              </View>
+            </View>
+          ) : (
+            <Dropdown label="Arch" value={formData.arch}
+              options={['Maxillary', 'Mandibular']} onChange={v => updateForm('arch', v)} required data-testid="arch-dropdown" />
+          )
         )}
       </View>
 
@@ -2564,6 +2596,43 @@ export default function NewProcedureScreen() {
             {countError && (
               <Text style={{ fontSize: 11, color: '#B71C1C', marginTop: 6, textAlign: 'center', fontWeight: '600' }}>{countError}</Text>
             )}
+          </View>
+        );
+      })()}
+
+      {/* iter-Feb-2026 (v3): Conventional Implant Location FDI chart.
+          Appears for the 3 mixed advanced+conventional procedure types
+          (Pterygoid+Conventional, Zygoma+Conventional, and
+          Zygoma,Pterygoid+Conventional). Same anatomical chart as
+          "Missing Teeth" but drives a separate field
+          `conventional_implant_locations`. Red for selected sites, no
+          blue for unselected — the operator picks the FDI positions
+          where conventional implants will be placed. These positions
+          are later used during Implant Selection. */}
+      {needsConventionalImplantLocation(formData.implant_procedure_type) && (() => {
+        const locs = formData.conventional_implant_locations || [];
+        return (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Conventional Implant Location</Text>
+            <Text style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+              Select the location where conventional implant/implants need to be placed
+            </Text>
+            <FdiAnatomicalChart
+              mode="multi"
+              value={locs}
+              onChange={(next) => updateForm('conventional_implant_locations', next as string[])}
+              selectedColor="#E53935"
+              presentColor="#FAFAFA"
+              presentBorderColor="#B0BEC5"
+              selectedLabel="Implant Location"
+              hidePresentLegend
+              testIDPrefix="fdi-conv-implant-loc"
+            />
+            {locs.length > 0 ? (
+              <Text style={{ fontSize: 12, color: '#B71C1C', fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
+                {locs.length} {locs.length === 1 ? 'site' : 'sites'} marked — {locs.slice().sort().join(', ')}
+              </Text>
+            ) : null}
           </View>
         );
       })()}
@@ -2897,7 +2966,12 @@ export default function NewProcedureScreen() {
               {/* iter-235: hide Atrophy Assessment for Existing Implant full-arch
                   cases — the implants are already placed so an atrophy class /
                   therapeutic-option recommendation is not actionable. */}
-              {!isExistingImplantCase && (<>
+              {/* iter-Feb-2026 (v3): also hide for Zygoma cases — the extended
+                  Zygoma Phase 1 form already captures Cawood-Howell class,
+                  Bedrossian zones, ZAGA classification and detailed zygomatic/
+                  pterygomaxillary bone assessments; a generic atrophy chip
+                  would duplicate that data and mis-classify severe atrophy. */}
+              {!isExistingImplantCase && !isZygomaFullArchProcedure(formData.implant_procedure_type) && (<>
               <Text style={[styles.subSectionTitle, { marginTop: 18 }]}>Atrophy Assessment</Text>
               <Text style={{ fontSize: 12, color: '#5C6BC0', marginBottom: 10, fontStyle: 'italic' }}>
                 Enter average bone height and width in the anterior and posterior regions for each treated arch. The class and recommended therapeutic options are computed automatically.
@@ -3576,6 +3650,22 @@ export default function NewProcedureScreen() {
 }
 
 // ─── Styles ────────────────────────────────────────────
+
+// iter-Feb-2026 (v3): Local styles for Zygoma-specific UI additions
+// (locked Arch chip + Conventional Implant Location section header).
+const s_zyg_arch = StyleSheet.create({
+  lockedChip: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#EDE7F6', borderColor: '#B39DDB',
+    borderWidth: 1, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    marginTop: 4,
+  },
+  lockedText: {
+    marginLeft: 8, fontSize: 13, fontWeight: '600', color: '#4527A0', flex: 1,
+  },
+});
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F0F4F8' },
   headerBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },

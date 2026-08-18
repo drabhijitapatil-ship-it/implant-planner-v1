@@ -218,6 +218,33 @@ export const MIXED_ADVANCED_AND_CONVENTIONAL_PROCEDURE_TYPES = [
 export const isMixedAdvancedAndConventional = (t: string | undefined | null): boolean =>
   !!t && MIXED_ADVANCED_AND_CONVENTIONAL_PROCEDURE_TYPES.includes(t);
 
+// iter-Feb-2026 (v3): Zygoma cases are always full-arch, maxillary-only
+// rehabilitations. The Phase 1 form hides the "Missing Teeth" FDI chart,
+// force-locks the Arch to "Maxillary Arch", and uses the full-arch
+// Clinical Examination workflow (except Atrophy assessment).
+export const ZYGOMA_FULL_ARCH_PROCEDURE_TYPES = [
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
+];
+
+export const isZygomaFullArchProcedure = (t: string | undefined | null): boolean =>
+  !!t && ZYGOMA_FULL_ARCH_PROCEDURE_TYPES.includes(t);
+
+// iter-Feb-2026 (v3): Cases that need a dedicated "Conventional Implant
+// Location" FDI chart (separate from the Missing Teeth chart). Operator
+// picks the FDI sites where conventional implants will be placed; those
+// sites are then surfaced during Implant Selection.
+export const CONVENTIONAL_IMPLANT_LOCATION_PROCEDURE_TYPES = [
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
+];
+
+export const needsConventionalImplantLocation = (t: string | undefined | null): boolean =>
+  !!t && CONVENTIONAL_IMPLANT_LOCATION_PROCEDURE_TYPES.includes(t);
+
 // Configuration options presented when a Zygoma/Pterygoid procedure type
 // is selected (from user brochure — 5 configurations).
 export const ZYGOMA_PTERYGOID_CONFIGURATIONS = [
@@ -315,6 +342,15 @@ export const FULL_ARCH_GROUP = new Set([
   'All on 4',
   'All on 6',
   'All on X',
+  // iter-Feb-2026 (v3): All Zygoma cases are full-arch maxillary rehabs.
+  // Membership here hides the "Missing Teeth" FDI chart, forces the
+  // full-arch Clinical Examination workflow, and locks the Arch dropdown
+  // to Maxillary. Note: "Pterygoid and Conventional Implants" is NOT
+  // included — it stays as a partial-arch case with pterygoid anchorage.
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
 ]);
 
 // All non-full-arch procedures (for Occlusal Analysis + Aesthetic Risk)
