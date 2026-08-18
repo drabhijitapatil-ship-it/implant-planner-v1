@@ -19,11 +19,14 @@ async def main():
     client = AsyncIOMotorClient(os.environ["MONGO_URL"])
     db = client[os.environ["DB_NAME"]]
 
-    # ── Clean up legacy "BLT" stub rows (iter-283 left 4 placeholder rows) ──
-    deleted = await db.implant_library.delete_many({"brand": BRAND, "system": "BLT"})
-    if deleted.deleted_count:
-        print(f"[implant_library] removed {deleted.deleted_count} legacy 'BLT' stub rows")
-    await db.implant_catalog.delete_one({"key": f"{BRAND}|BLT"})
+    # iter-Feb-2026 (v5): Destructive legacy cleanup DISABLED on startup.
+    # These delete_many calls were a one-off migration for iter-283; running
+    # them on every deploy risks removing live data in a new environment.
+    # They are now no-ops. Run manually via a migration script if needed.
+    # deleted = await db.implant_library.delete_many({"brand": BRAND, "system": "BLT"})
+    # if deleted.deleted_count:
+    #     print(f"[implant_library] removed {deleted.deleted_count} legacy 'BLT' stub rows")
+    # await db.implant_catalog.delete_one({"key": f"{BRAND}|BLT"})
 
     inserted = 0; skipped = 0
     for sys_name, sizes in SYSTEM_SIZES.items():
