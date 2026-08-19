@@ -32,6 +32,7 @@ import {
   clusterOfTooth,
 } from '../utils/implantValidation';
 import RevisionComparisonModal, { type ComparisonRevision } from './RevisionComparisonModal';
+import ZygomaImplantSelection, { type ZygImplantRow } from './ZygomaImplantSelection';
 
 
 // ── Drilling Protocol PDF helpers (A4, backend-rendered) ────────────────────
@@ -196,6 +197,10 @@ interface ImplantPlanItem {
   position: string; brand: string; system: string; diameter: number; length: number;
   bone_width?: number; bone_height?: number; bone_type?: string;
   risk_level?: string; risk_score?: number;
+  // iter-Jun-2026 (v6): Zygoma/Pterygoid extended fields
+  implant_type?: 'conventional' | 'zygoma' | 'pterygoid';
+  side?: 'Right' | 'Left' | '';
+  row_label?: string;
 }
 interface Props {
   procedureId: string;
@@ -626,6 +631,20 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
   const canDeleteImplant = canEdit && !phase2Done;
 
   const [survivalReview, setSurvivalReview] = useState<any | null>(null);
+  // iter-Jun-2026 (v6): Zygoma/Pterygoid procedure context for the specialized
+  // implant selector. `zygConfig` is the Phase 1 configuration string,
+  // `convLocations` the pre-selected FDI codes for conventional implants in
+  // mixed cases.
+  const [zygConfig, setZygConfig] = useState<string>('');
+  const [convLocations, setConvLocations] = useState<string[]>([]);
+  const ZYG_PROCEDURE_TYPES = new Set<string>([
+    'Quad Zygoma Implants',
+    'Zygoma and Pterygoid Implants',
+    'Pterygoid and Conventional Implants',
+    'Zygoma and Conventional Implants',
+    'Zygoma, Pterygoid and Conventional Implants',
+  ]);
+  const isZygCase = !!procedureType && ZYG_PROCEDURE_TYPES.has(procedureType);
 
   const loadData = useCallback(async () => {
     try {
@@ -662,7 +681,12 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
       if (toothRes.status === 'fulfilled') setToothRecs(toothRes.value.data || {});
       // iter-345: load survival review so Implant Planning cards can show
       // Active/Inactive badges + append replacement cards at the bottom.
-      if (procRes.status === 'fulfilled') setSurvivalReview(procRes.value.data?.phase2_survival_review || null);
+      if (procRes.status === 'fulfilled') {
+        setSurvivalReview(procRes.value.data?.phase2_survival_review || null);
+        // iter-Jun-2026 (v6): pick up Phase 1 zygoma config + conventional sites
+        setZygConfig(procRes.value.data?.zygoma_pterygoid_configuration || '');
+        setConvLocations(procRes.value.data?.conventional_implant_locations || []);
+      }
     } catch (err) {
       console.error('Failed to load implant planning data:', err);
     } finally {
@@ -750,11 +774,103 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
 
   const usedPositions = plans.map(p => p.position);
 
+  // iter-Jun-2026 (v6): Bidirectional mappers between the shared
+  // ImplantPlanItem shape and the ZygImplantRow used by ZygomaImplantSelection.
+  const plansToZygRows = (list: ImplantPlanItem[]): ZygImplantRow[] =>
+    list.map(p => ({
+      implant_type: (p.implant_type as any) || 'conventional',
+      side: p.side as any,
+      tooth_position: (!p.implant_type || p.implant_type === 'conventional') ? p.position : undefined,
+      brand: p.brand,
+      system: p.system,
+      diameter: p.diameter,
+      length: p.length,
+      row_label: p.row_label,
+    }));
+  const zygRowsToPlans = (rows: ZygImplantRow[]): ImplantPlanItem[] => {
+    // Deterministic synthetic position codes so each zygoma/pterygoid row
+    // has a unique `position` (backend enforces uniqueness + <=10 rows).
+    const rightZygCount: number[] = [];
+    const leftZygCount: number[] = [];
+    const rightPterCount: number[] = [];
+    const leftPterCount: number[] = [];
+    return rows.map(r => {
+      let position = r.tooth_position || '';
+      let row_label = r.row_label || '';
+      if (r.implant_type === 'zygoma') {
+        if (r.side === 'Right') {
+          rightZygCount.push(1);
+          const n = rightZygCount.length;
+          position = `ZR${n}`;
+          row_label = row_label || `Zygoma Right #${n}`;
+        } else if (r.side === 'Left') {
+          leftZygCount.push(1);
+          const n = leftZygCount.length;
+          position = `ZL${n}`;
+          row_label = row_label || `Zygoma Left #${n}`;
+        }
+      } else if (r.implant_type === 'pterygoid') {
+        if (r.side === 'Right') {
+          rightPterCount.push(1);
+          const n = rightPterCount.length;
+          position = `PR${n}`;
+          row_label = row_label || `Pterygoid Right${n > 1 ? ` #${n}` : ''}`;
+        } else if (r.side === 'Left') {
+          leftPterCount.push(1);
+          const n = leftPterCount.length;
+          position = `PL${n}`;
+          row_label = row_label || `Pterygoid Left${n > 1 ? ` #${n}` : ''}`;
+        }
+      }
+      // Placeholder brand/system/diameter/length for rows in "configure me" state
+      // (Quad Zygoma pre-populates 4 empty rows). Backend requires these fields,
+      // so we send safe defaults; a completed row will overwrite them.
+      return {
+        position,
+        brand: r.brand || 'TBD',
+        system: r.system || 'TBD',
+        diameter: typeof r.diameter === 'number' ? r.diameter : Number(r.diameter) || 0,
+        length: typeof r.length === 'number' ? r.length : Number(r.length) || 0,
+        implant_type: (r.implant_type as any) || 'conventional',
+        side: (r.side as any) || undefined,
+        row_label: row_label || undefined,
+      } as ImplantPlanItem;
+    });
+  };
+
   if (loading) {
     return (
       <View style={st.loadingBox}>
         <ActivityIndicator size="small" color="#1E88E5" />
         <Text style={st.loadingText}>Loading implant plans...</Text>
+      </View>
+    );
+  }
+
+  // iter-Jun-2026 (v6): Zygoma/Pterygoid procedures use a specialized picker
+  // that bypasses the FDI tooth-chart flow (Zygomas/Pterygoids don't anchor
+  // in tooth sockets). Falls back to the standard planning UI otherwise.
+  if (isZygCase) {
+    return (
+      <View style={st.container} data-testid="case-implant-planning">
+        <View style={st.header}>
+          <View style={st.headerLeft}>
+            <Ionicons name="medical" size={22} color="#5E35B1" />
+            <Text style={st.headerTitle}>Zygoma / Pterygoid Implant Planning</Text>
+          </View>
+          <View style={st.badge} data-testid="zyg-implant-count">
+            <Text style={st.badgeText}>{plans.length}</Text>
+          </View>
+        </View>
+        <ZygomaImplantSelection
+          procedureType={procedureType || ''}
+          configuration={zygConfig}
+          conventionalLocations={convLocations}
+          systems={systems as any}
+          value={plansToZygRows(plans)}
+          onChange={(rows) => savePlans(zygRowsToPlans(rows))}
+          readOnly={!canEdit || !!saving}
+        />
       </View>
     );
   }

@@ -803,7 +803,7 @@ def _validate_done_date(d, prev_date, label):
 
 
 class ImplantPlanItem(BaseModel):
-    position: str  # FDI tooth number e.g. "14"
+    position: str  # FDI tooth number e.g. "14" OR synthetic Zyg/Pter code e.g. "ZR1", "PL"
     brand: str
     system: str
     diameter: float
@@ -813,6 +813,13 @@ class ImplantPlanItem(BaseModel):
     bone_type: Optional[str] = None
     risk_level: Optional[str] = None
     risk_score: Optional[int] = None
+    # iter-Jun-2026 (v6): Zygoma/Pterygoid extended fields.
+    # `implant_type` distinguishes conventional vs zygoma vs pterygoid rows in
+    # advanced (full-arch, ZAGA/Bedrossian) cases where "position" is a
+    # synthetic anchor code (ZR1..ZL2 / PR / PL) rather than an FDI tooth.
+    implant_type: Optional[str] = None       # 'conventional' | 'zygoma' | 'pterygoid'
+    side: Optional[str] = None                # 'Right' | 'Left'  (zygoma/pterygoid only)
+    row_label: Optional[str] = None           # e.g. 'Right #1', 'Left #2', 'Pterygoid Right'
 
 class ImplantPlanSave(BaseModel):
     implants: List[ImplantPlanItem]
@@ -10255,8 +10262,8 @@ async def save_implant_plan(
                 detail="Implant positions cannot be added or removed after Phase 2 surgery. Existing positions can still be edited.",
             )
 
-    if len(plan.implants) < 1 or len(plan.implants) > 6:
-        raise HTTPException(status_code=400, detail="Must plan between 1 and 6 implants")
+    if len(plan.implants) < 1 or len(plan.implants) > 10:
+        raise HTTPException(status_code=400, detail="Must plan between 1 and 10 implants")
 
     # Validate unique positions
     positions = [imp.position for imp in plan.implants]
@@ -10276,6 +10283,10 @@ async def save_implant_plan(
             "bone_type": imp.bone_type,
             "risk_level": imp.risk_level,
             "risk_score": imp.risk_score,
+            # iter-Jun-2026 (v6): Zygoma/Pterygoid extended fields
+            "implant_type": imp.implant_type or "conventional",
+            "side": imp.side,
+            "row_label": imp.row_label,
         })
 
     # iter-277: track field-level edits to the implant plan once Phase 1
@@ -23249,6 +23260,17 @@ async def seed_on_startup():
         await db.implant_library.update_many(
             {"implant_type": {"$exists": False}},
             {"$set": {"implant_type": "conventional"}},
+        )
+
+        # iter-Feb-2026 (v6): Retag B&B Dental "3P Long" (Ø 3.75/4.0 × L 18-24 mm)
+        # as PTERYGOID — long extra-alveolar geometry indicated for pterygoid
+        # anchorage in full-arch rehabs. Idempotent (safe on every startup).
+        await db.implant_library.update_many(
+            {"brand": "B&B Dental", "system": "3P Long"},
+            {"$set": {
+                "implant_type": "pterygoid",
+                "indication": "Pterygoid anchorage (posterior maxilla, long extra-alveolar length)",
+            }},
         )
 
         total = await db.implant_library.count_documents({})
