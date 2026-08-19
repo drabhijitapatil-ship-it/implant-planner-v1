@@ -303,7 +303,39 @@ backend:
         agent: "testing"
         comment: "✅ INSTRUCTOR ASSIGNMENT NOTIFICATION WORKING CORRECTLY! Complete notification workflow tested: 1) Retrieved initial notification count (13 notifications) for Dr. Abhijit Patil ✅, 2) Created new procedure assigning Dr. Abhijit as instructor (ID: 699eb8df2a6b555951cc990f) ✅, 3) Verified notification count increased to 16 notifications ✅, 4) Found specific assignment notification: 'You have been assigned as Instructor for a new procedure by Gaurav Pandey for patient Test Notification Assignment' ✅. The system correctly creates assignment notifications when instructors are assigned to new procedures."
 
+  - task: "Zygoma/Pterygoid Implant Selection Backend (v6)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Extended /api/procedures/{id}/implant-plan to accept new optional fields on ImplantPlanItem: implant_type ('conventional'|'zygoma'|'pterygoid'), side ('Right'|'Left'), row_label. Bumped max implants per case from 6 to 10 (Quad Zygoma + up to 4 conventional). Persisted the new fields into implant_docs. Existing unique-position + status-gated validation kept intact. Need to verify: (a) POST implant-plan with mixed rows (zygoma with position 'ZR1', pterygoid 'PR1', conventional '15') succeeds and returns count=3, (b) GET implant-plan returns the new fields, (c) posting 4 zygoma rows with positions ZR1/ZR2/ZL1/ZL2 succeeds, (d) posting duplicate synthetic positions is rejected, (e) posting >10 rows is rejected. Use existing credentials: student gaurav.pandey@student.dental.edu / Student@123 and supervisor abhijit.patil@dental.edu / Admin@123."
+      - working: true
+        agent: "testing"
+        comment: "✅ v6 backend implant-plan extensions VERIFIED (iter-407, 5/5 pytest passed — /app/backend/tests/test_zygoma_v6_implant_plan.py, junit /app/test_reports/pytest/iter407_zygoma_v6.xml). Cases: (a) POST 4 Quad-Zygoma rows (ZR1/ZR2/ZL1/ZL2, implant_type='zygoma', side, row_label) → 200 count=4; (b) GET returns all 4 rows with implant_type/side/row_label preserved (defaults to 'conventional' if unset); (c) POST 11 rows → 400 'Must plan between 1 and 10 implants'; (d) duplicate positions (two ZR1) → 400 'unique tooth position'; (e) mixed payload (zygoma ZR1 + pterygoid PR1 + conventional FDI '15') → 200 count=3, GET verifies per-row implant_type. Limit raise 6→10 and new optional fields all working."
+
+
 frontend:
+  - task: "Zygoma/Pterygoid Implant Selection Frontend (v6)"
+    implemented: true
+    working: true
+    file: "frontend/components/ZygomaImplantSelection.tsx, frontend/components/CaseImplantPlanning.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Introduced a specialized implant selection UI that replaces the FDI tooth-chart picker inside CaseImplantPlanning when the procedure_type is one of the 5 Zygoma/Pterygoid types ('Quad Zygoma Implants', 'Zygoma and Pterygoid Implants', 'Pterygoid and Conventional Implants', 'Zygoma and Conventional Implants', 'Zygoma, Pterygoid and Conventional Implants'). Behavior to verify in an existing Zygoma/Pterygoid case (or a newly created one): (1) Zygoma header 'Zygoma / Pterygoid Implant Planning' with purple medical icon appears in place of standard FDI planning; (2) For 'Quad Zygoma Implants' 4 rows are auto-populated (Right #1, Right #2, Left #1, Left #2) as empty configurable cards; (3) Tapping an empty card opens the modal, shows implant TYPE cards driven by Phase 1 configuration (only zygoma card for Quad Zygoma; zygoma+pterygoid for 'Zygoma and Pterygoid'; three cards for the mixed type); (4) Side chips (Right/Left) required for zygoma/pterygoid; (5) System list is filtered to the selected implant_type; (6) Save persists via existing /procedures/{id}/implant-plan; (7) Standard FDI-chart based 'Add Implant Position' UI is HIDDEN for these procedure types; (8) Editing existing rows still works. Test with student credentials gaurav.pandey / Student@123 and supervisor abhijit.patil / Admin@123."
+      - working: true
+        agent: "testing"
+        comment: "✅ v6 frontend Zygoma/Pterygoid Implant Selection VERIFIED (iter-407, Playwright mobile 390x844). On a Quad Zygoma Implants case (/procedures/6a854ae0b4683aab80704d86): (1) purple 'Zygoma / Pterygoid Implant Selection' header + medical icon rendered (note: implementation uses 'Selection' not 'Planning' — cosmetic diff from request copy); (2) 4 rows pre-populated with labels Right #1, Right #2, Left #1, Left #2, all showing Refirm · Z-Series with correct diameters/lengths from persisted data — testIDs zyg-implant-row-0..3 present; (3) Standard FDI 'Add Implant Position' pill is NOT rendered (add_pill:false); (4) Tapping 'Add Implant' (zyg-add-implant-btn) opens 'Add Implant' modal showing ONLY the 'Select Zygoma Implant' card (data-testid zyg-type-zygoma) — matches Quad Zygoma configuration; (5) Tapping an existing row opens 'Edit Implant' modal with ZYGOMA type badge + Side chips (zyg-side-Right, zyg-side-Left) + Refirm Z-Series system + Diameter Ø4 + Length list (30-60mm) + Update Implant button (zyg-modal-save); (6) Regression on Single Conventional Implant case (/procedures/6a6b7fbf6633443cf356df15) confirms zygoma testIDs absent and standard FDI/implant planning UI still active. Pre-existing (unrelated to this iteration) console warning 'Unexpected text node' appears on both zygoma and non-zygoma procedure detail pages."
+
+
   - task: "New Procedure Form Submission (Android Crash Fix - Issue #5)"
     implemented: true
     working: true
@@ -386,12 +418,16 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Zygoma/Pterygoid Implant Selection Backend (v6)"
+    - "Zygoma/Pterygoid Implant Selection Frontend (v6)"
   stuck_tasks: []
   test_all: false
-  test_priority: "completed"
+  test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: "🎉 iter-407 Zygoma/Pterygoid Implant Selection (v6) VERIFIED — backend 5/5 pytest pass + frontend Playwright confirms Quad-Zygoma pre-population, single Zygoma type card in Add Implant modal, Edit modal with Side chips + Refirm Z-Series, absent FDI 'Add Implant Position' pill, and non-zygoma regression case still using standard implant planning UI. Backend tests: /app/backend/tests/test_zygoma_v6_implant_plan.py (junit iter407_zygoma_v6.xml). Full report: /app/test_reports/iteration_407.json. Minor cosmetic note: header uses 'Zygoma / Pterygoid Implant Selection' (implementation) vs 'Planning' (request copy) — main agent may want to align. Pre-existing 'Unexpected text node' warning on procedure detail page is NOT introduced by this feature (reproduced on non-zygoma case)."
   - agent: "testing"
     message: "Comprehensive backend API testing completed successfully. All 8 major backend functionality areas tested and working correctly: 1) User registration & authentication, 2) Procedure creation, 3) Get procedures with filtering, 4) Instructor approval workflow, 5) Implant incharge approval workflow, 6) Rejection workflow, 7) Notifications system, 8) Security & error handling. The approval workflow functions perfectly with proper status transitions and notifications. Backend API is fully functional and ready for production use."
   - agent: "testing"
