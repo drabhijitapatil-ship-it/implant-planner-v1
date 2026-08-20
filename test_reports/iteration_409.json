@@ -1,0 +1,39 @@
+{
+  "summary": "Chunk 1 v8 Frontend testing (Playwright 390x844, Abhijit.patil / Admin@123). TASK 2 (Zygoma/Pterygoid Card Redesign) PASSES end-to-end on Quad Zygoma case 6a854ae0b4683aab80704d86: 4 pre-populated rows render as Conventional-style cards — orange badge (R1/R2/L1/L2), titles 'Zygoma Right' / 'Zygoma Left', green Active chip (zyg-status-{idx}), orange ZYGOMA type-pill, specs 'Refirm · Z-Series' and 'D: 4mm | L: 45/50mm', plus Edit (zyg-edit-implant-{idx}) and Remove (zyg-delete-implant-{idx}) buttons in the actions row. Tapping Edit on row 0 opens the specialized modal with 'Edit Implant' header, ZYGOMA badge, Side chips (Right/Left present via zyg-side-Right/Left), Refirm Z-Series system, diameter (Ø4) and length picker. Tapping Remove on row 3 triggered the native confirm dialog ('Remove implant?') and was dismissed successfully. Mixed-case regression on 6a86acfc08151ce737bf7390: Zygoma / Pterygoid Implant Planning header renders with config '2 zygoma + anterior conventional', divider 'Conventional Implants' visible, and standard 'Add Conventional Implant' button below — Conventional flow preserved. TASK 1 (Patient Card Zygoma/Pterygoid Pills) is BLOCKED by seed data: the pill code (procedures.tsx L244-274) is correctly implemented with all required testIDs, but every Zygoma/Pterygoid case in the DB (including the two target IDs) has status='draft' and DefaultProceduresScreen filters drafts out of the My Cases list (procedures.tsx L86). No non-draft Zygoma/Pterygoid procedure exists for any user, so the pill container can never render on the My Cases screen in the current environment. Pre-existing 'Unexpected text node' console warnings persist (already noted in iter-407, unrelated to this iteration).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "TASK 1 — Patient Card Zygoma Pills visibility on My Cases",
+        "issue": "Target seed cases (6a854ae0b4683aab80704d86 Quad Zygoma and 6a86acfc08151ce737bf7390 Zyg+Conv) are in status='draft'. DefaultProceduresScreen filters out drafts (procedures.tsx L86: 'response.data.filter(p => p.status !== draft)'). No non-draft Zygoma/Pterygoid case exists in DB, so the pill container zyg-pills-{id} never renders on the My Cases list and the visual test cannot be executed against real data. The pill code itself is correct on inspection.",
+        "affected_testIDs": ["zyg-pills-{id}", "zyg-pill-zygoma-{id}", "zyg-pill-pterygoid-{id}", "zyg-pill-config-{id}"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "ZygomaImplantSelection.tsx / procedures.tsx", "issue": "Pre-existing console error spam: 'Unexpected text node: . A text node cannot be a child of a <View>.' appears repeatedly on both zygoma detail page and My Cases page. Documented in iter-407 as not introduced by this iteration but still present."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_409.json"
+  ],
+  "action_items": [
+    "TASK 2 (Card Redesign): mark working=true, needs_retesting=false — verified end-to-end.",
+    "TASK 1 (Patient Card Pills): DO NOT mark working=true yet. Either (a) transition an existing Zygoma case out of draft (e.g. submit-phase1 on 6a854ae0b4683aab80704d86 as its student Gaurav.pandey → then approve to leave draft), or (b) create a fresh Quad Zygoma + Zyg+Conv case via the New Case flow so status=pending_phase1 and it surfaces on My Cases. After that, re-run Task 1 verification to visually confirm the orange Zygoma pill, purple config pill ('Quad zygoma' / '2 zygoma + anterior conventional'), and non-zygoma regression card absence.",
+    "Consider (optional): audit the 'Unexpected text node' console warning — appears to come from stray whitespace or empty template literal between JSX children; not blocking but noisy."
+  ],
+  "critical_code_review_comments": [
+    "procedures.tsx L244-274: pill IIFE correctly guards on regex /zygoma/i and /pterygoid/i and only renders the container when at least one of hasZyg/hasPter is true. numberOfLines={1} on the config pill is fine, but very long configuration strings will be truncated with no ellipsis fallback (maxWidth 240 on zygPill). Consider showing a tooltip or wrapping to 2 lines on wide configs.",
+    "ZygomaImplantSelection.tsx L138: fallback branch for row.implant_type === 'conventional' uses colors {bg:#FFFDE7...} but per the new v7 architecture, conventional rows in mixed cases are rendered by the parent CaseImplantPlanning, not by ZygomaImplantSelection. This fallback path is likely dead. Safe to leave as-is but could be pruned for clarity.",
+    "ZygomaImplantSelection.tsx L152: for row.implant_type === 'conventional' the title falls back to `FDI ${row.tooth_position}` — same dead-path note as above.",
+    "ZygomaImplantSelection.tsx cardSt.actions has paddingLeft: 48 to align under the badge column — good. Touch targets for Edit/Remove text buttons are only ~40x18 which is smaller than the 44pt guideline; consider expanding hitSlop or padding. Not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "TASK2: 100% pass; TASK1: 0% executed (blocked by seed data — code inspection PASS)"},
+  "seed_data_creation": "None. Existing DB seed cases are all in draft status; environment does not have any non-draft Zygoma/Pterygoid procedure to exercise the My Cases pill rendering.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Chunk 1 v8 Card Redesign is verified working on Quad Zygoma case 6a854ae0b4683aab80704d86 via https://dental-consent-sign.preview.emergentagent.com/procedures/{id}. To re-verify Chunk 1 v8 Patient Pills, first ensure at least one Zygoma or Pterygoid procedure has status != 'draft' (either submit_phase1 an existing draft or create a new case with implant_procedure_type='Quad Zygoma Implants' via /api/procedures). Then log in as Abhijit.patil, navigate to My Cases → All tab → search patient/registration → verify data-testid selectors zyg-pills-{id}, zyg-pill-zygoma-{id}, zyg-pill-config-{id} render. Regression: any non-Zygoma card must NOT have a data-testid=zyg-pills-* descendant. Detail page for regression: navigate to /procedures/6a86acfc08151ce737bf7390 to see the mixed-case (2 zygoma + anterior conventional) layout with the 'Conventional Implants' divider.",
+  "rca_of_issue": "TASK 1 blocker RCA: (1) frontend/app/(tabs)/procedures.tsx line 86 filters out drafts from the My Cases list; (2) all four DB Zygoma/Pterygoid seed cases returned by GET /api/procedures for Abhijit.patil are status='draft'; (3) therefore the pill rendering path in procedures.tsx L246-274 is never entered on the list. Mitigation: promote at least one Zygoma case out of draft (submit_phase1) OR create a new Zygoma case via the app so it starts in pending_phase1."
+}

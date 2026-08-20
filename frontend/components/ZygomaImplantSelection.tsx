@@ -126,32 +126,74 @@ const ZygomaImplantSelection: React.FC<Props> = ({ procedureType, configuration,
         <Text style={st.subValue}>{configuration || 'not set'}</Text>
       </View>
 
-      {/* Implant list */}
+      {/* Implant list — iter-Jun-2026 (v8): redesigned to visually match
+          the Conventional implant card (badge + title + status/type pills +
+          Edit/Delete actions). */}
       {(value || []).map((row, idx) => {
         const isEmpty = !row.system;
+        const typeColor = row.implant_type === 'zygoma'
+          ? { bg: '#FFF3E0', border: '#FB8C00', fg: '#E65100', badgeBg: '#FFE0B2', badgeFg: '#E65100' }
+          : row.implant_type === 'pterygoid'
+            ? { bg: '#E3F2FD', border: '#1E88E5', fg: '#1565C0', badgeBg: '#BBDEFB', badgeFg: '#0D47A1' }
+            : { bg: '#FFFDE7', border: '#FBC02D', fg: '#F57F17', badgeBg: '#FFF9C4', badgeFg: '#F57F17' };
+        const sideLetter = (row.side || '').charAt(0).toUpperCase() || '?';
+        const rowNum = (() => {
+          // Count same type+side in earlier rows to derive "#1/#2" numeric
+          let n = 0;
+          for (let i = 0; i <= idx; i++) {
+            if ((value[i]?.implant_type || 'conv') === row.implant_type && value[i]?.side === row.side) n++;
+          }
+          return n;
+        })();
+        const titleLabel = row.implant_type === 'zygoma'
+          ? `Zygoma ${row.side || 'TBD'}`
+          : row.implant_type === 'pterygoid'
+            ? `Pterygoid ${row.side || 'TBD'}`
+            : row.tooth_position ? `FDI ${row.tooth_position}` : `Implant #${idx + 1}`;
         return (
-          <TouchableOpacity key={idx} style={[st.card, isEmpty && st.cardEmpty]} onPress={() => !readOnly && openEdit(idx)} testID={`zyg-implant-row-${idx}`}>
-            <View style={st.cardRow}>
-              <View style={[st.pill, { backgroundColor: row.implant_type === 'zygoma' ? '#C2185B' : row.implant_type === 'pterygoid' ? '#EF6C00' : '#00897B' }]}>
-                <Text style={st.pillText}>{(row.implant_type || 'conv').toUpperCase().slice(0, 4)}</Text>
+          <View key={idx} style={[cardSt.card, isEmpty && cardSt.cardEmpty]} testID={`zyg-implant-row-${idx}`}>
+            <View style={cardSt.header}>
+              {/* Badge — orange/blue side-badge with initial+row number */}
+              <View style={[cardSt.badge, { backgroundColor: typeColor.badgeBg }]}>
+                <Text style={[cardSt.badgeText, { color: typeColor.badgeFg }]}>{sideLetter}{rowNum > 0 ? rowNum : ''}</Text>
               </View>
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <Text style={st.cardTitle}>
-                  {row.row_label || (row.side ? `${row.side} ${row.implant_type}` : row.tooth_position ? `FDI ${row.tooth_position}` : `Implant #${idx + 1}`)}
-                </Text>
+              <View style={cardSt.info}>
+                <View style={cardSt.titleRow}>
+                  <Text style={cardSt.title} numberOfLines={2}>{titleLabel}</Text>
+                  {/* Active/Inactive chip — Zygoma cases default to Active. */}
+                  <View style={[cardSt.statusChip, cardSt.statusChipActive]} testID={`zyg-status-${idx}`}>
+                    <Text style={cardSt.statusChipText}>Active</Text>
+                  </View>
+                  {/* Type pill (orange/blue/yellow) */}
+                  <View style={[cardSt.typePill, { backgroundColor: typeColor.bg, borderColor: typeColor.border }]}>
+                    <Text style={[cardSt.typePillText, { color: typeColor.fg }]}>
+                      {(row.implant_type || 'CONV').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
                 {isEmpty ? (
-                  <Text style={st.emptyHint}>Tap to configure (side, brand, diameter, length)</Text>
+                  <Text style={cardSt.emptyHint}>Tap Edit to configure (side, brand, diameter, length)</Text>
                 ) : (
-                  <Text style={st.cardBody}>{row.brand} · {row.system} · Ø{row.diameter} × L{row.length} mm</Text>
+                  <Text style={cardSt.specs}>{row.brand} · {row.system}</Text>
+                )}
+                {!isEmpty && (
+                  <Text style={cardSt.specsDetail}>D: {row.diameter}mm | L: {row.length}mm</Text>
                 )}
               </View>
-              {!readOnly ? (
-                <TouchableOpacity onPress={() => removeRow(idx)}>
-                  <Ionicons name="close-circle" size={22} color="#C62828" />
-                </TouchableOpacity>
-              ) : null}
             </View>
-          </TouchableOpacity>
+            {!readOnly ? (
+              <View style={cardSt.actions}>
+                <TouchableOpacity style={cardSt.editBtn} onPress={() => openEdit(idx)} testID={`zyg-edit-implant-${idx}`}>
+                  <Ionicons name="pencil" size={16} color="#1E88E5" />
+                  <Text style={cardSt.editBtnText}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={cardSt.deleteBtn} onPress={() => removeRow(idx)} testID={`zyg-delete-implant-${idx}`}>
+                  <Ionicons name="trash-outline" size={16} color="#F44336" />
+                  <Text style={cardSt.deleteBtnText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
         );
       })}
 
@@ -300,6 +342,33 @@ const st = StyleSheet.create({
   input: { backgroundColor: '#F5F7FA', borderRadius: 8, borderWidth: 1, borderColor: '#CFD8DC', paddingHorizontal: 10, paddingVertical: Platform.OS === 'ios' ? 10 : 6, fontSize: 14, color: '#263238' },
   saveBtn: { backgroundColor: '#5E35B1', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginTop: 16 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+});
+
+// iter-Jun-2026 (v8): Card styling designed to visually match the standard
+// Conventional implant card (Edit/Delete/Active-Inactive pills, side-badge,
+// specs, colored type pill).
+const cardSt = StyleSheet.create({
+  card: { backgroundColor: '#FFF', borderRadius: 10, borderWidth: 1, borderColor: '#ECEFF1', padding: 14, marginBottom: 8, alignSelf: 'center', width: '100%', maxWidth: 380 },
+  cardEmpty: { borderStyle: 'dashed', backgroundColor: '#F9FAFB' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  badge: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontSize: 13, fontWeight: '800' },
+  info: { flex: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  title: { fontSize: 14, fontWeight: '600', color: '#333' },
+  statusChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  statusChipActive: { backgroundColor: '#2E7D32' },
+  statusChipText: { fontSize: 10, color: '#FFF', fontWeight: '700' },
+  typePill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, borderWidth: 1 },
+  typePillText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  specs: { fontSize: 12, color: '#546E7A', marginTop: 3 },
+  specsDetail: { fontSize: 12, color: '#888', marginTop: 1 },
+  emptyHint: { fontSize: 11, color: '#78909C', fontStyle: 'italic', marginTop: 4 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 10, paddingLeft: 48 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  editBtnText: { fontSize: 12, color: '#1E88E5', fontWeight: '600' },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  deleteBtnText: { fontSize: 12, color: '#F44336', fontWeight: '600' },
 });
 
 export default ZygomaImplantSelection;
