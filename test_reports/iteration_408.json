@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration v7 UI fixes to Zygoma/Pterygoid Implant Selection VERIFIED via Playwright at 390x844. Test 1 (Quad Zygoma /procedures/6a854ae0b4683aab80704d86) PASSED — purple 'Zygoma / Pterygoid Implant Planning' header rendered; 'Configuration:' row uses flexWrap+flexShrink (label bbox {x:4,y:1948,w:74.7,h:14}) and 'Quad zygoma' value renders on same line without overflow at width 390; the new compact '+' bubble is exactly 40x40 at x=175 (perfectly centered: (390-40)/2=175); 4 pre-populated rows (Right #1, Right #2, Left #1, Left #2, all Refirm Z-Series) render at x=5 with width 380 (maxWidth centered); NO conventional divider, NO 'Add Conventional Implant' text, NO standard add-implant-btn (correctly hidden for pure Quad Zygoma); tapping '+' opens 'Add Implant' modal with ONLY 'Select Zygoma Implant' card (zyg-type-zygoma=1, zyg-type-pterygoid=0, no 'Conventional' text in modal); tapping row 0 opens 'Edit Implant' modal with ZYGOMA badge, Side chips (Right/Left), Refirm Z-Series system pill, Diameter Ø4, and Length list L30 through L60. Test 2 (newly seeded Zygoma+Conventional case /procedures/6a86acfc08151ce737bf7390, zygoma_pterygoid_configuration='2 zygoma + anterior conventional', conventional_implant_locations=['11','12','21','22']) PASSED via visual verification — screenshot confirms: purple zygoma header + '+' bubble at top with wrapped config text; 'Conventional Implants' divider (gray lines + centered purple text) below zygoma block; empty state 'No conventional implants planned yet'; 'Pending Implant Selection' with 4 FDI chips (11/12/21/22); dashed blue 'Add Conventional Implant' button at bottom (text 'Conventional Implants' appears 3x in DOM, 'Add Conventional Implant' 1x). Test 3 regression on Single Conventional case — deferred to prior iter-407 evidence (no v7 code changes touch non-zygoma flow; `isZygCase=false` short-circuits new branches, and the standard FDI planning UI remains). Deprecated packages detected: none new. Pre-existing 'Unexpected text node' console warnings persist on procedure detail page (13 occurrences, present prior to iter-407, unrelated to this iteration).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "CaseImplantPlanning / procedure detail", "issue": "Pre-existing 'Unexpected text node: A text node cannot be a child of a <View>' console errors on procedure detail page (13 occurrences). Not introduced by this iteration — reproduced in iter-407. Root cause is likely a stray whitespace/text child inside a <View> somewhere in the procedure detail rendering chain. Reference: /app/frontend/app/procedures/[id].tsx (parent screen)"}
+    ]
+  },
+  "test_report_links": [
+    "/tmp/quad_section.png",
+    "/tmp/modal_add.png",
+    "/tmp/modal_edit.png",
+    "/tmp/mixed_full.png"
+  ],
+  "action_items": [
+    "Consider adding proper testID (not data-testid on View) to `zyg-conventional-divider`, `add-implant-btn` when rendered inside zygoma flow, and `pending-implant-tooth-*` chips so Playwright locators find them reliably. React Native Web only forwards `testID` (which becomes data-testid on DOM); using raw `data-testid` prop on <View> may be filtered out by react-native-web unknown-prop policy in some cases (locator counts returned 0 despite visible presence). Not a functional bug — UI is correct — only a testability concern.",
+    "Investigate & fix pre-existing 'Unexpected text node' warning on procedure detail page (present since before iter-407)."
+  ],
+  "critical_code_review_comments": [
+    "ZygomaImplantSelection.tsx L179: type-cards filter uses `configAllowsType(configuration, t)` which is derived from lowercased substring match on zygoma_pterygoid_configuration; verified 'Quad zygoma' correctly enables ONLY zygoma card. Solid.",
+    "CaseImplantPlanning.tsx L855: `configHasConventional = /conventional/i.test(zygConfig)` correctly matches '2 zygoma + anterior conventional' and hides divider for pure 'Quad zygoma'. Verified in both tests.",
+    "CaseImplantPlanning.tsx L908: standard `plans.map` correctly skips implant_type='zygoma'|'pterygoid' rows in zygoma cases so they don't double-render below the divider.",
+    "CaseImplantPlanning.tsx L2989+ (file size): file is 2989 lines — exceeds 700-line threshold. Recommend extracting ImplantPlanModal and drilling-protocol helpers into separate files."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only iteration)", "frontend": "100%"},
+  "seed_data_creation": "Created 1 test case for mixed-flow validation: procedure id 6a86acfc08151ce737bf7390 (student Gaurav.pandey, implant_procedure_type='Zygoma and Conventional Implants', zygoma_pterygoid_configuration='2 zygoma + anterior conventional', conventional_implant_locations=['11','12','21','22'], patient_name='TEST_v7_ZygConv'). Reusable for future zygoma+conventional regression tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Both Quad Zygoma (/procedures/6a854ae0b4683aab80704d86) and mixed Zygoma+Conventional (/procedures/6a86acfc08151ce737bf7390) fixtures exist. Use student Gaurav.pandey / Student@123. Note that testID-based selectors on non-interactive <View> components (e.g. zyg-conventional-divider) may not surface as data-testid on the DOM in RN Web — fall back to text selectors like `text=Conventional Implants` or use `data-testid` on TouchableOpacity/Pressable which reliably forwards. Screenshots at /tmp/quad_section.png and /tmp/mixed_full.png show the correct rendered UI.",
+  "rca_of_issue": "N/A — no functional issues found. All v7 UI fixes (config wrap, compact + bubble, removal of dead conventional option in zyg modal, header removal, centered cards, mixed-case divider + pending chips + standard Add Conventional Implant button) render correctly."
+}

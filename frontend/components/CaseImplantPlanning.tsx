@@ -847,48 +847,65 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
     );
   }
 
-  // iter-Jun-2026 (v6): Zygoma/Pterygoid procedures use a specialized picker
-  // that bypasses the FDI tooth-chart flow (Zygomas/Pterygoids don't anchor
-  // in tooth sockets). Falls back to the standard planning UI otherwise.
-  if (isZygCase) {
-    return (
-      <View style={st.container} data-testid="case-implant-planning">
-        <View style={st.header}>
-          <View style={st.headerLeft}>
-            <Ionicons name="medical" size={22} color="#5E35B1" />
-            <Text style={st.headerTitle}>Zygoma / Pterygoid Implant Planning</Text>
-          </View>
-          <View style={st.badge} data-testid="zyg-implant-count">
-            <Text style={st.badgeText}>{plans.length}</Text>
-          </View>
-        </View>
-        <ZygomaImplantSelection
-          procedureType={procedureType || ''}
-          configuration={zygConfig}
-          conventionalLocations={convLocations}
-          systems={systems as any}
-          value={plansToZygRows(plans)}
-          onChange={(rows) => savePlans(zygRowsToPlans(rows))}
-          readOnly={!canEdit || !!saving}
-        />
-      </View>
-    );
-  }
+  // iter-Jun-2026 (v7): Zygoma/Pterygoid procedures render TWO stacked
+  // sections: the specialized zygoma/pterygoid picker at top, and — for
+  // mixed configurations — the standard FDI-chart conventional flow below.
+  // This gives conventional implants the same experience as Single/Multiple
+  // Conventional cases while keeping zygoma/pterygoid rows purple.
+  const configHasConventional = /conventional/i.test(zygConfig || '');
+  const showConventionalSection = !isZygCase || configHasConventional;
+  const conventionalOnlyPlans = isZygCase
+    ? plans.filter(p => !p.implant_type || p.implant_type === 'conventional')
+    : plans;
+  const zygOnlyPlans = isZygCase
+    ? plans.filter(p => p.implant_type === 'zygoma' || p.implant_type === 'pterygoid')
+    : [];
+  const allowedTeethForModal: string[] | undefined = isZygCase ? convLocations : missingTeeth;
 
   return (
     <View style={st.container} data-testid="case-implant-planning">
       <View style={st.header}>
         <View style={st.headerLeft}>
-          <Ionicons name="medical" size={22} color="#1E88E5" />
-          <Text style={st.headerTitle}>Implant Planning</Text>
+          <Ionicons name="medical" size={22} color={isZygCase ? '#5E35B1' : '#1E88E5'} />
+          <Text style={st.headerTitle}>{isZygCase ? 'Zygoma / Pterygoid Implant Planning' : 'Implant Planning'}</Text>
         </View>
         <View style={st.badge}>
           <Text style={st.badgeText}>{plans.length}</Text>
         </View>
       </View>
 
+      {/* iter-Jun-2026 (v7): Zygoma/Pterygoid picker (only for the 5 advanced procedure types) */}
+      {isZygCase && (
+        <ZygomaImplantSelection
+          procedureType={procedureType || ''}
+          configuration={zygConfig}
+          conventionalLocations={convLocations}
+          systems={systems as any}
+          value={plansToZygRows(zygOnlyPlans)}
+          onChange={(rows) => {
+            // Rebuild `plans` = (updated zyg/pter rows) + (existing conventional rows).
+            const nextZygPlans = zygRowsToPlans(rows);
+            savePlans([...nextZygPlans, ...conventionalOnlyPlans]);
+          }}
+          readOnly={!canEdit || !!saving}
+        />
+      )}
+
+      {/* iter-Jun-2026 (v7): Section divider — separates zygoma section from
+          conventional section in mixed advanced cases. */}
+      {isZygCase && showConventionalSection && (
+        <View style={st.zygDivider} data-testid="zyg-conventional-divider">
+          <View style={st.zygDividerLine} />
+          <Text style={st.zygDividerText}>Conventional Implants</Text>
+          <View style={st.zygDividerLine} />
+        </View>
+      )}
+
       {/* Saved Implant Cards */}
       {plans.map((plan, idx) => {
+        // iter-Jun-2026 (v7): In zygoma cases, skip zygoma/pterygoid rows — the
+        // dedicated ZygomaImplantSelection above already renders them.
+        if (isZygCase && (plan.implant_type === 'zygoma' || plan.implant_type === 'pterygoid')) return null;
         const rec = toothRecs[plan.position];
         // iter-345: derive Active/Inactive from survival review data.
         const surv = (survivalReview?.implants || {})[String(idx)] || {};
@@ -991,7 +1008,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                 <View style={st.siteGroupLine} />
               </View>
             )}
-          <View key={`${plan.position}-${idx}`} style={[st.implantCard, isInactive && st.implantCardInactive, isTreatmentEnded && st.implantCardEnded]} data-testid={`implant-plan-${idx}`}>
+          <View key={`${plan.position}-${idx}`} style={[st.implantCard, isInactive && st.implantCardInactive, isTreatmentEnded && st.implantCardEnded, isZygCase && st.zygCenteredCard]} data-testid={`implant-plan-${idx}`}>
             <View style={st.implantCardHeader}>
               <View style={st.positionBadge}>
                 <Text style={st.positionText}>{plan.position}</Text>
@@ -1194,7 +1211,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
             return (
               <View
                 key={`chain-${idx}-${revNum}`}
-                style={[st.implantCard, st.implantCardInactive]}
+                style={[st.implantCard, st.implantCardInactive, isZygCase && st.zygCenteredCard]}
                 testID={`implant-revision-${idx}-r${revNum}`}
                 data-testid={`implant-revision-${idx}-r${revNum}`}
               >
@@ -1265,7 +1282,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
             return (
               <View
                 key={`active-repl-${idx}`}
-                style={st.implantCard}
+                style={[st.implantCard, isZygCase && st.zygCenteredCard]}
                 testID={`implant-revision-active-${idx}`}
                 data-testid={`implant-revision-active-${idx}`}
               >
@@ -1326,20 +1343,27 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
           now rendered inline within each site's group above. The prior
           separate render block was removed. */}
 
-      {plans.length === 0 && (
+      {plans.length === 0 && !isZygCase && (
         <View style={st.emptyState}>
           <Ionicons name="medical-outline" size={36} color="#CCC" />
           <Text style={st.emptyText}>No implants planned yet</Text>
           <Text style={st.emptySubtext}>Add implant positions for this case</Text>
         </View>
       )}
+      {isZygCase && showConventionalSection && conventionalOnlyPlans.length === 0 && (
+        <View style={[st.emptyState, st.zygCenteredCard]}>
+          <Ionicons name="medical-outline" size={36} color="#CCC" />
+          <Text style={st.emptyText}>No conventional implants planned yet</Text>
+          <Text style={st.emptySubtext}>Add conventional anterior implants below</Text>
+        </View>
+      )}
 
-      {canAddImplant && Array.isArray(missingTeeth) && missingTeeth.length > 0 && (() => {
-        const planned = new Set(plans.map(p => p.position));
-        const pending = missingTeeth.filter(t => !planned.has(t));
+      {canAddImplant && showConventionalSection && Array.isArray(allowedTeethForModal) && allowedTeethForModal.length > 0 && (() => {
+        const planned = new Set(conventionalOnlyPlans.map(p => p.position));
+        const pending = (allowedTeethForModal || []).filter(t => !planned.has(t));
         if (pending.length === 0) return null;
         return (
-          <View style={st.pendingWrap} data-testid="pending-implant-teeth">
+          <View style={[st.pendingWrap, isZygCase && st.zygCenteredCard]} data-testid="pending-implant-teeth">
             <View style={st.pendingHeader}>
               <Ionicons name="alert-circle-outline" size={14} color="#E65100" />
               <Text style={st.pendingHeaderText}>Pending Implant Selection</Text>
@@ -1363,9 +1387,9 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         );
       })()}
 
-      {canAddImplant && (
+      {canAddImplant && showConventionalSection && (
         <TouchableOpacity
-          style={st.addButton}
+          style={[st.addButton, isZygCase && st.zygCenteredCard]}
           onPress={() => { setEditingIdx(null); setPendingPreset(undefined); setShowAddModal(true); }}
           disabled={saving}
           data-testid="add-implant-btn"
@@ -1375,7 +1399,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
           ) : (
             <>
               <Ionicons name="add-circle" size={20} color="#1E88E5" />
-              <Text style={st.addButtonText}>Add Implant Position</Text>
+              <Text style={st.addButtonText}>{isZygCase ? 'Add Conventional Implant' : 'Add Implant Position'}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -1394,8 +1418,8 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
         medicalAssessment={medicalAssessment}
         procedureType={procedureType}
         procedureId={procedureId}
-        allowedTeeth={missingTeeth}
-        missingTeeth={missingTeeth}
+        allowedTeeth={allowedTeethForModal}
+        missingTeeth={allowedTeethForModal}
         edentulousSiteMeasurements={edentulousSiteMeasurements}
         defaultOcclusocervical={defaultOcclusocervical}
         defaultMesiodistal={defaultMesiodistal}
@@ -2678,6 +2702,11 @@ const dc = StyleSheet.create({
 // ── Styles ─────────────────────────────────────────────────
 const st = StyleSheet.create({
   container: { marginBottom: 12 },
+  // iter-Jun-2026 (v7): centered narrow card for Zygoma-case implant cards
+  zygCenteredCard: { alignSelf: 'center', width: '100%', maxWidth: 380 },
+  zygDivider: { flexDirection: 'row', alignItems: 'center', marginTop: 14, marginBottom: 8, paddingHorizontal: 12, alignSelf: 'center', width: '100%', maxWidth: 420 },
+  zygDividerLine: { flex: 1, height: 1, backgroundColor: '#CFD8DC' },
+  zygDividerText: { fontSize: 12, fontWeight: '700', color: '#5E35B1', marginHorizontal: 10, letterSpacing: 0.4 },
   loadingBox: { backgroundColor: '#FFF', padding: 20, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
   loadingText: { fontSize: 14, color: '#666' },
   header: { backgroundColor: '#FFF', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },

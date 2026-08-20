@@ -53,11 +53,13 @@ type Props = {
   readOnly?: boolean;
 };
 
-const configAllowsType = (config: string, type: 'zygoma' | 'pterygoid' | 'conventional'): boolean => {
+const configAllowsType = (config: string, type: 'zygoma' | 'pterygoid'): boolean => {
+  // iter-Jun-2026 (v7): Conventional implants in mixed cases are handled by
+  // the parent CaseImplantPlanning FDI-chart flow (matches the Single/Multiple
+  // Conventional experience). This component now only manages zygoma + pterygoid.
   const c = (config || '').toLowerCase();
   if (type === 'zygoma') return c.includes('zygoma');
   if (type === 'pterygoid') return c.includes('pterygoid');
-  if (type === 'conventional') return c.includes('conventional');
   return false;
 };
 
@@ -118,7 +120,11 @@ const ZygomaImplantSelection: React.FC<Props> = ({ procedureType, configuration,
 
   return (
     <View style={st.wrap}>
-      <Text style={st.sub}>Configuration: <Text style={{ fontWeight: '700' }}>{configuration || 'not set'}</Text></Text>
+      {/* Config line — wraps to multiple lines on small screens so it never clips. */}
+      <View style={st.subRow}>
+        <Text style={st.subLabel}>Configuration:</Text>
+        <Text style={st.subValue}>{configuration || 'not set'}</Text>
+      </View>
 
       {/* Implant list */}
       {(value || []).map((row, idx) => {
@@ -150,10 +156,11 @@ const ZygomaImplantSelection: React.FC<Props> = ({ procedureType, configuration,
       })}
 
       {!readOnly ? (
-        <TouchableOpacity style={st.addBtn} onPress={openAdd} testID="zyg-add-implant-btn">
-          <Ionicons name="add-circle" size={20} color="#fff" />
-          <Text style={st.addBtnText}>Add Implant</Text>
-        </TouchableOpacity>
+        <View style={st.addBtnRow}>
+          <TouchableOpacity style={st.addBtnCompact} onPress={openAdd} testID="zyg-add-implant-btn" accessibilityLabel="Add Zygoma or Pterygoid implant">
+            <Ionicons name="add" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {/* Add / Edit modal */}
@@ -169,15 +176,14 @@ const ZygomaImplantSelection: React.FC<Props> = ({ procedureType, configuration,
               {!pendingType ? (
                 <>
                   <Text style={st.sectionLabel}>Select Implant Type</Text>
-                  {(['zygoma', 'pterygoid', 'conventional'] as const).filter(t => configAllowsType(configuration, t)).map(t => (
+                  {(['zygoma', 'pterygoid'] as const).filter(t => configAllowsType(configuration, t)).map(t => (
                     <TouchableOpacity key={t} style={st.typeCard} onPress={() => setPendingType(t)} testID={`zyg-type-${t}`}>
-                      <Ionicons name={t === 'zygoma' ? 'body-outline' : t === 'pterygoid' ? 'triangle-outline' : 'ellipse-outline'} size={22} color="#5E35B1" />
+                      <Ionicons name={t === 'zygoma' ? 'body-outline' : 'triangle-outline'} size={22} color="#5E35B1" />
                       <View style={{ flex: 1, marginLeft: 10 }}>
                         <Text style={st.typeCardTitle}>Select {t.charAt(0).toUpperCase() + t.slice(1)} Implant</Text>
                         <Text style={st.typeCardSub}>
-                          {t === 'zygoma' && 'Refirm Z-Series · 30-60 mm'}
+                          {t === 'zygoma' && 'Refirm Z-Series · 30-60 mm (Maxilla only)'}
                           {t === 'pterygoid' && 'Refirm P-Series · 18-25 mm  |  B&B 3P Long · 18-24 mm'}
-                          {t === 'conventional' && `${conventionalLocations.length} site${conventionalLocations.length !== 1 ? 's' : ''} pre-selected in Phase 1`}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={22} color="#78909C" />
@@ -191,43 +197,16 @@ const ZygomaImplantSelection: React.FC<Props> = ({ procedureType, configuration,
                     <TouchableOpacity onPress={() => setPendingType(null)}><Text style={st.changeLink}>Change</Text></TouchableOpacity>
                   </View>
 
-                  {/* Side for Zygoma/Pterygoid */}
-                  {pendingType !== 'conventional' ? (
-                    <>
-                      <Text style={st.sectionLabel}>Side</Text>
-                      <View style={st.chipRow}>
-                        {YES_NO_SIDE.map(s => (
-                          <TouchableOpacity key={s} onPress={() => setDraft({ ...draft, side: s as any })}
-                            style={[st.chip, draft.side === s && st.chipOn]} testID={`zyg-side-${s}`}>
-                            <Text style={[st.chipText, draft.side === s && st.chipTextOn]}>{s}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </>
-                  ) : null}
-
-                  {/* Conventional tooth position */}
-                  {pendingType === 'conventional' ? (
-                    <>
-                      <Text style={st.sectionLabel}>Tooth Position (FDI)</Text>
-                      {conventionalLocations.length ? (
-                        <>
-                          <Text style={st.helper}>Phase 1 pre-selected sites:</Text>
-                          <View style={st.chipRow}>
-                            {conventionalLocations.map(fdi => (
-                              <TouchableOpacity key={fdi} onPress={() => setDraft({ ...draft, tooth_position: fdi })}
-                                style={[st.chip, draft.tooth_position === fdi && st.chipOn]}>
-                                <Text style={[st.chipText, draft.tooth_position === fdi && st.chipTextOn]}>{fdi}</Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        </>
-                      ) : null}
-                      <Text style={st.helper}>Or enter any FDI code:</Text>
-                      <TextInput style={st.input} value={draft.tooth_position || ''} placeholder="e.g., 15" placeholderTextColor="#B0BEC5"
-                        onChangeText={v => setDraft({ ...draft, tooth_position: v })} />
-                    </>
-                  ) : null}
+                  {/* Side for Zygoma/Pterygoid — always required now that conventional is handled by parent */}
+                  <Text style={st.sectionLabel}>Side</Text>
+                  <View style={st.chipRow}>
+                    {YES_NO_SIDE.map(s => (
+                      <TouchableOpacity key={s} onPress={() => setDraft({ ...draft, side: s as any })}
+                        style={[st.chip, draft.side === s && st.chipOn]} testID={`zyg-side-${s}`}>
+                        <Text style={[st.chipText, draft.side === s && st.chipTextOn]}>{s}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
 
                   {/* System */}
                   <Text style={st.sectionLabel}>Implant System</Text>
@@ -278,11 +257,17 @@ const ZygomaImplantSelection: React.FC<Props> = ({ procedureType, configuration,
 };
 
 const st = StyleSheet.create({
-  wrap: { marginTop: 6 },
+  wrap: { marginTop: 6, width: '100%', maxWidth: 420, alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
   title: { fontSize: 14, fontWeight: '700', color: '#5E35B1', marginLeft: 6 },
-  sub: { fontSize: 12, color: '#546E7A', marginBottom: 10 },
-  card: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#ECEFF1', padding: 10, marginBottom: 8 },
+  // iter-Jun-2026 (v7): Configuration line wraps to multiple lines to avoid
+  // overflow on small phones (e.g. "Zygoma, pterygoid + conventional").
+  subRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 12, paddingHorizontal: 4 },
+  subLabel: { fontSize: 12, color: '#546E7A', marginRight: 4 },
+  subValue: { fontSize: 12, color: '#37474F', fontWeight: '700', flexShrink: 1 },
+  // Legacy `sub` kept in case referenced elsewhere.
+  sub: { fontSize: 12, color: '#546E7A', marginBottom: 10, flexWrap: 'wrap' },
+  card: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#ECEFF1', padding: 10, marginBottom: 8, alignSelf: 'center', width: '100%', maxWidth: 380 },
   cardEmpty: { borderStyle: 'dashed', backgroundColor: '#F5F7FA' },
   cardRow: { flexDirection: 'row', alignItems: 'center' },
   pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
@@ -290,6 +275,9 @@ const st = StyleSheet.create({
   cardTitle: { fontSize: 13, fontWeight: '700', color: '#37474F' },
   cardBody: { fontSize: 12, color: '#546E7A', marginTop: 2 },
   emptyHint: { fontSize: 11, color: '#78909C', fontStyle: 'italic', marginTop: 2 },
+  // iter-Jun-2026 (v7): compact centered "+" bubble instead of the wide purple bar.
+  addBtnRow: { alignItems: 'center', marginTop: 8, marginBottom: 4 },
+  addBtnCompact: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#5E35B1', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowOffset: { width: 0, height: 2 }, shadowRadius: 3, elevation: 3 },
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#5E35B1', paddingVertical: 12, borderRadius: 8, marginTop: 6 },
   addBtnText: { color: '#fff', fontWeight: '700', marginLeft: 6 },
   mBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 8 },
