@@ -42,6 +42,7 @@ import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF, generateTe
 import EndTreatmentPendingBanner from '../../components/EndTreatmentPendingBanner';
 import { downloadPreopBriefing } from '../../utils/preopBriefingPdf';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-209: removed CaseCompletionBadge — its facts merged into the green
+import ZygomaPterygoidPhase1Review from '../../components/ZygomaPterygoidPhase1Review';
 // Treatment Complete banner above the timeline.
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
@@ -2139,6 +2140,12 @@ export default function ProcedureDetailScreen() {
         </View>
 
         <PatientHistoryStrip procedure={procedure} />
+
+        {/* iter-Jun-2026 (v9, Chunk 2): Zygoma / Pterygoid Phase 1 read-only
+            review — visible to all roles (student / supervisor / in-charge /
+            admin) so everyone reviews the same clinical data. Renders nothing
+            when procedure_type is not a Zygoma/Pterygoid variant. */}
+        <ZygomaPterygoidPhase1Review procedure={procedure} />
 
         <AddImplantSection procedure={procedure} onChanged={loadProcedure} />
 

@@ -13697,6 +13697,152 @@ async def generate_case_report(
     if procedure.get("phase1_incharge_notes"):
         add_field("Implant In-Charge Comment", procedure.get("phase1_incharge_notes"))
 
+    # ── Phase 1: Zygoma / Pterygoid Extended Data ──────────────────
+    # iter-Jun-2026 (v9, Chunk 2): For Zygoma/Pterygoid procedure types,
+    # append a dedicated section with every Phase 1 sub-block. Nothing
+    # renders for regular procedure types.
+    _proc_type = str(procedure.get("implant_procedure_type") or "")
+    if "zygoma" in _proc_type.lower() or "pterygoid" in _proc_type.lower():
+        _zp = procedure.get("zygoma_pterygoid_data") or {}
+        _zp1 = _zp.get("phase1") if isinstance(_zp, dict) and isinstance(_zp.get("phase1"), dict) else _zp
+        _zp1 = _zp1 if isinstance(_zp1, dict) else {}
+        _config = procedure.get("zygoma_pterygoid_configuration") or ""
+        _conv_locs = procedure.get("conventional_implant_locations") or []
+        add_section_title("Phase 1 - Zygoma / Pterygoid Extended Data", 94, 53, 177)
+        if _config:
+            add_field("Configuration", _config)
+        if _conv_locs:
+            add_field("Conventional FDI Sites", ", ".join(map(str, _conv_locs)))
+
+        def _bi(obj):
+            if not isinstance(obj, dict):
+                return ""
+            r = obj.get("right") or ""
+            l = obj.get("left") or ""
+            if not r and not l:
+                return ""
+            return f"R: {r or '-'}  |  L: {l or '-'}"
+
+        def _sub(title, block, mapping):
+            if not isinstance(block, dict) or not block:
+                return
+            # Compute rendered fields first — skip whole sub-section if empty.
+            rendered = []
+            for label, key, fmt in mapping:
+                v = block.get(key)
+                if fmt == "bi":
+                    txt = _bi(v)
+                elif fmt == "list":
+                    txt = ", ".join(map(str, v)) if isinstance(v, list) else ""
+                else:
+                    txt = str(v) if v not in (None, "", []) else ""
+                if txt:
+                    rendered.append((label, txt))
+            if not rendered:
+                return
+            pdf.set_font("Helvetica", "BI", 11)
+            pdf.set_text_color(94, 53, 177)
+            pdf.cell(0, 7, safe(title), ln=True)
+            pdf.set_text_color(0, 0, 0)
+            for label, txt in rendered:
+                add_field(label, txt)
+            pdf.ln(1)
+
+        _sub("Diagnostic Summary", _zp1.get("diagnostic_summary"), [
+            ("Cawood-Howell", "cawood_howell", "str"),
+            ("Bedrossian", "bedrossian", "str"),
+            ("ZAGA Right", "zaga_right", "str"),
+            ("ZAGA Left", "zaga_left", "str"),
+        ])
+        # ZAGA may live at top-level as bilateral fallback.
+        _zaga = _zp1.get("zaga")
+        if isinstance(_zaga, dict) and (_zaga.get("right") or _zaga.get("left")):
+            add_field("ZAGA (bilateral)", _bi(_zaga))
+        _sub("Medical Assessment", _zp1.get("medical_assessment"), [
+            ("Immunosuppression", "immunosuppression", "str"),
+            ("Anticoagulants", "anticoagulants", "str"),
+            ("Psychological Suitability", "psychological_suitability", "str"),
+            ("GA Fitness (ASA)", "ga_fitness_asa_grade", "str"),
+            ("ASA Grade", "asa_grade", "str"),
+        ])
+        if _zp1.get("anaesthesia_plan"):
+            add_field("Anaesthesia Plan", _zp1.get("anaesthesia_plan"))
+        _sub("Pre-Surgical Assessment", _zp1.get("pre_surgical"), [
+            ("Interincisal Opening (mm)", "interincisal_opening_mm", "str"),
+            ("Sinus Health", "sinus_health", "str"),
+            ("OMC Patent", "omc_patent", "bi"),
+            ("Interarch Space @ VDO (mm)", "interarch_space_at_vdo_mm", "str"),
+            ("Caution Notes", "caution_notes", "str"),
+        ])
+        _sub("Extraoral", _zp1.get("extraoral"), [
+            ("Facial Profile", "facial_profile", "str"),
+            ("Lip Support", "lip_support", "str"),
+            ("Facial Asymmetry", "facial_asymmetry", "str"),
+            ("Zygomatic Prominence", "zygomatic_prominence", "bi"),
+            ("Notes", "notes", "str"),
+        ])
+        _sub("Intraoral", _zp1.get("intraoral"), [
+            ("Residual Ridge Form", "residual_ridge_form", "str"),
+            ("Keratinised Mucosa Width", "keratinised_mucosa_width_mm", "bi"),
+            ("Tuberosity Height", "tuberosity_height_mm", "bi"),
+            ("Tuberosity Form", "tuberosity_form", "bi"),
+            ("Palatal Vault Depth", "palatal_vault_depth_mm", "bi"),
+            ("Teeth to be Extracted", "teeth_to_be_extracted", "list"),
+        ])
+        _sub("Existing Prosthesis", _zp1.get("existing_prosthesis"), [
+            ("Currently Using", "using", "str"),
+            ("Type", "type", "str"),
+            ("Fit", "fit", "str"),
+            ("Phonetics", "phonetics", "str"),
+            ("Esthetics", "esthetics", "str"),
+            ("Patient Satisfaction", "patient_satisfaction", "str"),
+        ])
+        _sub("Radiographic", _zp1.get("radiographic"), [
+            ("Imaging Obtained", "imaging_obtained", "list"),
+            ("Field of View", "field_of_view", "str"),
+        ])
+        _sub("Zygomatic Region", _zp1.get("zygomatic_region"), [
+            ("Body Height", "body_height_mm", "bi"),
+            ("Cortical Thickness (Apex)", "cortical_thickness_apex_mm", "bi"),
+            ("Anterior Max Wall Concavity", "anterior_max_wall_concavity", "bi"),
+            ("Sinus Membrane Thickening", "sinus_membrane_thickening_mm", "bi"),
+            ("Sinus Septa Present", "sinus_septa_present", "bi"),
+            ("Ostium / OMC Patency", "ostium_omc_patency", "str"),
+            ("Orbital Floor Distance", "orbital_floor_distance_mm", "bi"),
+        ])
+        _sub("Pterygomaxillary Region", _zp1.get("pterygomaxillary_region"), [
+            ("Tuberosity Height", "tuberosity_height_mm", "bi"),
+            ("Tuberosity Bone Density", "tuberosity_bone_density", "bi"),
+            ("Pyramidal Process Volume", "pyramidal_process_volume", "bi"),
+            ("Pterygoid Plate Thickness", "pterygoid_plate_thickness_mm", "bi"),
+            ("Planned Path Length", "planned_path_length_mm", "bi"),
+            ("Greater Palatine Canal Position", "greater_palatine_canal_position", "bi"),
+            ("Maxillary Artery / Pterygoid Plexus", "maxillary_artery_pterygoid_plexus", "bi"),
+        ])
+        _sub("Bedrossian Zones (Available Bone)", _zp1.get("bedrossian_zones"), [
+            ("Zone 1 - Premaxilla", "zone1_premaxilla_mm", "bi"),
+            ("Zone 1 - Premolar", "zone1_premolar_mm", "bi"),
+            ("Zone 1 - Molar", "zone1_molar_mm", "bi"),
+        ])
+        _sub("Prosthetic Planning", _zp1.get("prosthetic_planning"), [
+            ("Diagnostic Steps", "diagnostic_steps", "list"),
+            ("Flange Required", "flange_required", "str"),
+            ("Occlusal Scheme", "occlusal_scheme", "str"),
+        ])
+        _sub("Design Checks", _zp1.get("design_checks"), [
+            ("Apices Distance", "apices_distance", "str"),
+            ("Heads Within Prosthetic Envelope", "heads_within_prosthetic_envelope", "str"),
+            ("AP Spread Adequate", "ap_spread_adequate", "str"),
+            ("Cantilever Eliminated", "cantilever_eliminated", "str"),
+        ])
+        _sub("Team Composition", _zp1.get("team_composition"), [
+            ("Primary Surgeon", "primary_surgeon", "str"),
+            ("Assistant Surgeon", "assistant_surgeon", "str"),
+            ("Anaesthetist", "anaesthetist", "str"),
+            ("Prosthodontist", "prosthodontist", "str"),
+            ("Nurse", "nurse", "str"),
+        ])
+
     # ── Phase 2: Implant Surgery ──────────────────────────────
     add_section_title("Phase 2 - Implant Surgery", 255, 107, 53)
     p2 = procedure.get("phase2_data", {})

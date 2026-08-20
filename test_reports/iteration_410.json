@@ -1,0 +1,37 @@
+{
+  "summary": "iter-410 Chunk 2 v9 Zygoma/Pterygoid Phase 1 Review section — FRONTEND verified via Playwright at 390x844. Component /app/frontend/components/ZygomaPterygoidPhase1Review.tsx injected after PatientHistoryStrip in /app/frontend/app/procedures/[id].tsx (L2148). Test 1 (Test Patient Zygoma — has data) ✅: section renders, purple body-outline icon + title 'Zygoma / Pterygoid — Phase 1' + subtitle 'Diagnosis & Treatment Planning' + chevron-up all present; expanded by default; config-pill 'Quad zygoma + 2 pterygoid' visible; bonus conv-pill 'Conventional FDI: 11, 21' shown; group titles uppercase purple (DIAGNOSTIC SUMMARY, MEDICAL ASSESSMENT, ANAESTHESIA PLAN, TEAM COMPOSITION); DS values Cawood-Howell:V, Bedrossian:3, ZAGA Right:2, ZAGA Left:1; MA Immunosuppression:None, ASA Grade:II; Anaesthesia Plan:GA + LA infiltration; Team Primary Surgeon:Dr. Patil. Header tap collapses (DS group count 1→0, config pill hidden) and re-tap expands (DS 0→1). Test 2 (Test v4 workflow — 'empty phase1' claim) ✅ with caveat: section renders, config pill 'Quad zygoma' preserved. Empty-hint (zyg-p1-review-empty) is NOT rendered — this matches the spec note that when config is present, hasAny=true so empty hint is suppressed. However, empty phase1 groups (Diagnostic Summary/Medical Assessment/Anaesthesia Plan/Pre-Surgical Assessment/Extraoral/Intraoral/Existing Prosthesis/Radiographic/Zygomatic Region/Pterygomaxillary Region/Bedrossian Zones/Prosthetic Planning/Design Checks/Team Composition) all still render their uppercase headers with no field rows under them — see 'Empty group headers UX' comment. Test 3 (non-Zygoma regression on Phase1 NoComment Test / Single Conventional Implant) ✅: zyg-p1-review testID count = 0 (early-return by isZygCase). Test 4 (student role) inferred ✅: component code has NO role-check (uses only procedure.implant_procedure_type via isZygCase), so section renders identically for any role that can load the procedure. Direct verification blocked because student Gaurav.pandey does not own ANY of the 3 known Zygoma test cases in DB (backend returns 'Procedure not found' on direct URL access to /procedures/6a8337dd... as student). Marked task working=true (test 4 blocked purely by seed-data ownership, not by component logic).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ZygomaPterygoidPhase1Review > Group",
+        "issue": "Empty Group headers still render when all Row children evaluate to null. In Test v4 workflow (empty phase1 dict) the section shows 14 uppercase group titles (MEDICAL ASSESSMENT / EXTRAORAL / INTRAORAL / RADIOGRAPHIC / etc.) with zero field rows underneath. Root cause: Group.tsx uses React.Children.toArray(children).filter(Boolean) which does NOT filter out <Row/> elements that render null via their internal `if (!value) return null` guard — the elements themselves are truthy, only their rendered output is null. Fix suggestion: change Row to be a plain function (not a component) that returns null OR let Group pass explicit `label,value` pairs and skip empties before creating elements. Reference: /app/frontend/components/ZygomaPterygoidPhase1Review.tsx:63-73 (Group) and :52-61 (Row).",
+        "testID": "zyg-p1-review-group-*",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_410.json"
+  ],
+  "action_items": [
+    "OPTIONAL fix: prevent empty group headers in the review section (see ui_bugs entry). Cosmetic — feature still passes acceptance criteria because the spec permits either behaviour when phase1 is sparse.",
+    "OPTIONAL seed: create one Zygoma/Pterygoid procedure owned by student Gaurav.pandey so future automation can directly verify per-role visibility (currently only Abhijit.patil owns the 3 seed zygoma cases).",
+    "No blocking issues. Both Chunk 2 v9 sub-tasks (UI review section + PDF export) can be marked working:true; PDF export was already verified 3/3 pytest green in a prior iteration."
+  ],
+  "critical_code_review_comments": [
+    "Nice separation of concerns — component is READ-ONLY, no role gate, no edit affordances. Correctly early-returns when isZygCase() is false.",
+    "Bilateral helper bi() and clean() are robust to missing/nested/legacy structures (phase1.* and top-level p1 both handled at L81).",
+    "testIDs are consistent and exhaustive (14 group testIDs + 4 top-level testIDs); good for regression coverage."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only run)", "frontend": "100% for tests 1-3, test 4 verified by code inspection due to seed-data ownership"},
+  "seed_data_creation": "None — used existing DB fixtures.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The Chunk 2 v9 Zygoma/Pterygoid Phase 1 read-only Review section is fully functional. It appears right after PatientHistoryStrip in the Case Details page. Component ignores role and only checks procedure.implant_procedure_type. Cases known to work: 'Test Patient Zygoma' (id 6a8337dd64ad3269dc584a69) fully populated; 'Test v4 workflow' (id 6a845d57cff336ac29b34ac1) minimal phase1 but shows empty group headers (documented). To retest as student, first have main agent create a student-owned zygoma case OR reassign one of the 3 admin-owned cases to Gaurav.pandey via backend. Backend PDF export sibling task already verified 3/3 pytest green in iter-Jan-2026 v3/v4 (/app/test_reports/pytest/chunk2v9_pdf.xml).",
+  "rca_of_issue": "N/A — no failure. Only a minor cosmetic observation (empty group headers) documented."
+}
