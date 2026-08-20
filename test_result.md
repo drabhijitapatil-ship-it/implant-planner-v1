@@ -322,6 +322,37 @@ backend:
 frontend:
   - task: "Chunk 1 v8 — Patient Card Zygoma/Pterygoid Pills"
     implemented: true
+  - task: "Chunk 2 v9 — Phase 1 Zygoma/Pterygoid Review Section (Case Details UI)"
+    implemented: true
+    working: true
+    file: "frontend/components/ZygomaPterygoidPhase1Review.tsx, frontend/app/procedures/[id].tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Created a NEW ZygomaPterygoidPhase1Review component and injected it into procedures/[id].tsx right after the PatientHistoryStrip. Renders ONLY when procedure.implant_procedure_type matches /zygoma|pterygoid/i. Displays configuration + conventional FDI sites as pills at the top, then 13 grouped sections auto-collapse when their sub-block is empty. testIDs: zyg-p1-review, zyg-p1-review-config-pill, zyg-p1-review-conv-pill, zyg-p1-review-empty, and zyg-p1-review-group-{ds,ma,an,pre,ext,intra,pr,rad,zr,pt,bz,pp,dc,team}."
+      - working: true
+        agent: "testing"
+        comment: "iter-410 VERIFIED (Playwright, mobile 390x844). Test 1 (Test Patient Zygoma /procedures/6a8337dd64ad3269dc584a69): section renders with purple body-outline icon, title 'Zygoma / Pterygoid — Phase 1', subtitle 'Diagnosis & Treatment Planning', chevron-up. Expanded by default. Config pill 'Quad zygoma + 2 pterygoid' visible; bonus conv-pill 'Conventional FDI: 11, 21' also renders. Uppercase purple group titles present (DIAGNOSTIC SUMMARY / MEDICAL ASSESSMENT / ANAESTHESIA PLAN / TEAM COMPOSITION). Values: Cawood-Howell:V, Bedrossian:3, ZAGA Right:2, ZAGA Left:1, Immunosuppression:None, ASA Grade:II, Plan:'GA + LA infiltration', Primary Surgeon:'Dr. Patil'. Header tap collapses (DS group count 1→0, config pill hidden), re-tap expands (DS 0→1). Test 2 (Test v4 workflow /procedures/6a845d57cff336ac29b34ac1): section renders, config pill 'Quad zygoma' preserved. Empty-hint NOT rendered because hasAny=true (config present) — matches spec note. Test 3 (Phase1 NoComment Test — Single Conventional Implant, /procedures/69cfde8b356c7405230a9dcc): zyg-p1-review testID count = 0 (early-return by isZygCase). Test 4 (student Gaurav.pandey): component has no role gate — visibility identical for all roles by code inspection; direct-URL access to admin-owned zygoma cases is blocked by backend ownership check (returns 'Procedure not found'), so end-to-end student verification is blocked purely by seed-data ownership, not by component logic. Minor UX observation: empty groups still render their uppercase headers because Group.filter(Boolean) does not filter out Row elements whose internal render returns null (see /app/test_reports/iteration_410.json ui_bugs). Non-blocking. Full report: /app/test_reports/iteration_410.json."
+
+  - task: "Chunk 2 v9 — Phase 1 Zygoma/Pterygoid PDF Export"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Extended the /api/procedures/{id}/case-report PDF generator to append a 'Phase 1 - Zygoma / Pterygoid Extended Data' section (purple #5E35B1 heading) when procedure_type contains 'zygoma' or 'pterygoid'. Handles both nested and legacy flat structures. Non-Zygoma procedures render the SAME PDF as before."
+      - working: true
+        agent: "testing"
+        comment: "iter-410 confirms prior 3/3 pytest run (/app/test_reports/pytest/chunk2v9_pdf.xml) is still green. Sibling frontend task also verified. Marking working:true, needs_retesting:false."
+
+
     working: true
     file: "frontend/app/(tabs)/procedures.tsx"
     stuck_count: 0
@@ -460,6 +491,8 @@ test_plan:
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: "iter-410 Chunk 2 v9 FRONTEND testing complete. ✅ Phase 1 Zygoma/Pterygoid Review Section (Case Details UI) VERIFIED end-to-end via Playwright mobile 390x844. Tests 1-3 fully passed against live data (Test Patient Zygoma, Test v4 workflow, Phase1 NoComment Test). Test 4 (student role) verified by code inspection since component has no role gate — student Gaurav.pandey does NOT own any of the 3 seed Zygoma cases in DB, so direct URL access is blocked by backend ownership check; not a component bug. Minor cosmetic observation: empty Group headers still render because Group.filter(Boolean) does not filter Row elements whose internal render returns null (documented, non-blocking). Sibling backend task Chunk 2 v9 PDF Export already 3/3 pytest green (chunk2v9_pdf.xml) — marked working:true. Both Chunk 2 v9 tasks now working:true, needs_retesting:false. Full report at /app/test_reports/iteration_410.json."
   - agent: "testing"
     message: "iter-409 Chunk 1 v8 FRONTEND testing complete. ✅ TASK 2 (Zygoma/Pterygoid Card Redesign) VERIFIED end-to-end on Quad Zygoma /procedures/6a854ae0b4683aab80704d86 — 4 pre-populated rows now render as Conventional-style cards (R1/R2/L1/L2 orange badges, 'Zygoma Right/Left' titles, green Active chip via zyg-status-{idx}, orange ZYGOMA type pill, Refirm·Z-Series specs, Edit/Remove buttons via zyg-edit-implant-{idx}/zyg-delete-implant-{idx}). Edit modal renders correctly with ZYGOMA badge, Side chips, Refirm Z-Series system, Ø4 diameter, length picker. Remove triggers native confirm. Mixed case regression on /procedures/6a86acfc08151ce737bf7390 preserved (Conventional Implants divider + Add Conventional Implant button visible). Marked working=true, needs_retesting=false. ⚠️ TASK 1 (Patient Card Pills) BLOCKED by seed data — pill code (procedures.tsx L244-274) is correct with all testIDs, but ALL 4 Zygoma/Pterygoid seed cases (6a854ae0b4683aab80704d86, 6a86acfc08151ce737bf7390, 6a854ae0b4683aab80704d8a, 6a854acc6a7767fa1dbcfd9a) are status='draft', and DefaultProceduresScreen filters drafts out of the My Cases list (procedures.tsx L86). No non-draft Zygoma case exists → pill container never renders. Left working='NA', needs_retesting=true. Main agent action: promote a Zygoma case out of draft (submit_phase1) or create a new Zygoma case, then re-verify pill rendering. Full report at /app/test_reports/iteration_409.json."
   - agent: "testing"
