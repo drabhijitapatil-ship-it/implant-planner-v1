@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import PhaseTabbedAutoFetch from '../../../components/PhaseTabbedAutoFetch';
 import { Ionicons } from '@expo/vector-icons';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
@@ -347,6 +348,9 @@ export default function FollowUpForm() {
       <PhaseHeader title="Phase 5 - Follow-up & Maintenance" subtitle={label} testID="followup-header" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+
+          {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid tabbed view (Phase 5) */}
+          <PhaseTabbedAutoFetch phase={5} procedureId={String(id)} />
 
           {/* ── Implant Survival Review (always first — Phase 2 style) ── */}
           <View style={s.section} testID="followup-survival-section">

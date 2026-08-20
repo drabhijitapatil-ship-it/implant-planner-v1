@@ -11,6 +11,7 @@ import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import PhaseTabbedAutoFetch from '../../../components/PhaseTabbedAutoFetch';
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
@@ -384,6 +385,8 @@ export default function Stage2SurgicalSubmissionScreen() {
       />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+          {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid tabbed view */}
+          <PhaseTabbedAutoFetch phase={3} procedureId={String(id)} />
           <View style={s.infoBox}>
             <Ionicons name="information-circle" size={22} color="#1565C0" />
             <Text style={s.infoText}>

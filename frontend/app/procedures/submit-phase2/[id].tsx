@@ -23,6 +23,7 @@ import {
 } from '../../../constants/checklist';
 import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
 import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
+import PhaseStep2TabbedView from '../../../components/PhaseStep2TabbedView';
 
 export default function Phase2SubmissionScreen() {
   const { id } = useLocalSearchParams();
@@ -116,6 +117,12 @@ export default function Phase2SubmissionScreen() {
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const [opgUploading, setOpgUploading] = useState(false);
   const [authToken, setAuthToken] = useState('');
+  // iter-Jun-2026 (v10, Chunk 3): full implant plan objects + prior tabbed
+  // data (per-implant + advanced clinical) so PhaseStep2TabbedView can
+  // render/save Zygoma/Pterygoid cases.
+  const [implantPlans, setImplantPlans] = useState<any[]>([]);
+  const [initialPerImplant, setInitialPerImplant] = useState<Record<string, any>>({});
+  const [initialAdvanced, setInitialAdvanced] = useState<Record<string, any>>({});
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
@@ -155,6 +162,11 @@ export default function Phase2SubmissionScreen() {
       const count = planRes.data.number_of_implants || 1;
       const positions = (planRes.data.implant_plans || []).map((p: any) => p.position);
       setImplantPositions(positions);
+      // iter-Jun-2026 (v10, Chunk 3): keep full plan objects for the tabbed view.
+      setImplantPlans(planRes.data.implant_plans || []);
+      const p2 = (procRes.data.phase2_data || {}) as any;
+      setInitialPerImplant(p2.per_implant || {});
+      setInitialAdvanced(p2.advanced_clinical || {});
       setTorqueValues(new Array(count).fill(''));
       setHealingAbutmentCuffHeight(new Array(count).fill(''));
       setAccessChannelOpenings(new Array(count).fill(''));
@@ -776,6 +788,19 @@ export default function Phase2SubmissionScreen() {
               })}
             </View>
           </View>
+
+          {/* iter-Jun-2026 (v10, Chunk 3): Tabbed per-implant + Advanced
+              Clinical view (Zygoma / Pterygoid / Conventional). Renders
+              only for Zygoma/Pterygoid mixed cases; returns null otherwise. */}
+          <PhaseStep2TabbedView
+            phase={2}
+            procedureId={String(id)}
+            token={authToken}
+            implantPlans={implantPlans}
+            initialPerImplant={initialPerImplant}
+            initialAdvancedClinical={initialAdvanced}
+            onSaved={loadImplantPlan}
+          />
 
           {/* ── Pre-Surgical Checklist (iter-189) ── */}
           <View style={s.section} testID="phase2-preop-checklist" onLayout={onStepLayout(0)}>

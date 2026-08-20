@@ -638,6 +638,17 @@ class Phase2Submit(BaseModel):
     # Pre-surgery checklist (legacy; iter-189 splits this into a separate
     # phase2_preop submission that must complete before surgical fields are sent)
     pre_surgery_checklist: Optional[Dict[str, bool]] = None
+    # iter-Jun-2026 (v10, Chunk 3): Unified tabbed Phase 2-5 — per-implant
+    # records (torque, isq, insertion date, timing, mua, complications, notes)
+    # keyed by implant position ('ZR1', 'ZL2', 'PR1', '15', ...). Optional so
+    # legacy Conventional cases that populate case-level `torque_values`
+    # continue to work. Zygoma/Pterygoid rows MUST NOT include an ISQ value
+    # (per clinical guidance — ISQ meter placement isn't reliable on those).
+    per_implant_data: Optional[Dict[str, Dict[str, Any]]] = None
+    # Advanced Clinical block — only populated for Zygoma cases. Contains
+    # ORIS success code, immediate-loading Day 0/7/30 timestamps, ZAGA
+    # confirmation, screw-retained enforcement flag, supervisor co-sign.
+    advanced_clinical: Optional[Dict[str, Any]] = None
     # Surgical procedure data
     anesthesia_adequate: Optional[str] = Field("Yes", max_length=10)  # Yes/No
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
@@ -2748,6 +2759,79 @@ async def get_zygoma_cosigns(procedure_id: str, current_user: dict = Depends(get
         "phase2_ready": bool(p2.get("supervisor") and p2.get("incharge")),
         "phase3_day0_ready": bool(p3d0.get("supervisor") and p3d0.get("prosthodontist")),
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# iter-Jun-2026 (v10, Chunk 3): Unified tabbed Phase 2-5 tabbed-data endpoint
+# ─────────────────────────────────────────────────────────────
+# Lightweight PATCH used by the new tabbed per-implant + advanced-clinical UI
+# for phases 2/3/4/5. Kept separate from the existing submit-phase{N} flows so
+# per-implant data can be saved incrementally as users fill it in (before the
+# final phase submission). Backward compatible: existing phase data + torque
+# arrays remain untouched.
+class TabbedPhaseData(BaseModel):
+    per_implant: Optional[Dict[str, Dict[str, Any]]] = None
+    advanced_clinical: Optional[Dict[str, Any]] = None
+
+
+@api_router.patch("/procedures/{procedure_id}/tabbed-phase-data/{phase}")
+async def patch_tabbed_phase_data(
+    procedure_id: str,
+    phase: int,
+    payload: TabbedPhaseData,
+    current_user: dict = Depends(get_current_user),
+):
+    """Persist per-implant + advanced-clinical data for a given phase (2..5).
+    Non-destructive: partial saves are merged into the sub-block using dot-set."""
+    if phase not in (2, 3, 4, 5):
+        raise HTTPException(status_code=400, detail="phase must be 2, 3, 4 or 5")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    # Role gate: same rule as phase submits — student on their case, supervisor
+    # on their case, implant_incharge, or creator. Nurse is read-only.
+    role = current_user["role"]
+    uid = current_user["_id"]
+    is_owner = (
+        (role == "student" and proc.get("student_id") == uid)
+        or (role == "supervisor" and proc.get("supervisor_id") == uid)
+        or role in ("implant_incharge", "administrator")
+        or proc.get("created_by_id") == uid
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+    now = datetime.utcnow()
+    field_prefix = f"phase{phase}_data"
+    update: Dict[str, Any] = {"updated_at": now}
+    if payload.per_implant is not None:
+        # Merge each implant's dict individually so unrelated implants are preserved.
+        existing = ((proc.get(field_prefix) or {}).get("per_implant") or {})
+        for pos, rec in (payload.per_implant or {}).items():
+            merged = dict(existing.get(pos) or {})
+            merged.update(rec or {})
+            update[f"{field_prefix}.per_implant.{pos}"] = merged
+    if payload.advanced_clinical is not None:
+        # Shallow-merge advanced clinical.
+        existing = ((proc.get(field_prefix) or {}).get("advanced_clinical") or {})
+        merged = dict(existing)
+        merged.update(payload.advanced_clinical or {})
+        update[f"{field_prefix}.advanced_clinical"] = merged
+
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update})
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    return {
+        "ok": True,
+        "phase": phase,
+        "per_implant": ((updated or {}).get(field_prefix) or {}).get("per_implant") or {},
+        "advanced_clinical": ((updated or {}).get(field_prefix) or {}).get("advanced_clinical") or {},
+    }
+
+
 
 
 @api_router.post("/procedures/{procedure_id}/add-implant")
@@ -12524,6 +12608,19 @@ P. Treatment Outcome (overall assessment, prognosis)"""
         case_type_instruction = "This case involves bone augmentation. Detail the grafting rationale, material choice, and expected timeline for graft maturation."
     elif case_type == 'multiple_implant':
         case_type_instruction = "This involves multiple implant sites. Discuss inter-implant spacing, load distribution, and splinting considerations."
+
+    # iter-Jun-2026 (v10, Chunk 3): Zygoma / Pterygoid clinical instructions.
+    _proc_type_lower = str(proc.get("implant_procedure_type") or "").lower()
+    _is_zyg = ("zygoma" in _proc_type_lower or "pterygoid" in _proc_type_lower)
+    if _is_zyg:
+        case_type_instruction += (
+            "\n\nThis is a Zygoma / Pterygoid case. IMPORTANT additional instructions:\n"
+            "  • Comment on the ZAGA classification (per side) and how it shaped the surgical entry point.\n"
+            "  • Interpret the Aparicio ORIS Success Code (0-4) if present and explain the underlying D1-D4 dimensions (Offense, Rehabilitation, Infection, Stability).\n"
+            "  • Discuss immediate-loading protocol (Day 0 / Day 7 / Day 30 checkpoints) and screw-retained prosthesis enforcement.\n"
+            "  • Note supervisor co-sign status where applicable.\n"
+            "  • DO NOT mention ISQ readings for zygoma or pterygoid implants (they are not clinically valid on those anchors)."
+        )
     elif case_type == 'immediate_loading':
         case_type_instruction = "This case uses an immediate loading protocol. Discuss criteria for immediate loading (minimum insertion torque, ISQ thresholds, occlusal considerations)."
     else:
@@ -13277,6 +13374,101 @@ async def get_smart_planner(
 
 
 
+# ─────────────────────────────────────────────────────────────
+# iter-Jun-2026 (v10, Chunk 3): PDF helper — Per-Implant + Advanced Clinical
+# ─────────────────────────────────────────────────────────────
+def _render_tabbed_phase_data(pdf, safe, add_field, phase_data, phase_num, is_zyg_case):
+    """Renders the per_implant + advanced_clinical blocks written by the new
+    tabbed UI (Chunk 3). Safe to call on any phase — renders NOTHING when
+    both blocks are empty or absent."""
+    if not isinstance(phase_data, dict):
+        return
+    per_imp = phase_data.get("per_implant") or {}
+    adv = phase_data.get("advanced_clinical") or {}
+    if not per_imp and not adv:
+        return
+
+    # Group per-implant by type via the position code prefix + optional
+    # implant_type field on the record.
+    def _type_of(pos, rec):
+        t = str((rec or {}).get("implant_type") or "").lower()
+        if t in ("zygoma", "pterygoid", "conventional"):
+            return t
+        if pos.startswith("ZR") or pos.startswith("ZL"):
+            return "zygoma"
+        if pos.startswith("PR") or pos.startswith("PL"):
+            return "pterygoid"
+        return "conventional"
+
+    grouped = {"zygoma": [], "pterygoid": [], "conventional": []}
+    for pos, rec in per_imp.items():
+        grouped[_type_of(pos, rec)].append((pos, rec or {}))
+
+    labels = {"zygoma": "Zygoma", "pterygoid": "Pterygoid", "conventional": "Conventional"}
+
+    if per_imp:
+        pdf.set_font("Helvetica", "BI", 11)
+        pdf.set_text_color(94, 53, 177)
+        pdf.cell(0, 8, safe(f"Per-Implant Records"), ln=True)
+        pdf.set_text_color(0, 0, 0)
+        for t in ("zygoma", "pterygoid", "conventional"):
+            rows = grouped[t]
+            if not rows:
+                continue
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 6, safe(f"  {labels[t]} ({len(rows)})"), ln=True)
+            for pos, rec in rows:
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.cell(0, 5, safe(f"    · {pos}"), ln=True)
+                for label, key in [
+                    ("Torque (N·cm)", "torque_ncm"),
+                    ("ISQ", "isq"),
+                    ("Insertion Date", "insertion_date"),
+                    ("Timing", "timing_type"),
+                    ("MUA Angulation", "mua_angulation"),
+                    ("Complications", "complications"),
+                    ("Notes", "notes"),
+                ]:
+                    # ISQ omitted for zygoma/pterygoid per clinical guidance.
+                    if key == "isq" and t != "conventional":
+                        continue
+                    v = rec.get(key)
+                    if v in (None, "", []):
+                        continue
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.cell(0, 5, safe(f"        {label}: {v}"), ln=True)
+            pdf.ln(1)
+
+    if adv and is_zyg_case:
+        pdf.set_font("Helvetica", "BI", 11)
+        pdf.set_text_color(94, 53, 177)
+        pdf.cell(0, 8, safe("Advanced Clinical (Zygoma)"), ln=True)
+        pdf.set_text_color(0, 0, 0)
+        for label, key in [
+            ("ZAGA Confirmed Right", "zaga_confirmed_right"),
+            ("ZAGA Confirmed Left", "zaga_confirmed_left"),
+            ("ORIS Success Code", "oris_success_code"),
+            ("No Sinus Disease", "no_sinus_disease"),
+            ("No Oro-Antral Communication", "no_oro_antral_communication"),
+            ("Screw-Retained Prosthesis", "screw_retained_confirmed"),
+            ("Passive Fit Verified", "passive_fit_verified"),
+            ("No Peri-Implant Lesion", "no_radiographic_peri_implant_lesion"),
+            ("Immediate Loading Day 0", "immediate_loading_day0_at"),
+            ("Immediate Loading Day 7", "immediate_loading_day7_at"),
+            ("Immediate Loading Day 30", "immediate_loading_day30_at"),
+            ("Supervisor Co-sign Notes", "supervisor_cosign_notes"),
+        ]:
+            v = adv.get(key)
+            if v in (None, ""):
+                continue
+            if isinstance(v, bool):
+                v = "Yes" if v else "No"
+            add_field(label, v)
+        pdf.ln(2)
+
+
+
+
 @api_router.post("/procedures/{procedure_id}/case-report")
 async def generate_case_report(
     procedure_id: str,
@@ -13702,6 +13894,7 @@ async def generate_case_report(
     # append a dedicated section with every Phase 1 sub-block. Nothing
     # renders for regular procedure types.
     _proc_type = str(procedure.get("implant_procedure_type") or "")
+    _is_zyg_case_local = ("zygoma" in _proc_type.lower() or "pterygoid" in _proc_type.lower())
     if "zygoma" in _proc_type.lower() or "pterygoid" in _proc_type.lower():
         _zp = procedure.get("zygoma_pterygoid_data") or {}
         _zp1 = _zp.get("phase1") if isinstance(_zp, dict) and isinstance(_zp.get("phase1"), dict) else _zp
@@ -13846,6 +14039,8 @@ async def generate_case_report(
     # ── Phase 2: Implant Surgery ──────────────────────────────
     add_section_title("Phase 2 - Implant Surgery", 255, 107, 53)
     p2 = procedure.get("phase2_data", {})
+    # iter-Jun-2026 (v10, Chunk 3): Per-implant + Advanced Clinical block
+    _render_tabbed_phase_data(pdf, safe, add_field, p2, 2, _is_zyg_case_local)
     if isinstance(p2, dict) and p2:
         pre_surg = p2.get("pre_surgery_checklist", {})
         if pre_surg:
@@ -13985,6 +14180,8 @@ async def generate_case_report(
     # ── Phase 3: Second Stage ────────────────────────────────
     pdf.add_page()
     add_section_title("Phase 3 - Healing and Second Stage Surgery", 33, 150, 243)
+    p3 = procedure.get("phase3_data", {}) or {}
+    _render_tabbed_phase_data(pdf, safe, add_field, p3, 3, _is_zyg_case_local)
     # Phase 2 carry-over context (per product spec, Phase 3 displays the
     # Immediate Prosthesis Done / Healing Abutment Placed summary inherited
     # from Phase 2).
@@ -14048,6 +14245,8 @@ async def generate_case_report(
 
     # ── Phase 4: Prosthetic ──────────────────────────────────
     add_section_title("Phase 4 - Prosthetic Rehabilitation", 156, 39, 176)
+    p4 = procedure.get("phase4_data", {}) or {}
+    _render_tabbed_phase_data(pdf, safe, add_field, p4, 4, _is_zyg_case_local)
     p4s1 = procedure.get("phase4_step1_data", {})
     if isinstance(p4s1, dict) and p4s1:
         pdf.set_font("Helvetica", "BI", 11)
@@ -14122,6 +14321,13 @@ async def generate_case_report(
     phase4_date = procedure.get("treatment_completed_at")
     if phase4_date:
         add_field("Treatment Completed", phase4_date.isoformat() if isinstance(phase4_date, datetime) else str(phase4_date))
+
+    # ── Phase 5: Follow-up & Maintenance ──────────────────────
+    # iter-Jun-2026 (v10, Chunk 3): added Phase 5 section w/ tabbed data.
+    p5 = procedure.get("phase5_data", {}) or {}
+    if p5 or procedure.get("followup_visits"):
+        add_section_title("Phase 5 - Follow-up & Maintenance", 244, 143, 177)
+        _render_tabbed_phase_data(pdf, safe, add_field, p5, 5, _is_zyg_case_local)
 
     # ── AI-Generated Summaries (editable; included verbatim in PDF) ─────
     ai_clinical = (procedure.get("ai_case_summary") or "").strip()
@@ -15374,6 +15580,13 @@ async def submit_phase2(
     )
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
+
+    # iter-Jun-2026 (v10, Chunk 3): Persist per-implant + advanced clinical
+    # blocks under phase2_data.* so PDF/AI/review can read a unified schema.
+    if phase2_data.per_implant_data is not None:
+        update_data["phase2_data.per_implant"] = phase2_data.per_implant_data
+    if phase2_data.advanced_clinical is not None:
+        update_data["phase2_data.advanced_clinical"] = phase2_data.advanced_clinical
 
     # iter-343: Materialize the top-level `implants[]` array from the
     # Phase-1 implant plan + captured torque values. This is the source
