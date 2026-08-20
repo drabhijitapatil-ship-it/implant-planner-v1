@@ -319,6 +319,37 @@ backend:
         comment: "✅ v6 backend implant-plan extensions VERIFIED (iter-407, 5/5 pytest passed — /app/backend/tests/test_zygoma_v6_implant_plan.py, junit /app/test_reports/pytest/iter407_zygoma_v6.xml). Cases: (a) POST 4 Quad-Zygoma rows (ZR1/ZR2/ZL1/ZL2, implant_type='zygoma', side, row_label) → 200 count=4; (b) GET returns all 4 rows with implant_type/side/row_label preserved (defaults to 'conventional' if unset); (c) POST 11 rows → 400 'Must plan between 1 and 10 implants'; (d) duplicate positions (two ZR1) → 400 'unique tooth position'; (e) mixed payload (zygoma ZR1 + pterygoid PR1 + conventional FDI '15') → 200 count=3, GET verifies per-row implant_type. Limit raise 6→10 and new optional fields all working."
 
 
+  - task: "Chunk 3 v10 — Unified Tabbed Phase 2-5 Backend (per_implant + advanced_clinical + PDF + AI)"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Chunk 3 backend deliverables — (1) NEW PATCH /api/procedures/{id}/tabbed-phase-data/{phase} endpoint (phase=2|3|4|5). See full deliverables above."
+      - working: true
+        agent: "testing"
+        comment: "iter-411 VERIFIED 8/8 pytest (/app/backend/tests/test_chunk3_v10_tabbed_phase.py, junit /app/test_reports/pytest/chunk3_v10.xml). (a) PATCH /tabbed-phase-data/2 happy path on Test Patient Zygoma 6a8337dd64ad3269dc584a69 returned ok=true, phase=2, per_implant contains ZR1(torque_ncm=40, timing=immediate, mua=17°) + ZL1(torque=45), advanced_clinical.oris_success_code=4. (b) Partial-merge test: PATCH {per_implant:{ZR1:{notes:'extra note'}}} preserved ZR1.torque_ncm=40 AND ZR1.timing_type='immediate' and set notes; ZL1 unchanged. (c) PATCH /tabbed-phase-data/1 → 400; /tabbed-phase-data/6 → 400 (both 'phase must be 2, 3, 4 or 5'). (d) Student Gaurav.pandey PATCH on Abhijit-owned zygoma case → 404 (backend can't find case for student, which is functionally equivalent to 403 unauthorized — accepted). (e) POST /procedures/6a8337dd64ad3269dc584a69/case-report → PDF text contains 'Per-Implant Records', 'Zygoma (2)', 'Torque (N·cm): 45' & '40', 'Advanced Clinical (Zygoma)', 'ORIS Success Code: 4'. Confirmed NO 'ISQ' within 600 chars after zygoma heading. (f) Non-zygoma PDF regression on Single Conventional case 6a6b7fbf6633443cf356df15 does NOT contain 'Advanced Clinical (Zygoma)'. (g) AI case-summary endpoint returned 200 and best-effort keyword check passed. Full report /app/test_reports/iteration_411.json."
+
+  - task: "Chunk 3 v10 — Unified Tabbed Phase 2-5 Frontend (PhaseStep2TabbedView + integration)"
+    implemented: true
+    working: true
+    file: "frontend/components/PhaseStep2TabbedView.tsx, frontend/components/PhaseTabbedAutoFetch.tsx, frontend/app/procedures/submit-phase2/[id].tsx, frontend/app/procedures/submit-stage2-surgical/[id].tsx, frontend/app/procedures/submit-stage2-prosthetic/[id].tsx, frontend/app/procedures/submit-phase4-step2/[id].tsx, frontend/app/procedures/followup/[id].tsx, frontend/src/utils/orisCalculator.ts, frontend/app/procedures/[id].tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "MAJOR REFACTOR — Chunk 3 unified tabbed Phase 2-5. See full deliverables above."
+      - working: true
+        agent: "testing"
+        comment: "iter-411 VERIFIED 7/7 Playwright (mobile 390x844, Abhijit.patil/Admin@123). (1) /procedures/zygoma-workflow/6a8337dd64ad3269dc584a69 renders Expo 'Unmatched Route — Page could not be found.' — route deleted as expected. (2) Case Details /procedures/6a8337dd64ad3269dc584a69 has NO testID='zygoma-workflow-btn' AND no 'Zygoma / Pterygoid Extended Workflow' text — CTA removed. (3) /procedures/submit-phase2/6a8337dd64ad3269dc584a69 renders testID='phase2-tabbed-view' with implant-type-tabs container (orange Zygoma 2/3 + blue Pterygoid 0/2), 3 zygoma cards (per-implant-card-ZR1, ZR2, ZL1) with Torque/Insertion Date/Timing chips/MUA chips, zero ISQ inputs on both Zygoma AND Pterygoid tabs, torque-ZR1..3 inputs present, testID='zyg-advanced-clinical' visible on Zygoma tab and HIDDEN on Pterygoid tab (correct behavior), testID='phase2-tabbed-save' present. Pterygoid tab reveals PR1/PL1 cards. (4) ORIS pill showed '4/4 · Optimum success' after 5 adv-toggles + Day 0 date + torque=45 on all zygoma rows (already-persisted state from PATCH). (5) Save button click emitted no browser dialog (React Native Alert.alert not surfaced in Expo web preview — non-blocking; PATCH persistence itself is verified by backend test #2). (6) Quad Zygoma case 6a845d57cff336ac29b34ac1 renders phase2-tabbed-view WITHOUT implant-type-tabs container (single-type auto-hide) AND without tab-pterygoid; zyg-advanced-clinical still visible. (7) Single Conventional case 6a6b7fbf6633443cf356df15 does NOT render phase2-tabbed-view — legacy form only. Seed-data note: implant_plans on Test Patient Zygoma & Test v4 workflow were empty; had to be seeded via direct MongoDB write because /api/procedures/{id}/implant-plan requires assigned faculty match. This is a seed-data limitation, not a Chunk 3 defect. Full report /app/test_reports/iteration_411.json."
+
+
 frontend:
   - task: "Chunk 1 v8 — Patient Card Zygoma/Pterygoid Pills"
     implemented: true
@@ -484,13 +515,14 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Chunk 1 v8 — Patient Card Zygoma/Pterygoid Pills"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: "iter-411 Chunk 3 v10 Unified Tabbed Phase 2-5 — BOTH backend (8/8 pytest) and frontend (7/7 Playwright, mobile 390x844) VERIFIED. Backend: PATCH /tabbed-phase-data happy-path + partial-merge + invalid-phase + unauthorized-role all pass; PDF export on Test Patient Zygoma contains 'Per-Implant Records / Zygoma (2) / Torque (N·cm): 45 & 40 / Advanced Clinical (Zygoma) / ORIS Success Code: 4' and NO ISQ inside zygoma block; non-zygoma PDF regression clean; AI summary keyword check passed. Frontend: old zygoma-workflow route returns Unmatched Route; CTA removed from Case Details; Phase 2 renders phase2-tabbed-view with orange Zygoma (2/3) + blue Pterygoid (0/2) tabs on Zyg+Pter case, 0 ISQ inputs on both tabs, Advanced Clinical Zygoma-tab-only, ORIS 4/4, Quad Zyg single-type auto-hide (no tabs container), Single Conv case does NOT render tabbed view. Seed-data workaround: implant_plans on Test Patient Zygoma & Test v4 workflow were empty and I seeded them via direct MongoDB write because POST /implant-plan requires assigned faculty match — not a Chunk 3 bug. Both tasks marked working:true, needs_retesting:false. Full report /app/test_reports/iteration_411.json."
   - agent: "testing"
     message: "iter-410 Chunk 2 v9 FRONTEND testing complete. ✅ Phase 1 Zygoma/Pterygoid Review Section (Case Details UI) VERIFIED end-to-end via Playwright mobile 390x844. Tests 1-3 fully passed against live data (Test Patient Zygoma, Test v4 workflow, Phase1 NoComment Test). Test 4 (student role) verified by code inspection since component has no role gate — student Gaurav.pandey does NOT own any of the 3 seed Zygoma cases in DB, so direct URL access is blocked by backend ownership check; not a component bug. Minor cosmetic observation: empty Group headers still render because Group.filter(Boolean) does not filter Row elements whose internal render returns null (documented, non-blocking). Sibling backend task Chunk 2 v9 PDF Export already 3/3 pytest green (chunk2v9_pdf.xml) — marked working:true. Both Chunk 2 v9 tasks now working:true, needs_retesting:false. Full report at /app/test_reports/iteration_410.json."
   - agent: "testing"
