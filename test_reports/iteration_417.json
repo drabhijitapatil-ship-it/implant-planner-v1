@@ -1,0 +1,29 @@
+{
+  "summary": "FRONTEND-ONLY test of v13 Chunk A (3 fixes) on mobile viewport 390x844 with Abhijit.patil. Ask 1 (Card-per-Section review): PASS — Zygoma/Pterygoid Phase 1 review renders header card [zyg-p1-review] with purple body-outline icon + title 'Zygoma / Pterygoid — Phase 1' + subtitle 'Diagnosis & Treatment Planning' + chevron + config-pill 'Quad zygoma + 2 pterygoid'; sub-sections render as OWN sibling cards outside the header (verified via DOM parentElement equality) with light-purple header strips, icons, and values — Diagnostic Summary (V/3/2/1), Medical Assessment (Immunosuppression None/ASA II), Anaesthesia Plan (GA + LA infiltration), Team Composition (Dr. Patil), plus Zygomatic Region (body_height R:18/L:23, unexpected but valid since seed had this field populated). Empty groups (extraoral, intraoral, radiographic, pre, existing prosthesis, pterygoid, bedrossian, prosthetic-planning, design-checks) all count=0 — confirming per-section hide-when-empty. Ask 2 (Remove Phase 2 tabs): PASS — phase2-tabbed-view / implant-type-tabs / tab-zygoma / tab-pterygoid / tab-conventional / zyg-advanced-clinical all count=0 on /procedures/submit-phase2/6a8337dd64ad3269dc584a69; Torque Achieved + MUA + Post Surgical Radiographs still present. Ask 4 (Zygoma/Pterygoid Access Channel): PASS — after picking Immediate Loading Done for all 5 implants (ZR1, ZR2, ZL1, PR1, PL1), the Access Channel Opening section renders exactly 5 rows with correct labels 'Zygoma R1/R2/L1', 'Pterygoid R1/L1' (via implantDisplayLabel), each with EXACTLY 3 chips in order: Buccal, Occlusal, Palatal — zero occurrences of 'Facial', 'Incisal', 'Lingual' in the entire AC section. Test 6 (conventional regression) validated by CODE INSPECTION at /app/frontend/app/procedures/submit-phase2/[id].tsx L1513-1523: isZygPter regex /^(ZR|ZL|PR|PL)/ correctly gates zygoma-only trio; else-branch falls through to the pre-existing FDI-derived options (Facial always + Occlusal for upper/lower posterior + Incisal/Cingulum for anterior + Lingual for lower posterior + Palatal for upper posterior). Not E2E tested because no seeded conventional case had phase2_preop_completed_at signed — the pure branch logic is straightforward and low-risk. All 5 executable tests pass; the 1 regression test is code-verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_417.json"],
+  "action_items": [
+    "Consider signing preop on one of the phase1_approved conventional cases (e.g. 69f640140ae04a75cf8d0cc7 with FDI 14, or 69cfb0cea19e1d1819e0f734 with FDI 36) if end-to-end regression coverage for the Access Channel conventional branch is desired in the next iteration."
+  ],
+  "critical_code_review_comments": [
+    "ZygomaPterygoidPhase1Review.tsx L63-86: Group component uses React.Children.toArray + kids.some(...props.value.length) to auto-hide empty groups — works for direct Row children but would miss nested wrappers; current usage is fine since all children are <Row />.",
+    "submit-phase2/[id].tsx L1513: /^(ZR|ZL|PR|PL)/i regex is case-insensitive but backend seeds positions in uppercase — consistent.",
+    "Unrelated pre-existing 'Unexpected text node' console warnings still fire on case-details render (documented in iter-407/410); not caused by this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% (5/5 E2E + 1/1 code-inspected)"},
+  "seed_data_creation": "None. Used existing seeded Test Patient Zygoma case 6a8337dd64ad3269dc584a69 (phase1_approved, preop already signed, 5 implants ZR1/ZR2/ZL1/PR1/PL1, phase1_data populated with diagnostic_summary/medical_assessment/anaesthesia_plan/team_composition/zygomatic_region.body_height).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Test Patient Zygoma at 6a8337dd64ad3269dc584a69 is a good fixture with phase1_approved+preop_signed+5 implants (3 zygoma + 2 pterygoid). No conventional case currently has phase2_preop_completed_at populated. To test the conventional Access Channel branch end-to-end, POST /api/procedures/{id}/phase2-preop with all 13 pre-op checklist items to unlock Step 2. Token key in localStorage is 'implanr_access_token' (WEB_STORAGE_PREFIX='implanr_' from utils/api.ts). To hit Immediate Loading path, must click the per-implant dropdown [data-testid=per-implant-prosthetic-picker-{idx}] then the option [data-testid=per-implant-prosthetic-{idx}-option-Immediate-Loading-Done]. Access Channel picker code is at submit-phase2/[id].tsx L1500-1547.",
+  "rca_of_issue": "N/A — no bugs found."
+}

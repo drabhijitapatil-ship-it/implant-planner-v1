@@ -60,10 +60,11 @@ const Row: React.FC<{ label: string; value: string; icon?: any }> = ({ label, va
   );
 };
 
-const Group: React.FC<{ title: string; children: React.ReactNode; testID?: string }> = ({ title, children, testID }) => {
-  // Only render the group when at least one Row child has a non-empty value.
-  // React.Children.toArray keeps *elements* (not rendered output), so we peek
-  // into each child's props.value to decide.
+const Group: React.FC<{ title: string; icon?: any; children: React.ReactNode; testID?: string }> = ({ title, icon, children, testID }) => {
+  // iter-Jun-2026 (v13, Chunk A, Ask 1): Each section renders as its own
+  // card matching the "Procedure Details" / "Clinical Examination" cards
+  // used for Conventional cases (white background, purple left-border,
+  // section header with icon + title, uniform spacing).
   const kids = React.Children.toArray(children);
   const hasVisible = kids.some((c: any) => {
     if (!c || typeof c !== 'object') return false;
@@ -72,9 +73,14 @@ const Group: React.FC<{ title: string; children: React.ReactNode; testID?: strin
   });
   if (!hasVisible) return null;
   return (
-    <View style={styles.group} testID={testID}>
-      <Text style={styles.groupTitle}>{title}</Text>
-      {kids}
+    <View style={styles.sectionCard} testID={testID}>
+      <View style={styles.sectionCardHeader}>
+        <View style={styles.sectionCardIcon}>
+          <Ionicons name={icon || 'document-text-outline'} size={14} color="#FFF" />
+        </View>
+        <Text style={styles.sectionCardTitle}>{title}</Text>
+      </View>
+      <View style={styles.sectionCardBody}>{kids}</View>
     </View>
   );
 };
@@ -109,25 +115,23 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
   );
 
   return (
-    <View style={styles.section} testID={testIdPrefix} data-testid={testIdPrefix}>
-      <TouchableOpacity style={styles.header} onPress={() => setExpanded(v => !v)} activeOpacity={0.75}>
-        <View style={styles.headerLeft}>
-          <View style={styles.headerIcon}>
-            <Ionicons name="body-outline" size={16} color="#FFF" />
+    <View testID={testIdPrefix} data-testid={testIdPrefix}>
+      {/* Header card — expandable title strip with configuration pills */}
+      <View style={styles.headerCard}>
+        <TouchableOpacity style={styles.header} onPress={() => setExpanded(v => !v)} activeOpacity={0.75}>
+          <View style={styles.headerLeft}>
+            <View style={styles.headerIcon}>
+              <Ionicons name="body-outline" size={16} color="#FFF" />
+            </View>
+            <View>
+              <Text style={styles.sectionTitle}>Zygoma / Pterygoid — Phase 1</Text>
+              <Text style={styles.sectionSubtitle}>Diagnosis & Treatment Planning</Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.sectionTitle}>Zygoma / Pterygoid — Phase 1</Text>
-            <Text style={styles.sectionSubtitle}>Diagnosis & Treatment Planning</Text>
-          </View>
-        </View>
-        <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color="#5E35B1" />
-      </TouchableOpacity>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={20} color="#5E35B1" />
+        </TouchableOpacity>
 
-      {!expanded ? null : !hasAny ? (
-        <Text style={styles.emptyHint} data-testid={`${testIdPrefix}-empty`}>Phase 1 Zygoma/Pterygoid data has not been captured yet.</Text>
-      ) : (
-        <>
-          {/* Header pills — configuration + conventional sites */}
+        {expanded && hasAny ? (
           <View style={styles.pillRow}>
             {!!config && (
               <View style={[styles.pill, { backgroundColor: '#EDE7F6', borderColor: '#5E35B1' }]} testID={`${testIdPrefix}-config-pill`}>
@@ -142,15 +146,23 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
               </View>
             )}
           </View>
+        ) : null}
+      </View>
 
-          <Group title="Diagnostic Summary" testID={`${testIdPrefix}-group-ds`}>
+      {!expanded ? null : !hasAny ? (
+        <View style={styles.headerCard}>
+          <Text style={styles.emptyHint} data-testid={`${testIdPrefix}-empty`}>Phase 1 Zygoma/Pterygoid data has not been captured yet.</Text>
+        </View>
+      ) : (
+        <>
+          <Group title="Diagnostic Summary" icon="clipboard-outline" testID={`${testIdPrefix}-group-ds`}>
             <Row label="Cawood-Howell" value={clean(ds.cawood_howell)} />
             <Row label="Bedrossian" value={clean(ds.bedrossian)} />
             <Row label="ZAGA Right" value={clean(ds.zaga_right) || clean(p1.zaga?.right)} />
             <Row label="ZAGA Left" value={clean(ds.zaga_left) || clean(p1.zaga?.left)} />
           </Group>
 
-          <Group title="Medical Assessment" testID={`${testIdPrefix}-group-ma`}>
+          <Group title="Medical Assessment" icon="medkit-outline" testID={`${testIdPrefix}-group-ma`}>
             <Row label="Immunosuppression" value={clean(ma.immunosuppression)} />
             <Row label="Anticoagulants" value={clean(ma.anticoagulants)} />
             <Row label="Psychological Suitability" value={clean(ma.psychological_suitability)} />
@@ -158,11 +170,11 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
             <Row label="ASA Grade" value={clean(ma.asa_grade)} />
           </Group>
 
-          <Group title="Anaesthesia Plan" testID={`${testIdPrefix}-group-an`}>
+          <Group title="Anaesthesia Plan" icon="pulse-outline" testID={`${testIdPrefix}-group-an`}>
             <Row label="Plan" value={clean(p1.anaesthesia_plan)} />
           </Group>
 
-          <Group title="Pre-Surgical Assessment" testID={`${testIdPrefix}-group-pre`}>
+          <Group title="Pre-Surgical Assessment" icon="warning-outline" testID={`${testIdPrefix}-group-pre`}>
             <Row label="Interincisal Opening" value={pre.interincisal_opening_mm ? `${pre.interincisal_opening_mm} mm` : ''} />
             <Row label="Sinus Health" value={clean(pre.sinus_health)} />
             <Row label="OMC Patent" value={bi(pre.omc_patent)} />
@@ -170,7 +182,7 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
             <Row label="Caution Notes" value={clean(pre.caution_notes)} />
           </Group>
 
-          <Group title="Extraoral" testID={`${testIdPrefix}-group-ext`}>
+          <Group title="Extraoral" icon="person-outline" testID={`${testIdPrefix}-group-ext`}>
             <Row label="Facial Profile" value={clean(ext.facial_profile)} />
             <Row label="Lip Support" value={clean(ext.lip_support)} />
             <Row label="Facial Asymmetry" value={clean(ext.facial_asymmetry)} />
@@ -178,7 +190,7 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
             <Row label="Notes" value={clean(ext.notes)} />
           </Group>
 
-          <Group title="Intraoral" testID={`${testIdPrefix}-group-intra`}>
+          <Group title="Intraoral" icon="happy-outline" testID={`${testIdPrefix}-group-intra`}>
             <Row label="Residual Ridge Form" value={clean(intra.residual_ridge_form)} />
             <Row label="Keratinised Mucosa Width" value={bi(intra.keratinised_mucosa_width_mm)} />
             <Row label="Tuberosity Height" value={bi(intra.tuberosity_height_mm)} />
@@ -187,7 +199,7 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
             <Row label="Teeth to be Extracted" value={Array.isArray(intra.teeth_to_be_extracted) ? intra.teeth_to_be_extracted.join(', ') : ''} />
           </Group>
 
-          <Group title="Existing Prosthesis" testID={`${testIdPrefix}-group-pr`}>
+          <Group title="Existing Prosthesis" icon="cube-outline" testID={`${testIdPrefix}-group-pr`}>
             <Row label="Currently Using" value={clean(prosPrev.using)} />
             <Row label="Type" value={clean(prosPrev.type)} />
             <Row label="Fit" value={clean(prosPrev.fit)} />
@@ -196,12 +208,12 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
             <Row label="Patient Satisfaction" value={clean(prosPrev.patient_satisfaction)} />
           </Group>
 
-          <Group title="Radiographic" testID={`${testIdPrefix}-group-rad`}>
+          <Group title="Radiographic" icon="image-outline" testID={`${testIdPrefix}-group-rad`}>
             <Row label="Imaging Obtained" value={Array.isArray(rad.imaging_obtained) ? rad.imaging_obtained.join(', ') : ''} />
             <Row label="Field of View" value={clean(rad.field_of_view)} />
           </Group>
 
-          <Group title="Zygomatic Region" testID={`${testIdPrefix}-group-zr`}>
+          <Group title="Zygomatic Region" icon="body-outline" testID={`${testIdPrefix}-group-zr`}>
             <Row label="Body Height" value={bi(zr.body_height_mm)} />
             <Row label="Cortical Thickness (Apex)" value={bi(zr.cortical_thickness_apex_mm)} />
             <Row label="Anterior Max Wall Concavity" value={bi(zr.anterior_max_wall_concavity)} />
@@ -211,7 +223,7 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
             <Row label="Orbital Floor Distance" value={bi(zr.orbital_floor_distance_mm)} />
           </Group>
 
-          <Group title="Pterygomaxillary Region" testID={`${testIdPrefix}-group-pt`}>
+          <Group title="Pterygomaxillary Region" icon="triangle-outline" testID={`${testIdPrefix}-group-pt`}>
             <Row label="Tuberosity Height" value={bi(pt.tuberosity_height_mm)} />
             <Row label="Tuberosity Bone Density" value={bi(pt.tuberosity_bone_density)} />
             <Row label="Pyramidal Process Volume" value={bi(pt.pyramidal_process_volume)} />
@@ -221,26 +233,26 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
             <Row label="Maxillary Artery / Pterygoid Plexus" value={bi(pt.maxillary_artery_pterygoid_plexus)} />
           </Group>
 
-          <Group title="Bedrossian Zones (Available Bone)" testID={`${testIdPrefix}-group-bz`}>
+          <Group title="Bedrossian Zones (Available Bone)" icon="grid-outline" testID={`${testIdPrefix}-group-bz`}>
             <Row label="Zone 1 — Premaxilla" value={bi(bz.zone1_premaxilla_mm)} />
             <Row label="Zone 1 — Premolar" value={bi(bz.zone1_premolar_mm)} />
             <Row label="Zone 1 — Molar" value={bi(bz.zone1_molar_mm)} />
           </Group>
 
-          <Group title="Prosthetic Planning" testID={`${testIdPrefix}-group-pp`}>
+          <Group title="Prosthetic Planning" icon="construct-outline" testID={`${testIdPrefix}-group-pp`}>
             <Row label="Diagnostic Steps" value={Array.isArray(pp.diagnostic_steps) ? pp.diagnostic_steps.join(', ') : ''} />
             <Row label="Flange Required" value={clean(pp.flange_required)} />
             <Row label="Occlusal Scheme" value={clean(pp.occlusal_scheme)} />
           </Group>
 
-          <Group title="Design Checks" testID={`${testIdPrefix}-group-dc`}>
+          <Group title="Design Checks" icon="checkmark-done-outline" testID={`${testIdPrefix}-group-dc`}>
             <Row label="Apices Distance" value={clean(dc.apices_distance)} />
             <Row label="Heads Within Prosthetic Envelope" value={clean(dc.heads_within_prosthetic_envelope)} />
             <Row label="AP Spread Adequate" value={clean(dc.ap_spread_adequate)} />
             <Row label="Cantilever Eliminated" value={clean(dc.cantilever_eliminated)} />
           </Group>
 
-          <Group title="Team Composition" testID={`${testIdPrefix}-group-team`}>
+          <Group title="Team Composition" icon="people-outline" testID={`${testIdPrefix}-group-team`}>
             <Row label="Primary Surgeon" value={clean(team.primary_surgeon)} />
             <Row label="Assistant Surgeon" value={clean(team.assistant_surgeon)} />
             <Row label="Anaesthetist" value={clean(team.anaesthetist)} />
@@ -254,7 +266,9 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
 };
 
 const styles = StyleSheet.create({
-  section: {
+  // iter-Jun-2026 (v13, Chunk A, Ask 1): Card-per-section layout matching
+  // the "Procedure Details" / "Clinical Examination" cards.
+  headerCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     marginHorizontal: 12,
@@ -267,6 +281,58 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
+  },
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#EDE7F6',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+    overflow: 'hidden',
+  },
+  sectionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#F3E5F5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1BEE7',
+  },
+  sectionCardIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#5E35B1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4527A0',
+    letterSpacing: 0.2,
+  },
+  sectionCardBody: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  // Legacy `section` kept for backward-compat.
+  section: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 12,
+    marginTop: 8,
+    padding: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: '#5E35B1',
   },
   header: {
     flexDirection: 'row',
