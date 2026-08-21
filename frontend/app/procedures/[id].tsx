@@ -43,6 +43,7 @@ import EndTreatmentPendingBanner from '../../components/EndTreatmentPendingBanne
 import { downloadPreopBriefing } from '../../utils/preopBriefingPdf';
 import CaseImplantPlanning from '../../components/CaseImplantPlanning';// iter-209: removed CaseCompletionBadge — its facts merged into the green
 import ZygomaPterygoidPhase1Review from '../../components/ZygomaPterygoidPhase1Review';
+import AdvancedClinicalCard from '../../components/AdvancedClinicalCard';
 // Treatment Complete banner above the timeline.
 import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
@@ -2146,6 +2147,12 @@ export default function ProcedureDetailScreen() {
             admin) so everyone reviews the same clinical data. Renders nothing
             when procedure_type is not a Zygoma/Pterygoid variant. */}
         <ZygomaPterygoidPhase1Review procedure={procedure} />
+
+        {/* iter-Jun-2026 (v13, Chunk B, Ask 3): Advanced Clinical (Zygoma) is
+            now a standalone card on the Case Details page. It is NOT gated by
+            Phase 2 submission — students can fill it independently, and it
+            carries its own "Send for Approval" workflow (30-day follow-up). */}
+        <AdvancedClinicalCard procedure={procedure} onChanged={loadProcedure} currentUserRole={user?.role} />
 
         <AddImplantSection procedure={procedure} onChanged={loadProcedure} />
 

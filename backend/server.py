@@ -2769,6 +2769,94 @@ async def get_zygoma_cosigns(procedure_id: str, current_user: dict = Depends(get
 
 
 # ─────────────────────────────────────────────────────────────
+# iter-Jun-2026 (v13, Chunk B, Ask 3):
+# Independent Advanced Clinical (Zygoma) approval workflow.
+# The Advanced Clinical (Zygoma) block is decoupled from Phase 2 submission —
+# it can be filled/sent for approval at any time (30-day follow-up cadence)
+# without gating other phases. Approvers = the same co-sign roles that already
+# authorise Zygoma cases (supervisor, implant_incharge, administrator).
+# ─────────────────────────────────────────────────────────────
+def _adv_normalize_role(current_user: dict) -> str:
+    return str(current_user.get("role") or "").lower()
+
+
+@api_router.post("/procedures/{procedure_id}/advanced-clinical/send-for-approval")
+async def advanced_clinical_send_for_approval(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Student (or any authenticated role that authored the case) marks the
+    Advanced Clinical block as pending approval. Sets
+    `phase2_data.advanced_clinical.approval_status = 'pending'` and stamps the
+    submitter. Idempotent (safe to call twice)."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    now = datetime.utcnow()
+    p2 = proc.get("phase2_data") or {}
+    adv = (p2.get("advanced_clinical") or {}).copy()
+    adv["approval_status"] = "pending"
+    adv["submitted_by"] = str(current_user.get("_id") or current_user.get("id") or "")
+    adv["submitted_by_name"] = f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip() or current_user.get("username", "")
+    adv["submitted_at"] = now.isoformat()
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"phase2_data.advanced_clinical": adv, "updated_at": now}},
+    )
+    return {"ok": True, "approval_status": "pending", "advanced_clinical": adv}
+
+
+@api_router.post("/procedures/{procedure_id}/advanced-clinical/approve")
+async def advanced_clinical_approve(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Supervisor / Implant In-Charge / Administrator approves the Advanced
+    Clinical block. Requires the block to already be in `pending` status."""
+    role = str(current_user.get("role") or "").lower()
+    if role not in {"supervisor", "implant_incharge", "administrator"}:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' is not authorised to approve Advanced Clinical")
+
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    p2 = proc.get("phase2_data") or {}
+    adv = (p2.get("advanced_clinical") or {}).copy()
+    if adv.get("approval_status") != "pending":
+        raise HTTPException(status_code=400, detail="Advanced Clinical is not pending approval")
+
+    now = datetime.utcnow()
+    adv["approval_status"] = "approved"
+    adv["approved_by"] = str(current_user.get("_id") or current_user.get("id") or "")
+    adv["approved_by_name"] = f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip() or current_user.get("username", "")
+    adv["approved_by_role"] = role
+    adv["approved_at"] = now.isoformat()
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"phase2_data.advanced_clinical": adv, "updated_at": now}},
+    )
+    return {"ok": True, "approval_status": "approved", "advanced_clinical": adv}
+
+
+
+
+# ─────────────────────────────────────────────────────────────
 # iter-Jun-2026 (v10, Chunk 3): Unified tabbed Phase 2-5 tabbed-data endpoint
 # ─────────────────────────────────────────────────────────────
 # Lightweight PATCH used by the new tabbed per-implant + advanced-clinical UI

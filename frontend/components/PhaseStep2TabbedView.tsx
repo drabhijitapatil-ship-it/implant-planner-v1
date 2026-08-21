@@ -489,9 +489,13 @@ const PhaseStep2TabbedView: React.FC<Props> = ({
         if (t === 'conventional') cleaned[p.position] = r;
         else { const { isq, ...rest } = r as any; cleaned[p.position] = rest; }
       }
+      // iter-Jun-2026 (v13, Chunk B, Ask 3): Advanced Clinical is now saved by
+      // the standalone AdvancedClinicalCard component on the Case Details view.
+      // Phase 2 tabbed save must NOT include `advanced_clinical` — omitting
+      // avoids clobbering approval_status/day dates set by the standalone flow.
       await axios.patch(
         `${API}/procedures/${procedureId}/tabbed-phase-data/${phase}`,
-        { per_implant: cleaned, advanced_clinical: advToSave },
+        { per_implant: cleaned },
         { headers: { Authorization: `Bearer ${token}` } },
       );
       onSaved && onSaved();
@@ -531,24 +535,18 @@ const PhaseStep2TabbedView: React.FC<Props> = ({
         ))
       )}
 
-      {/* Advanced Clinical — inside Zygoma tab only */}
-      {activeTab === 'zygoma' && hasZyg ? (
-        <ZygomaAdvancedClinicalSection
-          phase={phase}
-          state={adv}
-          perImplant={perImplant}
-          zygPositions={zygPositions}
-          onChange={(patch) => setAdv(prev => ({ ...prev, ...patch }))}
-          readOnly={readOnly}
-        />
-      ) : null}
+      {/* iter-Jun-2026 (v13, Chunk B, Ask 3): Advanced Clinical (Zygoma) has
+          been decoupled from the Phase 2 tabbed submission and now lives as an
+          independent card on the Case Details view. See
+          /app/frontend/components/AdvancedClinicalCard.tsx. Phase 2 can be
+          submitted without Day 0/7/30 loading dates. */}
 
       {!readOnly ? (
         <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} testID={`phase${phase}-tabbed-save`}>
           {saving ? <ActivityIndicator color="#FFF" /> : (
             <>
               <Ionicons name="save-outline" size={16} color="#FFF" />
-              <Text style={styles.saveBtnText}>Save Phase {phase} — Per-Implant + Advanced Clinical</Text>
+              <Text style={styles.saveBtnText}>Save Phase {phase} — Per-Implant Data</Text>
             </>
           )}
         </TouchableOpacity>
