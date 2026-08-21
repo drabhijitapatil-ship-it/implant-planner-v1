@@ -7487,3 +7487,17 @@ CHANGES:
 - /app/frontend/utils/pdfGenerator.ts — generateLabSlipPDF Impression row now appends 3 bullet-block CSS classes (scan_body_types, scan_types, scan_levels) as an HTML <ul> per group when intraoral.
 TESTED (iter-424): Backend 11/11 pytest PASS (status gate 6/6 + scan persistence 3/3 + PDF bullets 2/2). Frontend Playwright PASS on mobile 390x844 (auto-seed, confirm toggle, intraoral chips reveal, hidden when conventional). Report /app/test_reports/iteration_424.json.
 Deployment: User needs to redeploy (Publish button) so the fix + new features ship to production. Once redeployed, Zygoma/Pterygoid/Conventional cases stuck on the "Phase 3 must be approved" error will unblock.
+
+## Iteration 425 (Jun 2026) — Chunk H: Phase 4 Step 2 (Final Restoration) refinements
+User asks:
+1. Baseline radiograph compare — Conventional implants only; hide for cases containing Zygoma / Pterygoid implants.
+2. Post-Delivery imaging split — Conventional implants use IOPA (per-tooth FDI-labelled), Zygoma/Pterygoid use whole-arch OPG. Mixed cases render both sections; IOPA rows appear only for Conventional implant positions.
+3. "Baseline Probing Depth of Peri-implant Soft Tissue" section title was overflowing the card — wrap inside.
+CHANGES:
+- /app/frontend/app/procedures/submit-phase4-step2/[id].tsx:
+   • Added `isZygPtrPosition`, `iopaImplantPositions`, `zygPtrImplantPositions`, `needsOpg`, `needsIopa` (excludes pure Conventional full-arch via `zygPtr.length>0 || !isFullArch` — hotfix), `supportsBaselineCompare` derived flags.
+   • Ask 1 gate: `<RadiographCompare>` wrapped in `{supportsBaselineCompare && …}`.
+   • Ask 2: split imaging into two sections — `phase4-step2-opg-section` (OPG when needsOpg) + `phase4-step2-iopa-section` (IOPA rows iterate over `iopaImplantPositions` when needsIopa). Payload now sends both when applicable. Missing-hints panel tracks OPG and IOPA independently. Validation copy varies by case makeup.
+   • Ask 3: `sectionHeader` alignItems="flex-start" + `Text style={{flex:1, flexShrink:1, flexWrap:'wrap'}}` on the probing title; info-btn shifted to `marginTop: 2`.
+TESTED (iter-425 + 425b hotfix): Frontend Playwright 12/12 PASS across 6 procedure-type scenarios on mobile 390x844. Reports /app/test_reports/iteration_425.json + iteration_425b.json.
+Deployment: User needs to redeploy (Publish) so the split imaging + baseline gate reach production.
