@@ -643,6 +643,22 @@ export const buildLabSlipHtml = (procedure: any): string => {
     ? 'Intra-Oral Digital Scans'
     : `Conventional${trayLabel ? ` — ${trayLabel}` : ''}${matLabel ? ` (${matLabel})` : ''}`;
 
+  // iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-oral scan sub-fields — rendered
+  // as three bulleted lists (Type of Scan Body, Scan Type, Scan Level).
+  const _bulletList = (label: string, values: any) => {
+    const arr: string[] = Array.isArray(values) ? values.map((v: any) => String(v || '').trim()).filter(Boolean) : [];
+    if (arr.length === 0) return '';
+    const items = arr.map(v => `<li>${_esc(v)}</li>`).join('');
+    return `<div class="bullet-block"><div class="bullet-label">${_esc(label)}</div><ul class="bullet-list">${items}</ul></div>`;
+  };
+  const scanSubfieldsHtml = p4.impression_type === 'intraoral_scans'
+    ? (
+        _bulletList('Type of Scan Body', p4.scan_body_types) +
+        _bulletList('Scan Type', p4.scan_types) +
+        _bulletList('Scan Level', p4.scan_levels)
+      )
+    : '';
+
   // iter-202: Multi-Unit Abutment block — historically sourced from Phase 2
   // surgical capture (`procedure.phase2_data.multi_unit_abutment_*`). The lab
   // needs angulation + cuff height per implant to fabricate the substructure.
@@ -726,6 +742,11 @@ export const buildLabSlipHtml = (procedure: any): string => {
         .sig-box { width: 45%; border-top: 1px solid #555; padding-top: 6px; font-size: 11px; text-align: center; }
         .footer { margin-top: 28px; padding-top: 10px; border-top: 1px dashed #BDBDBD; font-size: 10px; color: #757575; text-align: center; }
         .badge { display: inline-block; padding: 3px 8px; background-color: #6A1B9A; color: white; border-radius: 10px; font-size: 10px; font-weight: bold; }
+        /* iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-field bullet lists. */
+        .bullet-block { margin: 4px 0 6px 0; }
+        .bullet-label { font-weight: 700; color: #2E7D32; font-size: 11px; letter-spacing: 0.2px; margin-bottom: 2px; }
+        .bullet-list { margin: 0 0 0 16px; padding: 0; }
+        .bullet-list li { font-size: 11px; color: #37474F; line-height: 1.4; }
       </style>
     </head>
     <body>
@@ -799,7 +820,7 @@ export const buildLabSlipHtml = (procedure: any): string => {
           <tr><td class="lbl">Prosthetic Material</td><td>${p4.prosthetic_material || '—'}</td></tr>
           ${p4.custom_abutment ? `<tr><td class="lbl">Custom Abutment</td><td>${p4.custom_abutment}</td></tr>` : ''}
           ${p4.overdenture_attachment ? `<tr><td class="lbl">Overdenture Attachment</td><td>${p4.overdenture_attachment}</td></tr>` : ''}
-          <tr><td class="lbl">Impression</td><td>${impressionSummary}</td></tr>
+          <tr><td class="lbl">Impression</td><td>${impressionSummary}${scanSubfieldsHtml ? `<div style="margin-top: 6px;">${scanSubfieldsHtml}</div>` : ''}</td></tr>
           ${procedure.shade ? `<tr><td class="lbl">Shade</td><td>${procedure.shade}</td></tr>` : ''}
         </table>
       </div>
