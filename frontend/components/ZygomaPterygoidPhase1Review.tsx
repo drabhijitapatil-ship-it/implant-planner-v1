@@ -50,21 +50,29 @@ const bi = (obj: any): string => {
 };
 
 const Row: React.FC<{ label: string; value: string; icon?: any }> = ({ label, value, icon }) => {
+  // iter-Jun-2026 (v13, Chunk E, Ask 3): Match the Conventional-implant
+  // review's InfoRow visual — icon on the left, label above value, thin
+  // grey divider below. Same font sizes / spacing / colours as InfoRow
+  // in /app/frontend/app/procedures/[id].tsx.
   if (!value) return null;
   return (
     <View style={styles.row}>
-      {icon ? <Ionicons name={icon} size={14} color="#5E35B1" style={{ marginRight: 6 }} /> : null}
-      <Text style={styles.rowLabel}>{label}:</Text>
-      <Text style={styles.rowValue} numberOfLines={0}>{value}</Text>
+      <View style={styles.rowIconWrap}>
+        {icon ? <Ionicons name={icon} size={18} color="#1565C0" /> : null}
+      </View>
+      <View style={styles.rowContent}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.rowValue}>{value}</Text>
+      </View>
     </View>
   );
 };
 
 const Group: React.FC<{ title: string; icon?: any; children: React.ReactNode; testID?: string }> = ({ title, icon, children, testID }) => {
-  // iter-Jun-2026 (v13, Chunk A, Ask 1): Each section renders as its own
-  // card matching the "Procedure Details" / "Clinical Examination" cards
-  // used for Conventional cases (white background, purple left-border,
-  // section header with icon + title, uniform spacing).
+  // iter-Jun-2026 (v13, Chunk E, Ask 3): Section card matches the
+  // Conventional review — white background, subtle blue-tinted shadow,
+  // border `#E8EDF5`, section title in blue `#1565C0`. No coloured
+  // header bar; keep it clean and uniform across procedure types.
   const kids = React.Children.toArray(children);
   const hasVisible = kids.some((c: any) => {
     if (!c || typeof c !== 'object') return false;
@@ -75,9 +83,7 @@ const Group: React.FC<{ title: string; icon?: any; children: React.ReactNode; te
   return (
     <View style={styles.sectionCard} testID={testID}>
       <View style={styles.sectionCardHeader}>
-        <View style={styles.sectionCardIcon}>
-          <Ionicons name={icon || 'document-text-outline'} size={14} color="#FFF" />
-        </View>
+        {icon ? <Ionicons name={icon} size={18} color="#1565C0" style={{ marginRight: 6 }} /> : null}
         <Text style={styles.sectionCardTitle}>{title}</Text>
       </View>
       <View style={styles.sectionCardBody}>{kids}</View>
@@ -266,73 +272,64 @@ const ZygomaPterygoidPhase1Review: React.FC<Props> = ({ procedure, testIdPrefix 
 };
 
 const styles = StyleSheet.create({
-  // iter-Jun-2026 (v13, Chunk A, Ask 1): Card-per-section layout matching
-  // the "Procedure Details" / "Clinical Examination" cards.
+  // iter-Jun-2026 (v13, Chunk E, Ask 3): Match Conventional-implant Case
+  // Details styles verbatim — white cards, blue titles + icons, blue-tinted
+  // shadow, `#E8EDF5` borders, InfoRow-style rows with icon + label above
+  // value.  Zygoma / Pterygoid Phase 1 now looks identical to Conventional.
   headerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
     marginHorizontal: 12,
     marginTop: 8,
     padding: 14,
-    borderLeftWidth: 4,
-    borderLeftColor: '#5E35B1',
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: '#E8EDF5',
+    shadowColor: '#1565C0',
     shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
     marginHorizontal: 12,
-    marginTop: 8,
+    marginTop: 12,
+    padding: 18,
     borderWidth: 1,
-    borderColor: '#EDE7F6',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-    overflow: 'hidden',
+    borderColor: '#E8EDF5',
+    shadowColor: '#1565C0',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   sectionCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: '#F3E5F5',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E1BEE7',
+    marginBottom: 12,
   },
+  // Legacy — no longer rendered; kept for backwards compatibility.
   sectionCardIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#5E35B1',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 0, height: 0, overflow: 'hidden',
   },
   sectionCardTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#4527A0',
-    letterSpacing: 0.2,
+    color: '#1565C0',
+    letterSpacing: 0.3,
   },
   sectionCardBody: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    // No extra padding — matches Conventional's tight infoRow rhythm.
   },
-  // Legacy `section` kept for backward-compat.
   section: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
     marginHorizontal: 12,
     marginTop: 8,
-    padding: 14,
-    borderLeftWidth: 4,
-    borderLeftColor: '#5E35B1',
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E8EDF5',
   },
   header: {
     flexDirection: 'row',
@@ -345,11 +342,11 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#5E35B1',
+    backgroundColor: '#1565C0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#37474F' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1565C0', letterSpacing: 0.3 },
   sectionSubtitle: { fontSize: 11, color: '#78909C', marginTop: 1 },
   emptyHint: { fontSize: 12, color: '#78909C', fontStyle: 'italic', marginTop: 8 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, marginBottom: 4 },
@@ -361,15 +358,31 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
   group: { marginTop: 10 },
   groupTitle: {
-    fontSize: 12, fontWeight: '800', color: '#5E35B1',
+    fontSize: 12, fontWeight: '800', color: '#1565C0',
     letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase',
   },
+  // InfoRow-mirror: icon on the left, label above value, thin bottom divider.
   row: {
-    flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start',
-    paddingVertical: 3, gap: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F4F8',
   },
-  rowLabel: { fontSize: 12, color: '#546E7A', fontWeight: '600', minWidth: 140 },
-  rowValue: { fontSize: 12, color: '#37474F', flexShrink: 1, flex: 1 },
+  rowIconWrap: { width: 24, alignItems: 'center', justifyContent: 'center' },
+  rowContent: { marginLeft: 12, flex: 1 },
+  rowLabel: {
+    fontSize: 12,
+    color: '#1565C0',
+    marginBottom: 4,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  rowValue: {
+    fontSize: 14,
+    color: '#1A1A2E',
+    fontWeight: '500',
+  },
 });
 
 export default ZygomaPterygoidPhase1Review;

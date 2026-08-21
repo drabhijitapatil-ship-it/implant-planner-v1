@@ -1,0 +1,57 @@
+{
+  "summary": "iter-422 v13 Chunk E — 3 refinements to Zygoma/Pterygoid/Conventional workflow VERIFIED. Backend Ask 1: 11/11 pytest PASS. Frontend Ask 2 & 3: verified via mobile viewport (390×844) as Abhijit.patil on seed case 6a8337dd64ad3269dc584a69. ASK 1 PASS — POST /api/procedures/{id}/smart-planner on the 4 Zygoma-containing types (Quad Zygoma / Zygoma+Pterygoid / Zygoma+Conventional / Zygoma+Pterygoid+Conventional) all return case_type='full_arch' AND arch_condition='edentulous_maxillary'; Pterygoid-only ('Pterygoid and Conventional Implants') stays dentulous with arch_condition=null; the 3 All-on-X types stay full_arch with arch_condition=null; Single/Multiple Implant Placement remain dentulous. Default-to-Maxillary arch confirmed on a Quad Zygoma case with arch='' (restorative-space module renders arch='Maxillary' + title 'Maxillary Restorative Space Analysis'). ASK 2 PASS — With prosthetic_plan='Temporary PMMA CAD Prosthesis' and phase2_data.prosthesis_type='Fixed': (2.1) phase2-prosthesis-type-summary chip visually renders 'Prosthesis Type: Temporary PMMA CAD Prosthesis' (NOT 'Fixed') — sourced from procedure.prosthetic_plan. (2.2) All 3 Immediate Loading per-implant cards (ZR1/ZL1/PR1) show inline 'Prosthesis type: Temporary PMMA CAD Prosthesis'. (2.3) phase3-immediate-prosthesis-summary code path uses a single _display var for BOTH 'Prosthesis Type:' and 'Prosthetic Plan:' rows so they cannot diverge — invariant validated by inspection (procedures/[id].tsx L3538-3552); the block only appears once phase3_data is populated so it does not visually render on this case (status=phase2_approved). (2.4) phase3-immediate-prosthesis-banner banner innerText matched byte-for-byte 'Immediate Prosthesis Done / Prosthesis Type: Temporary PMMA CAD Prosthesis / Prosthetic Plan: Temporary PMMA CAD Prosthesis' — count('Temporary PMMA CAD Prosthesis')=2, both rows equal. (2.5) With prosthetic_plan cleared to '' — Phase 2 summary chip shows '— (not recorded)'; Phase 3 form banner shows 'Prosthesis Type: —' AND 'Prosthetic Plan: —' (both rows fallback identically). ASK 3 PASS — ZygomaPterygoidPhase1Review section cards now render with computed styles bg rgb(255,255,255), borderRadius 16px, borderColor rgb(232,237,245)=#E8EDF5, borderLeftWidth 1px — NO purple 4px accent bar. Section titles + icons in blue #1565C0 (fontSize:16, fontWeight:700). InfoRow-mirror rows (icon left, label above value, bottom divider #F0F4F8) confirmed by StyleSheet + rendered layout. All 14 existing testIDs (zyg-p1-review, zyg-p1-review-config-pill, zyg-p1-review-group-{ds,ma,an,pre,ext,intra,pr,rad,zr,pt,bz,pp,dc,team}) render correctly. Case state restored to prosthetic_plan='Fixed hybrid' post-test. Screenshots captured for visual regression: /tmp/iter422_case_details.png, /tmp/iter422_phase3_form_banner.png, /tmp/iter422_ask25_empty_plan_p2.png, /tmp/iter422_ask25_empty_plan_p3form.png, /tmp/iter422_ask3_zyg_phase1_review.png.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "procedures/[id].tsx Phase 2 review per-implant inline 'Prosthesis type:' line (L3142-3148)",
+        "issue": "When procedure.prosthetic_plan is empty, the inline 'Prosthesis type: ...' text row inside each per-implant card is entirely omitted (gated on `pc === 'Immediate Loading Done' && prosthesisType`). Ask 2.5 spec calls for a '—' or '— (not recorded)' fallback in ALL FOUR locations. The global summary chip does surface the fallback, so the operator is not left completely blind — but for symmetry / consistency with the other 3 locations, consider rendering 'Prosthesis type: —' when the parent Immediate Loading is set but prosthesisType is empty.",
+        "testID": "phase2-implant-card-{0..2} (Immediate Loading rows)",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter422_smart_planner_zygoma.py",
+    "/app/test_reports/pytest/iter422_smart_planner.xml",
+    "/app/test_reports/iteration_422.json",
+    "/tmp/iter422_case_details.png",
+    "/tmp/iter422_phase3_form_banner.png",
+    "/tmp/iter422_ask25_empty_plan_p2.png",
+    "/tmp/iter422_ask25_empty_plan_p3form.png",
+    "/tmp/iter422_ask3_zyg_phase1_review.png"
+  ],
+  "action_items": [
+    "OPTIONAL (P3): procedures/[id].tsx L3142-3148 — when prosthetic_plan is empty on an Immediate Loading implant, either render 'Prosthesis type: —' in the per-implant card OR document that the global summary chip is the intentional single fallback surface. Non-blocking."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py:13265-13270 — ZYGOMA_FULL_ARCH_SET is defined as a module-level constant (4 entries, matches spec exactly). Comment block (L13261-13264) correctly documents that Pterygoid-only combos are NOT in the set. Clean isolation from the pre-existing FULL_ARCH_SET.",
+    "backend/server.py:13275-13276 — `is_zygoma_full_arch = proc_type in ZYGOMA_FULL_ARCH_SET` and `is_full_arch = proc_type in FULL_ARCH_SET or is_zygoma_full_arch`. Ordering is right — Zygoma cases inherit full-arch behaviour without duplicating the FULL_ARCH_SET list. Change is additive; no regression risk on the existing All-on-X path.",
+    "backend/server.py:13288 — `arch = procedure.get('arch', '') or ('Maxillary' if is_zygoma_full_arch else '')`. Default-to-Maxillary only fires when arch is falsy AND the case is Zygoma. Doesn't touch cases where the operator picked Mandibular explicitly. Verified by T2 in test suite (arch='' + Quad Zygoma → module reports arch='Maxillary').",
+    "backend/server.py:13528-13529 — return dict has `case_type` (full_arch/dentulous) + `arch_condition` (edentulous_maxillary/null) as top-level fields. Consistent shape; frontend can read arch_condition even when modules list is short (e.g., no phase3_data).",
+    "procedures/[id].tsx L3053-3060 — 'Prosthesis Type' and 'Prosthetic Plan' both sourced from procedure.prosthetic_plan (single source of truth). Elegant — makes it impossible for the two labels to diverge in review-side UI.",
+    "procedures/[id].tsx L3538-3552 — phase3-immediate-prosthesis-summary uses a single `_display` variable rendered on BOTH 'Prosthesis Type:' and 'Prosthetic Plan:' rows. Guaranteed equal. Fallback '— (not recorded)' when plan is empty.",
+    "submit-stage2-surgical/[id].tsx L418-429 — phase3-immediate-prosthesis-banner mirrors the same pattern; both rows read prostheticPlan (with prostheticPlanOther fallback for 'Other'). Fallback is '—' (short dash) here vs. '— (not recorded)' on the review side — minor cosmetic inconsistency but matches spec ('— or — (not recorded)').",
+    "ZygomaPterygoidPhase1Review.tsx L279-306 — sectionCard style matches Conventional review's styles.section verbatim (white bg, borderRadius 16, border #E8EDF5, blue-tinted shadow #1565C0 alpha 0.05). No leftover purple left border on the section card. Legacy sectionCardIcon kept as {width:0,height:0,overflow:'hidden'} — clean deprecation.",
+    "ZygomaPterygoidPhase1Review.tsx L316-321 — sectionCardTitle: color #1565C0, fontSize 16, fontWeight '700'. Matches Conventional's sectionTitle exactly.",
+    "ZygomaPterygoidPhase1Review.tsx L365-386 — Row is now InfoRow-mirror: icon left in blue, label above value, bottom divider #F0F4F8. Layout is uniform with the Conventional-implant Case Details rows."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter422_smart_planner_zygoma.py (new)",
+    "/app/test_reports/iteration_422.json (new)",
+    "/app/test_reports/pytest/iter422_smart_planner.xml (new)",
+    "/app/test_result.md (appended iter-422 result note)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 tests)",
+    "frontend": "Ask 2: 4/4 sub-checks visually PASS (2.1, 2.2, 2.4 verified live; 2.3 verified by code inspection since phase3_data is not populated on this case; 2.5 fallback PASS with 1 low-priority spec deviation on per-implant inline row). Ask 3: 5/5 sub-checks PASS (styles verified via computed style + StyleSheet; testIDs preserved; visual layout matches Conventional review)."
+  },
+  "seed_data_creation": "None. Reused seed 'Test Patient Zygoma' 6a8337dd64ad3269dc584a69 (Zygoma+Pterygoid, phase2_approved, 5 implants: 3 Immediate Loading + 1 Cover Screw + 1 Healing Abutment). Temporary Mongo mutations: (a) prosthetic_plan cycled 'Fixed hybrid' → 'Temporary PMMA CAD Prosthesis' → '' → restored to 'Fixed hybrid' at end; (b) Ask 1 backend tests use pytest fixture with autouse restore so implant_procedure_type/status/arch/available_interarch_space are snapshotted + replaced per-test. Post-run state is IDENTICAL to pre-run (verified: prosthetic_plan='Fixed hybrid', status='phase2_approved', implant_procedure_type='Zygoma and Pterygoid Implants').",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter-422 Chunk E is green. Backend classifier fields (case_type + arch_condition) are stable across all 8 implant_procedure_type values. Zygoma-family cases now surface as edentulous full maxillary arch in the smart-planner response. Frontend contract: procedure.prosthetic_plan is the SINGLE source of truth for both 'Prosthesis Type' and 'Prosthetic Plan' labels across Phase 2 review, Phase 3 review, and Phase 3 form banner — do NOT re-introduce phase2_data.prosthesis_type as a secondary source; that field is now purely legacy. ZygomaPterygoidPhase1Review visual style is now identical to Conventional review — any future tweak to the Conventional review's `styles.section` should be mirrored here (both use white bg + #E8EDF5 border + borderRadius 16). Seed case 6a8337dd64ad3269dc584a69 restored to prosthetic_plan='Fixed hybrid' at exit. One low-priority action item logged (per-implant inline 'Prosthesis type:' fallback symmetry).",
+  "rca_of_issue": "N/A — all 3 asks verified working. Note on the low-priority ui_bug: procedures/[id].tsx L3142 gates the per-implant inline 'Prosthesis type:' text on `pc === 'Immediate Loading Done' && prosthesisType` — the second predicate short-circuits when prosthetic_plan is empty. The global summary chip (phase2-prosthesis-type-summary) does render the '— (not recorded)' fallback, so the operator still sees the missing state. To meet Ask 2.5's literal 'all four locations show —' guidance, the per-implant inline could be relaxed to `pc === 'Immediate Loading Done'` and render '—' when prosthesisType is empty. Non-blocking for the current release."
+}

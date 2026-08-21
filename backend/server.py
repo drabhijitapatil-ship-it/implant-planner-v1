@@ -13258,11 +13258,22 @@ async def get_ai_chat_history(procedure_id: str, current_user: dict = Depends(ge
 
 # ── Smart Prosthetic Planner ───────────────────────────────────────────────
 FULL_ARCH_SET = {"All on 4", "All on 6", "All on X"}
+# iter-Jun-2026 (v13, Chunk E, Ask 1): Zygoma-containing procedure types are
+# always full-maxillary-arch, edentulous rehabilitation. Pterygoid-only
+# combinations (e.g. Pterygoid and Conventional Implants) are NOT included —
+# those stay on the dentulous path per the user's clarification.
+ZYGOMA_FULL_ARCH_SET = {
+    "Quad Zygoma Implants",
+    "Zygoma and Pterygoid Implants",
+    "Zygoma and Conventional Implants",
+    "Zygoma, Pterygoid and Conventional Implants",
+}
 ANTERIOR_TEETH = {11, 12, 13, 21, 22, 23}
 
 def _generate_smart_planner_report(procedure: dict) -> dict:
     proc_type = procedure.get("implant_procedure_type", "")
-    is_full_arch = proc_type in FULL_ARCH_SET
+    is_zygoma_full_arch = proc_type in ZYGOMA_FULL_ARCH_SET
+    is_full_arch = proc_type in FULL_ARCH_SET or is_zygoma_full_arch
     implant_plans = procedure.get("implant_plans", [])
     risk_score = procedure.get("medical_risk_score", "")
     p3 = procedure.get("phase3_data") or {}
@@ -13271,7 +13282,10 @@ def _generate_smart_planner_report(procedure: dict) -> dict:
 
     if is_full_arch:
         # ── FULL ARCH PATH ──
-        arch = procedure.get("arch", "") or ""
+        # iter-Jun-2026 (v13, Chunk E, Ask 1): For Zygoma cases the arch is
+        # anatomically fixed to Maxillary (zygomatic bone anchors in the
+        # upper face), so default when the user didn't pick one explicitly.
+        arch = procedure.get("arch", "") or ("Maxillary" if is_zygoma_full_arch else "")
         interarch_raw = procedure.get("available_interarch_space", "")
         interarch = 0
         try:
@@ -13512,6 +13526,7 @@ def _generate_smart_planner_report(procedure: dict) -> dict:
 
     return {
         "case_type": "full_arch" if is_full_arch else "dentulous",
+        "arch_condition": "edentulous_maxillary" if is_zygoma_full_arch else None,
         "procedure_type": proc_type,
         "modules": modules,
         "alerts": alerts,

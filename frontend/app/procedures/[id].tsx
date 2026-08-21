@@ -3050,8 +3050,14 @@ export default function ProcedureDetailScreen() {
                 const perImplant = procedure.phase2_data.prosthetic_components;
                 const cuffs = procedure.phase2_data.healing_abutment_cuff_height;
                 const singleComponent = procedure.phase2_data.prosthetic_component;
-                const prosthesisType = procedure.phase2_data.prosthesis_type;
-                const prosthesisTypeOther = procedure.phase2_data.prosthesis_type_other;
+                // iter-Jun-2026 (v13, Chunk E, Ask 2): "Prosthesis Type" and
+                // "Prosthetic Plan" are conceptually the same. Source BOTH
+                // labels from procedure.prosthetic_plan so they always show
+                // the same detailed value across Phase 2 + Phase 3 views.
+                const _plan = procedure.prosthetic_plan;
+                const _planOther = procedure.prosthetic_plan_other;
+                const prosthesisType = _plan;
+                const prosthesisTypeOther = _planOther;
                 const plans = procedure.implant_plans || procedure.implants || [];
                 const _fdi = (i: number) => {
                   const p = plans[i] || {};
@@ -3524,10 +3530,14 @@ export default function ProcedureDetailScreen() {
               const p2Components: string[] = Array.isArray(p2.prosthetic_components) ? p2.prosthetic_components : [];
               const anyImmediate = p2Components.includes('Immediate Loading Done') || p2.prosthetic_component === 'Immediate Loading Done';
               if (!anyImmediate) return null;
-              const pType = p2.prosthesis_type;
-              const pOther = p2.prosthesis_type_other;
+              // iter-Jun-2026 (v13, Chunk E, Ask 2): Prosthesis Type and
+              // Prosthetic Plan share procedure.prosthetic_plan as their
+              // single source of truth.
               const plan = procedure.prosthetic_plan;
               const planOther = procedure.prosthetic_plan_other;
+              const _display = plan
+                ? (plan === 'Other' ? (planOther || 'Other') : plan)
+                : '— (not recorded)';
               return (
                 <View style={{
                   marginBottom: 14, padding: 10, borderRadius: 8,
@@ -3535,15 +3545,11 @@ export default function ProcedureDetailScreen() {
                 }} data-testid="phase3-immediate-prosthesis-summary">
                   <Text style={{ fontSize: 13, fontWeight: '800', color: '#1B5E20', marginBottom: 4 }}>Immediate Prosthesis Done</Text>
                   <Text style={{ fontSize: 12.5, color: '#33691E' }}>
-                    <Text style={{ fontWeight: '700' }}>Prosthesis Type:</Text>{' '}
-                    {pType ? (pType === 'Other' ? (pOther || 'Other') : pType) : '— (not recorded)'}
+                    <Text style={{ fontWeight: '700' }}>Prosthesis Type:</Text>{' '}{_display}
                   </Text>
-                  {plan ? (
-                    <Text style={{ marginTop: 2, fontSize: 12.5, color: '#33691E' }}>
-                      <Text style={{ fontWeight: '700' }}>Prosthetic Plan:</Text>{' '}
-                      {plan === 'Other' ? (planOther || 'Other') : plan}
-                    </Text>
-                  ) : null}
+                  <Text style={{ marginTop: 2, fontSize: 12.5, color: '#33691E' }}>
+                    <Text style={{ fontWeight: '700' }}>Prosthetic Plan:</Text>{' '}{_display}
+                  </Text>
                 </View>
               );
             })()}

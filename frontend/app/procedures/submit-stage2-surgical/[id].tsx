@@ -413,17 +413,20 @@ export default function Stage2SurgicalSubmissionScreen() {
           {phase2Component === 'Immediate Loading Done' && (
             <View style={[s.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32', backgroundColor: '#F1F8E9' }]} testID="phase3-immediate-prosthesis-banner">
               <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20' }}>Immediate Prosthesis Done</Text>
+              {/* iter-Jun-2026 (v13, Chunk E, Ask 2): "Prosthesis Type" and
+                  "Prosthetic Plan" share the same value = prosthetic_plan. */}
               <Text style={{ marginTop: 6, fontSize: 13, color: '#33691E' }}>
                 <Text style={{ fontWeight: '700' }}>Prosthesis Type:</Text>{' '}
-                {phase2ProsthesisType === 'Other' ? (phase2ProsthesisOther || 'Other') : (phase2ProsthesisType || '—')}
+                {prostheticPlan
+                  ? (prostheticPlan === 'Other' ? (prostheticPlanOther || 'Other') : prostheticPlan)
+                  : '—'}
               </Text>
-              {/* iter-Jun-2026 (v13, Chunk D, Ask 4): also surface the Prosthetic Plan */}
-              {prostheticPlan ? (
-                <Text style={{ marginTop: 4, fontSize: 13, color: '#33691E' }} testID="phase3-banner-prosthetic-plan">
-                  <Text style={{ fontWeight: '700' }}>Prosthetic Plan:</Text>{' '}
-                  {prostheticPlan === 'Other' ? (prostheticPlanOther || 'Other') : prostheticPlan}
-                </Text>
-              ) : null}
+              <Text style={{ marginTop: 4, fontSize: 13, color: '#33691E' }} testID="phase3-banner-prosthetic-plan">
+                <Text style={{ fontWeight: '700' }}>Prosthetic Plan:</Text>{' '}
+                {prostheticPlan
+                  ? (prostheticPlan === 'Other' ? (prostheticPlanOther || 'Other') : prostheticPlan)
+                  : '—'}
+              </Text>
               {isOwner && !pendingEditRequest && (
                 <TouchableOpacity style={s.requestEditBtn} onPress={openEditRequestModal} data-testid="phase3-request-edit-btn">
                   <Ionicons name="alert-circle-outline" size={16} color="#E65100" />
