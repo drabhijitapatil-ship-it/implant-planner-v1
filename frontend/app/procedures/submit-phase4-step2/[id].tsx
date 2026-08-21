@@ -8,7 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import api, { getAuthFileUrl } from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PhaseHeader } from '../../../components/PhaseHeader';
-import PhaseTabbedAutoFetch from '../../../components/PhaseTabbedAutoFetch';
+// iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 4 Step 2.
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
 import { showUploadPicker } from '../../../utils/uploadPicker';
@@ -295,8 +295,8 @@ export default function Phase4Step2Screen() {
       <PhaseHeader title="Phase 4 - Prosthetic Rehabilitation" subtitle="Step 2 of 2: Final Restoration" testID="phase4-step2-submit-header" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
-          {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid tabbed view (Phase 4 Step 2) */}
-          <PhaseTabbedAutoFetch phase={4} procedureId={String(id)} />
+          {/* iter-Jun-2026 (v13, Chunk D, Ask 1): Zygoma/Pterygoid/Conventional
+              3-tab sub-view removed from Phase 4 Step 2. */}
           {/* iter-226: Side-by-side baseline vs current radiograph comparison.
               Existing-implant cases compare Phase 1 IOPA vs Phase 4 IOPA;
               routine cases compare Phase 2 post-surgical IOPA vs Phase 4 IOPA. */}

@@ -7437,3 +7437,17 @@ Root cause: POST /api/procedures/{id}/submit-phase2 issued a single $set that co
 Fix: /app/backend/server.py (~line 15767) — merge those sub-fields INTO phase2_surgical_data BEFORE composing update_data, and also merge any pre-existing phase2_data.* keys so a Phase 2 submit does not wipe advanced_clinical / other state written by the standalone AdvancedClinicalCard.
 TESTED (iter-420): backend 5/5 pytest PASS. Reports /app/test_reports/iteration_420.json. Advanced Clinical preservation regression confirmed. iter-419 prosthetic_plan audit trail untouched.
 Deployment: User needs to redeploy backend on Emergent to push this hotfix to production.
+
+## Iteration 421 (Jun 2026) — Chunk D: 5 UI/UX refinements for Zygoma/Pterygoid/Conventional workflow
+User asks:
+1. Remove Zygoma/Pterygoid/Conventional 3-tab sub-view from Phase 3, Phase 4, Phase 5 (previously removed from Phase 2 in Chunk A).
+2. Case Details Phase 2 review — colored per-implant outlines: Orange = Zygoma, Blue = Pterygoid, Yellow = Conventional. Only outline is coloured (rest of the card stays neutral).
+3. Prosthesis Type recorded in Phase 2 Step 2 now visible in Case Details Phase 2 review — global summary banner above the per-implant chips + inline "Prosthesis Type: X" on each Immediate Loading card.
+4. In Phase 3 (form banner + case details review), when Immediate Prosthesis was done, also surface the Prosthetic Plan from procedure.prosthetic_plan (Phase 1 value, possibly overridden in Phase 2 via iter-419).
+5. If Immediate Loading was done for an implant in Phase 2, the Phase 3 form skips its Healing Abutment card entirely; validation no longer counts these implants as incomplete. If EVERY implant is Immediate Loading, the whole HA section is hidden. Mirrored on the Case Details review side.
+CHANGES:
+- /app/frontend/app/procedures/submit-stage2-surgical/[id].tsx — Removed PhaseTabbedAutoFetch import + JSX. Added prostheticPlan / prostheticPlanOther state hydrated from procedure. Banner now shows Prosthesis Type + Prosthetic Plan (testID phase3-banner-prosthetic-plan). Validation loop + HA card map skip cfg.phase2_component === 'Immediate Loading Done'. Section header wrapper hidden when all implants are Immediate.
+- /app/frontend/app/procedures/submit-phase4-step2/[id].tsx, submit-stage2-prosthetic/[id].tsx, followup/[id].tsx — Removed PhaseTabbedAutoFetch import + JSX.
+- /app/frontend/app/procedures/[id].tsx — Case Details Phase 2 review: per-implant card border coloured by implant_type via _outlineFor(). Added global summary phase2-prosthesis-type-summary. Guarded legacy "Tap to add" placeholder to only run for single-implant flow. Case Details Phase 3 review: new phase3-immediate-prosthesis-summary block; HA readback skips Immediate Loading implants.
+TESTED (iter-421): Frontend Playwright 5/5 PASS on mobile 390x844 using a seeded 5-implant mixed case. Report /app/test_reports/iteration_421.json. Backend NOT re-tested (no server-side changes). iter-419/420 baselines remain green.
+Deployment: User needs to redeploy (frontend + backend hotfix from iter-420) via the Publish button to push these to production.
