@@ -7451,3 +7451,16 @@ CHANGES:
 - /app/frontend/app/procedures/[id].tsx — Case Details Phase 2 review: per-implant card border coloured by implant_type via _outlineFor(). Added global summary phase2-prosthesis-type-summary. Guarded legacy "Tap to add" placeholder to only run for single-implant flow. Case Details Phase 3 review: new phase3-immediate-prosthesis-summary block; HA readback skips Immediate Loading implants.
 TESTED (iter-421): Frontend Playwright 5/5 PASS on mobile 390x844 using a seeded 5-implant mixed case. Report /app/test_reports/iteration_421.json. Backend NOT re-tested (no server-side changes). iter-419/420 baselines remain green.
 Deployment: User needs to redeploy (frontend + backend hotfix from iter-420) via the Publish button to push these to production.
+
+## Iteration 422 (Jun 2026) — Chunk E: 3 refinements to Zygoma/Pterygoid/Conventional workflow
+User asks:
+1. Smart Prosthetic Planner: Zygoma-containing cases (alone or combined with Pterygoid/Conventional) MUST always be classified as edentulous full-maxillary-arch rehabilitation. Pterygoid-only combos remain dentulous.
+2. "Prosthesis Type" and "Prosthetic Plan" are the same concept — wherever both labels appear separately, source both from procedure.prosthetic_plan so they show identical detailed value.
+3. Zygoma/Pterygoid Phase 1 review must LOOK identical to Conventional (uniform for Student/Supervisor/Implant In-Charge reviewers).
+CHANGES:
+- /app/backend/server.py — new constant ZYGOMA_FULL_ARCH_SET (4 procedure types containing Zygoma). _generate_smart_planner_report() folds it into is_full_arch, defaults arch to 'Maxillary' when unset, and adds arch_condition='edentulous_maxillary' to the response for those cases.
+- /app/frontend/app/procedures/[id].tsx (Case Details) — Phase 2 review: `prosthesisType`/`prosthesisTypeOther` now sourced from procedure.prosthetic_plan (chip + inline per-implant lines). Phase 3 review: `phase3-immediate-prosthesis-summary` uses one `_display` variable for both "Prosthesis Type" and "Prosthetic Plan" rows.
+- /app/frontend/app/procedures/submit-stage2-surgical/[id].tsx (Phase 3 form banner) — Both "Prosthesis Type" and "Prosthetic Plan" rows sourced from prostheticPlan/prostheticPlanOther.
+- /app/frontend/components/ZygomaPterygoidPhase1Review.tsx — Full style refactor: white cards with `#E8EDF5` border + `borderRadius: 16` + blue-tinted shadow; blue `#1565C0` section titles at fontSize 16 fontWeight 700; InfoRow-mirror row (icon left, label above value, `#F0F4F8` divider). All 14 existing testIDs preserved.
+TESTED (iter-422): backend 11/11 pytest PASS (Zygoma classifier + full-arch classification + dentulous regression). Frontend Playwright PASS across Phase 2 summary, per-implant inline, Phase 3 banner + review, and layout uniformity. Report /app/test_reports/iteration_422.json.
+Deployment: User needs to redeploy (Publish button) so backend classifier change + frontend refresh ship to production.
