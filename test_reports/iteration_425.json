@@ -1,0 +1,62 @@
+{
+  "summary": "iter-425 Chunk H — 3 asks tested (frontend-only) on /app/frontend/app/procedures/submit-phase4-step2/[id].tsx via live smoke on 9 procedure-type combinations against seed case 699fbfa15279dfa7819789b8. Ask 1 (Baseline compare gated by supportsBaselineCompare) ✅ PASS: RadiographCompare testIDs `phase4-step2-radiograph-compare`/`radiograph-compare-toggle` render on pureConv (per-tooth rows `compare-row-Tooth 12/22`) and pureConvFA (`compare-row-Full Arch — OPG`), and are HIDDEN for all 4 pure-Zyg/Ptr variants (Zygoma Implants, Pterygoid Implants, Quad Zygoma Implants, Zygoma+Pterygoid) AND all 3 mixed variants (Zyg+Conv, Ptr+Conv, Zyg+Ptr+Conv). Gate at [id].tsx:126 `supportsBaselineCompare = zygPtrImplantPositions.length === 0` behaves per spec. Ask 2 (imaging split) ⚠️ PARTIAL — 8 of 9 scenarios match spec, but pure Conventional Full Arch (All on 4/6/X) fails: the IOPA section renders alongside OPG when the spec requires IOPA to be HIDDEN. Verified via testIDs `phase4-step2-opg-section` + `phase4-step2-iopa-section` present and `iopa-row-14/16/26` rendered on the pureConvFA scenario. Titles verified: pureConv IOPA='Post-Delivery IOPA (per implant) *', pureZyg OPG='Post-Delivery OPG (Zygoma / Pterygoid) *', mixedFull OPG='Post-Delivery OPG (Zygoma / Pterygoid) *' + IOPA='Post-Delivery IOPA (per implant) — Conventional Implants *', mixed IOPA rows only for Conv positions (mixedZygConv → iopa-row-12/22 NOT ZR1, mixedPtrConv → iopa-row-12 NOT PR1, mixedFull → iopa-row-12/22 NOT ZR1/PR1). Ask 3 (Baseline Probing title wrap) ✅ PASS: screenshot at 390×844 (/tmp/iter425_ask3_probing.png) shows title 'Baseline Probing Depth of Peri-implant Soft Tissue' wrapping to 2 lines inside the card (section box width 358, info button at x=337→357 fully inside), info button `baseline-probing-info-btn` visible on the right — no clipping. Also captured /tmp/iter425_bug_fullarch.png showing the erroneous IOPA-visible state for pureConvFA, and /tmp/iter425_mixed_split.png showing correct split-OPG+IOPA state for mixedFull.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "phase4-step2-iopa-section (pure Conventional Full Arch case)",
+        "issue": "Spec requires IOPA section HIDDEN for pure Conventional Full Arch (All on 4/6/X) — only OPG should render. Current code at [id].tsx:123 `needsIopa = iopaImplantPositions.length > 0` returns true because full-arch positions like 14/16/26 are still Conventional, so both OPG (via isFullArch) AND IOPA sections render. Reference: /app/frontend/app/procedures/submit-phase4-step2/[id].tsx:120-123.",
+        "testID": "phase4-step2-iopa-section",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Phase 4 Step 2 submit payload for pure Conventional Full Arch",
+        "issue": "Because the section renders, submit payload includes `iopa_uploads: {...}` for the full-arch case, but spec says `iopa_uploads: null, opg_upload: {...}` for pure-Conv-non-full-arch → implies full-arch Conv should send only opg_upload and NOT iopa_uploads. Fix by narrowing needsIopa: e.g. `needsIopa = iopaImplantPositions.length > 0 && (zygPtrImplantPositions.length > 0 || !isFullArch)`. Also update the OPG-missing message: pureConvFA scenario currently shows title 'Post-Delivery OPG *' (no Zygoma/Pterygoid suffix) which is correct, but the validation copy at [id].tsx:246 already handles this branch — no change needed there.",
+        "affected_testIDs": ["phase4-step2-iopa-section", "iopa-row-14", "iopa-row-16", "iopa-row-26", "phase4-step2-submit"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_425.json",
+    "/tmp/iter425_ask3_probing.png",
+    "/tmp/iter425_bug_fullarch.png",
+    "/tmp/iter425_mixed_split.png",
+    "/tmp/seed_scenarios.py",
+    "/tmp/iter425_case_backup.json"
+  ],
+  "action_items": [
+    "Fix pure Conventional Full Arch imaging split at /app/frontend/app/procedures/submit-phase4-step2/[id].tsx:123 — narrow needsIopa so it is FALSE when isFullArch is TRUE and zygPtrImplantPositions.length === 0. Recommended: `const needsIopa = iopaImplantPositions.length > 0 && (zygPtrImplantPositions.length > 0 || !isFullArch);`. This will hide the IOPA section and null out iopa_uploads in the submit payload for pure Conv full-arch (All on 4/6/X) cases as required by the spec.",
+    "After the fix, verify: (a) pureConvFA renders `phase4-step2-opg-section` only, no `phase4-step2-iopa-section`; (b) submit payload sends `iopa_uploads: null, opg_upload: {...}`; (c) missing-hints panel no longer shows an IOPA count for pureConvFA; (d) other 8 scenarios continue to behave as measured (pureConv IOPA-only, pureZyg/purePtr/pureQuadZyg/zygPtr OPG-only, mixedZygConv/mixedPtrConv/mixedFull BOTH with Conv-only IOPA rows).",
+    "OPTIONAL — RadiographCompare full-arch mode currently renders on pureConvFA (row `compare-row-Full Arch — OPG`). Spec Ask 1.1 explicitly names All on 4/6/X under Conventional cases, so this is correct; retained for reference."
+  ],
+  "critical_code_review_comments": [
+    "[id].tsx:98-101 — isZygPtrPosition helper correctly matches prefixes ZR/ZL/PR/PL and stringifies via String(pos || '') so undefined positions are safe. Same shape as submit-phase2 Chunk F per spec.",
+    "[id].tsx:120-121 — iopaImplantPositions / zygPtrImplantPositions partition implantPositions cleanly using the helper; ensures Conventional positions never leak into the OPG-only branch.",
+    "[id].tsx:122 — needsOpg = isFullArch || zygPtrImplantPositions.length > 0 correctly covers both full-arch Conv AND any-Zyg/Ptr case.",
+    "[id].tsx:123 — needsIopa = iopaImplantPositions.length > 0 is TOO PERMISSIVE for the pure Conv full-arch case (see ui_bugs entry). Needs guard `&& (zygPtrImplantPositions.length > 0 || !isFullArch)`.",
+    "[id].tsx:126 — supportsBaselineCompare gate reads only zygPtrImplantPositions.length; correctly hides RadiographCompare for pure-Zyg/Ptr AND mixed cases. Verified live on 9 scenarios.",
+    "[id].tsx:242-256 — modality-aware validation copy matches spec exactly (OPG Required / IOPA Required); depends on same needsIopa flag, so the pureConvFA bug will also incorrectly demand IOPA uploads at submit time.",
+    "[id].tsx:277-278 — payload branch `iopa_uploads: needsIopa ? iopaUploads : null` inherits the bug: pureConvFA will send `iopa_uploads: {...}` instead of null.",
+    "[id].tsx:642-651 — missing-hints uses independent opgMissing / iopaMissing trackers (Ask 2 mixed-case UX): mixedFull with nothing uploaded correctly produces 'OPG upload, 2 IOPA uploads'. Verified logic by inspection.",
+    "[id].tsx:573-587 — sectionHeader wrapped in `{ alignItems: 'flex-start' }` + title with `flex:1, flexShrink:1, flexWrap:'wrap'` + info button on the right stays inside the card at 390×844 (info-btn x∈[337,357], card x∈[16,374]). Ask 3 fix verified visually.",
+    "[id].tsx:381-383, :420-423 — OPG/IOPA titles use `flex:1, flexShrink:1, flexWrap:'wrap'` so the ' — Conventional Implants' suffix wraps cleanly on mixedFull without clipping (visually confirmed in /tmp/iter425_mixed_split.png)."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_425.json (new)",
+    "/tmp/seed_scenarios.py (new — helper to mutate implant_procedure_type + implant_plans for seed case)",
+    "/tmp/iter425_case_backup.json (new — pre-test snapshot of case 699fbfa15279dfa7819789b8)"
+  ],
+  "success_rate": {
+    "backend": "N/A (frontend-only ask)",
+    "frontend": "94% — 8 of 9 imaging-split scenarios pass; 3/3 baseline-compare scenarios pass; 9/9 mixed-case IOPA-position filtering passes; Ask 3 title-wrap passes visually. 1 spec violation on pureConvFA IOPA-visibility."
+  },
+  "seed_data_creation": "Temporary Mongo mutations on procedure ObjectId('699fbfa15279dfa7819789b8') ('All on 4', student=Gaurav Pandey, status=stage2_prosthetic_step1_approved, current_phase=4). Cycled implant_procedure_type + implant_plans through 9 combos (pureConv/pureConvFA/pureZyg/purePtr/pureQuadZyg/zygPtr/mixedZygConv/mixedPtrConv/mixedFull) via /tmp/seed_scenarios.py. Case restored to original values at end (implant_procedure_type='All on 4', implant_plans=[{position:14},{position:16},{position:26}]). No new users or cases created. Backup at /tmp/iter425_case_backup.json.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter-425 Chunk H — one spec deviation found: pureConvFA (All on 4/6/X, no Zyg/Ptr) still renders BOTH `phase4-step2-opg-section` AND `phase4-step2-iopa-section`. Root cause: /app/frontend/app/procedures/submit-phase4-step2/[id].tsx:123 uses `needsIopa = iopaImplantPositions.length > 0` without excluding the pure-Conv-full-arch case. Recommended fix: change to `iopaImplantPositions.length > 0 && (zygPtrImplantPositions.length > 0 || !isFullArch)`. After fix, retest with seed case 699fbfa15279dfa7819789b8 by mutating implant_plans + implant_procedure_type via /tmp/seed_scenarios.py (script auto-restores on 'restore' arg). Login as Abhijit.patil / Admin@123 (implant_incharge — has read access to all cases; Gaurav.pandey in /app/memory/test_credentials.md is a DIFFERENT student from the case's student_name so login-as-student returns 403 for this case). Ask 1 gate and Ask 3 title-wrap are green — no regression expected there. All 9 procedure-type combos and expected testIDs are documented in this report's summary.",
+  "rca_of_issue": "PureConvFA IOPA-visibility bug: When implant_procedure_type ∈ {All on 4, All on 6, All on X} AND every position is Conventional (no ZR/ZL/PR/PL), the spec requires ONLY the OPG section (full-arch OPG behavior). The current implementation partitions implant positions correctly (iopaImplantPositions = all Conv, zygPtrImplantPositions = []), then sets needsOpg=true (via isFullArch) and needsIopa=true (via iopaImplantPositions.length > 0). The bug is that `needsIopa` doesn't consider full-arch context. Reproduction: (1) Set procedure implant_procedure_type='All on 4' + implant_plans=[{position:'14'},{position:'16'},{position:'26'}]; (2) Open /procedures/submit-phase4-step2/{id}; (3) Observe both `phase4-step2-opg-section` and `phase4-step2-iopa-section` rendered. Mitigation: narrow needsIopa as noted above. Downstream: fixes the payload branch at line 277 automatically (needsIopa=false → iopa_uploads=null), and the missing-hints panel at line 643 automatically (iopaMissing=0)."
+}

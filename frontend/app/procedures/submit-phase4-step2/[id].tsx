@@ -89,6 +89,16 @@ export default function Phase4Step2Screen() {
     ? procedure.original_procedure_type
     : procedure?.implant_procedure_type;
   const isFullArch = procedure && FULL_ARCH_TYPES.has(effectiveProcType);
+  // iter-Jun-2026 (v13, Chunk H, Asks 1 & 2): Split Post-Delivery imaging by
+  // implant modality. Conventional implants use IOPA (per-tooth), Zygoma /
+  // Pterygoid implants use whole-arch OPG. When a case mixes both, we
+  // render two separate sections and require both. Baseline-radiograph
+  // comparison is only meaningful for Conventional implants — Zygoma /
+  // Pterygoid have no per-implant IOPA history to diff against.
+  const isZygPtrPosition = (pos: string): boolean => {
+    const p = String(pos || '');
+    return p.startsWith('ZR') || p.startsWith('ZL') || p.startsWith('PR') || p.startsWith('PL');
+  };
   // iter-225: implant positions fall back to existing_implants[].tooth when
   // the case originated as "Existing Implant" — implant_plans[] is empty
   // for those cases because the surgery was historical.
@@ -104,6 +114,20 @@ export default function Phase4Step2Screen() {
         : [];
     return activeTeeth ? raw.filter((pos: string) => activeTeeth.has(pos)) : raw;
   })();
+  // iter-Jun-2026 (v13, Chunk H): derived positions for the split imaging
+  // sections. `iopaImplantPositions` are Conventional (per-tooth IOPA);
+  // `zygPtrImplantPositions` are Zygoma / Pterygoid (whole-arch OPG).
+  const iopaImplantPositions = implantPositions.filter(p => !isZygPtrPosition(p));
+  const zygPtrImplantPositions = implantPositions.filter(p => isZygPtrPosition(p));
+  const needsOpg = isFullArch || zygPtrImplantPositions.length > 0;
+  // iter-Jun-2026 (v13, Chunk H, Ask 2 hotfix): Pure Conventional full-arch
+  // (All on 4/6/X) uses OPG only — hide IOPA there too. IOPA remains for
+  // pure non-full-arch Conventional cases AND for mixed cases (where the
+  // Conventional implants still need per-tooth IOPA alongside the OPG).
+  const needsIopa = iopaImplantPositions.length > 0 && (zygPtrImplantPositions.length > 0 || !isFullArch);
+  // Baseline comparison only makes sense for Conventional (per-tooth IOPA).
+  // Cases with any Zygoma/Pterygoid implants skip the compare feature.
+  const supportsBaselineCompare = zygPtrImplantPositions.length === 0;
   const isInchargeSelfCreated =
     user?.role === 'implant_incharge'
     && procedure?.created_by_role === 'implant_incharge'
@@ -215,14 +239,21 @@ export default function Phase4Step2Screen() {
       Alert.alert('Confirmation Required', 'Please confirm the prosthesis delivery statement.');
       return;
     }
-    if (isFullArch) {
-      if (!opgUpload) {
-        Alert.alert('OPG Required', 'Upload the post-delivery OPG for this full-arch case.');
-        return;
-      }
-    } else {
-      const missing = implantPositions.filter(pos => !iopaUploads[pos]);
-      if (implantPositions.length > 0 && missing.length > 0) {
+    // iter-Jun-2026 (v13, Chunk H, Ask 2): Modality-aware imaging
+    // validation. OPG required if the case has any Zygoma/Pterygoid
+    // implants OR is a Conventional full-arch. IOPA required only for
+    // Conventional implants — mixed cases must supply both.
+    if (needsOpg && !opgUpload) {
+      Alert.alert('OPG Required',
+        zygPtrImplantPositions.length > 0
+          ? 'Upload the Post-Delivery OPG for the Zygoma / Pterygoid implants.'
+          : 'Upload the Post-Delivery OPG for this full-arch case.',
+      );
+      return;
+    }
+    if (needsIopa) {
+      const missing = iopaImplantPositions.filter(pos => !iopaUploads[pos]);
+      if (missing.length > 0) {
         Alert.alert('IOPA Required', `Upload IOPA for tooth: ${missing.join(', ')}`);
         return;
       }
@@ -244,8 +275,11 @@ export default function Phase4Step2Screen() {
         trial_checklist: trialChecklist,
         student_notes: studentNotes || null,
         confirmation_statement: confirmed,
-        iopa_uploads: isFullArch ? null : iopaUploads,
-        opg_upload: isFullArch ? opgUpload : null,
+        // iter-Jun-2026 (v13, Chunk H, Ask 2): send whichever modalities
+        // are applicable. Mixed cases send BOTH iopa_uploads (Conventional
+        // implants only) AND opg_upload.
+        iopa_uploads: needsIopa ? iopaUploads : null,
+        opg_upload: needsOpg ? opgUpload : null,
         prosthesis_photos: validPhotos,
         baseline_probing_depths: Object.keys(baselineProbing).length > 0 ? baselineProbing : null,
         // iter-332: actual delivery date (defaults to today)
@@ -297,14 +331,16 @@ export default function Phase4Step2Screen() {
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
           {/* iter-Jun-2026 (v13, Chunk D, Ask 1): Zygoma/Pterygoid/Conventional
               3-tab sub-view removed from Phase 4 Step 2. */}
-          {/* iter-226: Side-by-side baseline vs current radiograph comparison.
-              Existing-implant cases compare Phase 1 IOPA vs Phase 4 IOPA;
-              routine cases compare Phase 2 post-surgical IOPA vs Phase 4 IOPA. */}
-          <RadiographCompare
-            procedure={procedure}
-            iopaUploads={iopaUploads}
-            opgUpload={opgUpload}
-          />
+          {/* iter-Jun-2026 (v13, Chunk H, Ask 1): Only show baseline
+              compare for pure-Conventional cases. Zygoma / Pterygoid cases
+              have no per-tooth IOPA history to diff against. */}
+          {supportsBaselineCompare && (
+            <RadiographCompare
+              procedure={procedure}
+              iopaUploads={iopaUploads}
+              opgUpload={opgUpload}
+            />
+          )}
 
           <View style={s.infoBox}>
             <Ionicons name="star" size={22} color="#FF6F00" />
@@ -338,17 +374,19 @@ export default function Phase4Step2Screen() {
             ))}
           </View>
 
-          {/* ── Imaging: IOPA per implant OR OPG ── */}
-          <View style={s.section} testID="phase4-step2-imaging-section">
-            <View style={s.sectionHeader}>
-              <Ionicons name="images-outline" size={20} color="#0D47A1" />
-              <Text style={s.sectionTitle}>
-                {isFullArch ? 'Post-Delivery OPG' : 'Post-Delivery IOPA (per implant)'}
-                <Text style={{ color: '#DC3545' }}> *</Text>
-              </Text>
-            </View>
-
-            {isFullArch ? (
+          {/* ── Imaging: OPG (Zyg/Ptr or full-arch) and/or IOPA (Conventional) ── */}
+          {/* iter-Jun-2026 (v13, Chunk H, Ask 2): section splits by
+              modality — pure Zygoma/Pterygoid → OPG only, pure Conventional
+              → IOPA only (per implant), mixed → both blocks. */}
+          {needsOpg && (
+            <View style={s.section} testID="phase4-step2-opg-section">
+              <View style={s.sectionHeader}>
+                <Ionicons name="images-outline" size={20} color="#0D47A1" />
+                <Text style={[s.sectionTitle, { flex: 1, flexShrink: 1, flexWrap: 'wrap' }]}>
+                  Post-Delivery OPG{zygPtrImplantPositions.length > 0 ? ' (Zygoma / Pterygoid)' : ''}
+                  <Text style={{ color: '#DC3545' }}> *</Text>
+                </Text>
+              </View>
               <View style={s.uploadRow}>
                 {opgUpload ? (
                   <>
@@ -376,48 +414,57 @@ export default function Phase4Step2Screen() {
                   </TouchableOpacity>
                 )}
               </View>
-            ) : (
-              <>
-                {implantPositions.length === 0 && (
-                  <Text style={s.helperText}>No implants found on this case — IOPA upload is skipped.</Text>
-                )}
-                {implantPositions.map(pos => {
-                  const up = iopaUploads[pos];
-                  return (
-                    <View key={pos} style={[s.uploadRow, { marginBottom: 8 }]} testID={`iopa-row-${pos}`}>
-                      <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
-                      {up ? (
-                        <>
-                          <TouchableOpacity style={[s.viewBtn, { flex: 1 }]}
-                            onPress={() => {
-                              const url = getAuthFileUrl(`/uploads/${up.filename}`);
-                              if (Platform.OS === 'web') window.open(url, '_blank');
-                            }}
-                            testID={`iopa-view-${pos}`}>
-                            <Ionicons name="document-text" size={16} color="#0D47A1" />
-                            <Text style={s.viewBtnText} numberOfLines={1}>{up.original_name}</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => setIopaUploads(prev => { const c = { ...prev }; delete c[pos]; return c; })} testID={`iopa-remove-${pos}`}>
-                            <Ionicons name="close-circle" size={22} color="#D32F2F" />
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <TouchableOpacity style={[s.uploadBtn, { flex: 1 }]} onPress={() => pickIopa(pos)}
-                          disabled={iopaUploadingFor === pos} testID={`iopa-upload-${pos}`}>
-                          {iopaUploadingFor === pos ? <ActivityIndicator color="#0D47A1" /> : (
-                            <>
-                              <Ionicons name="cloud-upload-outline" size={16} color="#0D47A1" />
-                              <Text style={s.uploadBtnText}>Upload IOPA — Implant {pos}</Text>
-                            </>
-                          )}
+            </View>
+          )}
+
+          {needsIopa && (
+            <View style={s.section} testID="phase4-step2-iopa-section">
+              <View style={s.sectionHeader}>
+                <Ionicons name="images-outline" size={20} color="#0D47A1" />
+                <Text style={[s.sectionTitle, { flex: 1, flexShrink: 1, flexWrap: 'wrap' }]}>
+                  Post-Delivery IOPA (per implant){zygPtrImplantPositions.length > 0 ? ' — Conventional Implants' : ''}
+                  <Text style={{ color: '#DC3545' }}> *</Text>
+                </Text>
+              </View>
+              {iopaImplantPositions.length === 0 && (
+                <Text style={s.helperText}>No Conventional implants on this case — IOPA upload is skipped.</Text>
+              )}
+              {iopaImplantPositions.map(pos => {
+                const up = iopaUploads[pos];
+                return (
+                  <View key={pos} style={[s.uploadRow, { marginBottom: 8 }]} testID={`iopa-row-${pos}`}>
+                    <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
+                    {up ? (
+                      <>
+                        <TouchableOpacity style={[s.viewBtn, { flex: 1 }]}
+                          onPress={() => {
+                            const url = getAuthFileUrl(`/uploads/${up.filename}`);
+                            if (Platform.OS === 'web') window.open(url, '_blank');
+                          }}
+                          testID={`iopa-view-${pos}`}>
+                          <Ionicons name="document-text" size={16} color="#0D47A1" />
+                          <Text style={s.viewBtnText} numberOfLines={1}>{up.original_name}</Text>
                         </TouchableOpacity>
-                      )}
-                    </View>
-                  );
-                })}
-              </>
-            )}
-          </View>
+                        <TouchableOpacity onPress={() => setIopaUploads(prev => { const c = { ...prev }; delete c[pos]; return c; })} testID={`iopa-remove-${pos}`}>
+                          <Ionicons name="close-circle" size={22} color="#D32F2F" />
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <TouchableOpacity style={[s.uploadBtn, { flex: 1 }]} onPress={() => pickIopa(pos)}
+                        disabled={iopaUploadingFor === pos} testID={`iopa-upload-${pos}`}>
+                        {iopaUploadingFor === pos ? <ActivityIndicator color="#0D47A1" /> : (
+                          <>
+                            <Ionicons name="cloud-upload-outline" size={16} color="#0D47A1" />
+                            <Text style={s.uploadBtnText}>Upload IOPA — Implant {pos}</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {/* ── Prosthesis Photos ── */}
           <View style={s.section} testID="phase4-step2-photos-section">
@@ -522,15 +569,23 @@ export default function Phase4Step2Screen() {
 
           {/* ── iter-388: Baseline Probing Depth of Peri-implant Soft Tissue ── */}
           <View style={s.section} testID="baseline-probing-section">
-            <View style={s.sectionHeader}>
-              <Ionicons name="analytics-outline" size={20} color="#0D47A1" />
-              <Text style={s.sectionTitle}>Baseline Probing Depth of Peri-implant Soft Tissue</Text>
+            {/* iter-Jun-2026 (v13, Chunk H, Ask 3): title was overflowing the
+                card because sectionHeader is a flex row without wrapping —
+                the info button + long title exceeded the width. Wrap Title
+                in a flexible container so it wraps to a second line and
+                stays inside the card. */}
+            <View style={[s.sectionHeader, { alignItems: 'flex-start' }]}>
+              <Ionicons name="analytics-outline" size={20} color="#0D47A1" style={{ marginTop: 2 }} />
+              <Text style={[s.sectionTitle, { flex: 1, flexShrink: 1, flexWrap: 'wrap' }]}>
+                Baseline Probing Depth of Peri-implant Soft Tissue
+              </Text>
               <TouchableOpacity
                 onPress={() => Alert.alert(
                   'Baseline Probing Depth',
                   'Baseline probing depth is one of the most important criteria to evaluate the success of the treatment during follow up appointments. The baseline probing depth is measured after successful placement of the prosthesis and compared over follow up recall and maintenance appointments.'
                 )}
                 testID="baseline-probing-info-btn"
+                style={{ marginTop: 2 }}
               >
                 <Ionicons name="information-circle-outline" size={20} color="#1565C0" />
               </TouchableOpacity>
@@ -583,17 +638,21 @@ export default function Phase4Step2Screen() {
             />
             {(() => {
               const uncheckedCount = TRIAL_ITEMS.filter(i => !trialChecklist[i.id]).length;
-              const imagingMissing = isFullArch
-                ? (!opgUpload ? 1 : 0)
-                : (implantPositions.length > 0 ? implantPositions.filter(pos => !iopaUploads[pos]).length : 0);
               const validPhotos = prosthesisPhotos.filter((p): p is LabeledUpload => !!p);
               const photosMissing = validPhotos.length < 2 ? (2 - validPhotos.length) : 0;
               const photoLabelMissing = validPhotos.some(p => !p.label || !p.label.trim());
-              const canSubmit = uncheckedCount === 0 && confirmed && imagingMissing === 0 && photosMissing === 0 && !photoLabelMissing;
+              // iter-Jun-2026 (v13, Chunk H, Ask 2): missing-hints panel
+              // accounts for both OPG and IOPA independently.
+              const opgMissing = needsOpg && !opgUpload;
+              const iopaMissing = needsIopa
+                ? iopaImplantPositions.filter(pos => !iopaUploads[pos]).length
+                : 0;
+              const canSubmit = uncheckedCount === 0 && confirmed && !opgMissing && iopaMissing === 0 && photosMissing === 0 && !photoLabelMissing;
               const missingHints: string[] = [];
               if (uncheckedCount > 0) missingHints.push(`${uncheckedCount} trial item${uncheckedCount > 1 ? 's' : ''}`);
               if (!confirmed) missingHints.push('delivery confirmation');
-              if (imagingMissing > 0) missingHints.push(isFullArch ? 'OPG upload' : `${imagingMissing} IOPA upload${imagingMissing > 1 ? 's' : ''}`);
+              if (opgMissing) missingHints.push('OPG upload');
+              if (iopaMissing > 0) missingHints.push(`${iopaMissing} IOPA upload${iopaMissing > 1 ? 's' : ''}`);
               if (photosMissing > 0) missingHints.push(`${photosMissing} more prosthesis photo${photosMissing > 1 ? 's' : ''}`);
               if (photoLabelMissing) missingHints.push('photo labels');
               return (

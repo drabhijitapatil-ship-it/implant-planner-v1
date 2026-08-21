@@ -1,0 +1,35 @@
+{
+  "summary": "iter-425b Chunk H hotfix RETEST — Verified needsIopa gate fix at /app/frontend/app/procedures/submit-phase4-step2/[id].tsx:127 `const needsIopa = iopaImplantPositions.length > 0 && (zygPtrImplantPositions.length > 0 || !isFullArch);`. All 4 required imaging-split scenarios PASS plus 2 regression scenarios PASS (6/6). Live smoke against seed case 699fbfa15279dfa7819789b8 as Abhijit.patil / Admin@123 on 390x844: (1) Pure Conv Full Arch (All on 4, positions 14/16/26) → `phase4-step2-opg-section` VISIBLE, `phase4-step2-iopa-section` HIDDEN, iopa_rows=[] ✅ FIX CONFIRMED (was the iter-425 bug). (2) Pure Non-FA Conv (Single, positions 12/22) → OPG HIDDEN, IOPA VISIBLE, iopa_rows=[iopa-row-12, iopa-row-22] ✅. (3a) Mixed Zyg+Conv (ZR1/12/22) → BOTH visible, iopa rows = 12,22 only (ZR1 excluded) ✅. (3b) Mixed Zyg+Ptr+Conv (ZR1/PR1/12/22) → BOTH visible, iopa rows = 12,22 only ✅. (4a) Pure Zygoma (ZR1/ZL1) → OPG only ✅. (4b) Pure Pterygoid (PR1/PL1) → OPG only ✅. Ask 1 (baseline compare RadiographCompare gate) still PASS 5/5: pureConv & pureConvFA VISIBLE (Conventional-only), pureZyg + mixedZygConv + mixedFull HIDDEN (any Zyg/Ptr present) — supportsBaselineCompare gate at [id].tsx:130 unchanged. Ask 3 (Baseline Probing title wrap) still PASS: probing card x∈[16,374] w=358, info-btn `baseline-probing-info-btn` at x∈[337,357] — inside card; title 'Baseline Probing Depth of Peri-implant Soft Tissue' wraps to 2 lines (visually confirmed /tmp/iter425b_probing_wrap.png). Payload iopa_uploads:null branch inherited from same needsIopa flag at [id].tsx:281 — since needsIopa=false for pureConvFA, submit payload will send iopa_uploads:null (verified by logic — same flag drives both section visibility and payload branch).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_425b.json",
+    "/tmp/iter425b_probing_wrap.png",
+    "/tmp/iter425b_results.json",
+    "/tmp/seed_scenarios.py"
+  ],
+  "action_items": [
+    "None — hotfix verified. Chunk H iter-425 spec-deviation is resolved."
+  ],
+  "critical_code_review_comments": [
+    "[id].tsx:127 needsIopa gate now correctly narrowed: `iopaImplantPositions.length > 0 && (zygPtrImplantPositions.length > 0 || !isFullArch)`. This evaluates to false ONLY when there are Conventional positions AND no Zyg/Ptr AND it's a full-arch case — exactly the pure-Conv-full-arch condition per spec. Verified across 6 scenarios; no regression detected on the 5 non-target scenarios.",
+    "[id].tsx:281 payload branch `iopa_uploads: needsIopa ? iopaUploads : null` inherits the fix automatically — pureConvFA now sends iopa_uploads:null.",
+    "[id].tsx:646-655 missing-hints panel also uses needsIopa via `iopaMissing = needsIopa ? ...` so pureConvFA no longer contributes IOPA to the missing-hints copy.",
+    "[id].tsx:130 supportsBaselineCompare gate unchanged and still correct — Ask 1 verified live."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only retest)",
+    "frontend": "100% — 6/6 imaging-split scenarios PASS, 5/5 baseline-compare (Ask 1) PASS, Ask 3 probing title wrap PASS."
+  },
+  "seed_data_creation": "Reused /tmp/seed_scenarios.py against Mongo case ObjectId('699fbfa15279dfa7819789b8'); cycled implant_procedure_type + implant_plans through pureConvFA, pureConv, mixedZygConv, mixedFull, pureZyg, purePtr. Case restored at end via `python3 /tmp/seed_scenarios.py restore` (only implant_procedure_type + implant_plans fields touched). Backup file /tmp/iter425_case_backup.json untouched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter-425 Chunk H hotfix is verified green across all 4 required scenarios and 2 regressions. needsIopa gate at /app/frontend/app/procedures/submit-phase4-step2/[id].tsx:127 works as specified. If further changes touch imaging modality logic, re-run /tmp/seed_scenarios.py cycles as documented in iter-425 / iter-425b (login as Abhijit.patil via /auth/login using testIDs login-email-input / login-password-input / login-submit-btn — NOT plain 'input' element scanning, since the RN-web form doesn't render <input> children at the top DOM level until testID lookup mounts). Seed script auto-restores on 'restore' arg.",
+  "rca_of_issue": "Fix RCA: The one-line change at [id].tsx:127 added the guard `&& (zygPtrImplantPositions.length > 0 || !isFullArch)` to needsIopa. Truth table verified: pureConvFA (iopaImplant>0, zygPtr=0, isFullArch=true) → false ✅; pureConv (iopaImplant>0, zygPtr=0, isFullArch=false) → true ✅; mixed Zyg+Conv (iopaImplant>0, zygPtr>0, isFullArch=false) → true ✅; mixedFull (iopaImplant>0, zygPtr>0, isFullArch=varies) → true ✅; pureZyg/purePtr (iopaImplant=0) → false ✅. Downstream: payload branch [id].tsx:281 and missing-hints panel [id].tsx:646-655 both derive from the same flag, so a single-line change fully closes the spec gap."
+}
