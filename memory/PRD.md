@@ -7404,3 +7404,14 @@ LEARNING (memory): NEVER access e.nativeEvent inside deferred/functional setStat
 2. consent-sign screen rewritten: renders the full form (title, Patient Information, Planned Procedure, Planned Implant(s), sections 1-5), then the EN/HI/MR v2.1 consent statement, checkbox, pad, submit. ErrorBoundary + all testids retained; new testids: consent-form-title, consent-patient-info, consent-procedure-details, consent-implants, consent-section-{1-5}.
 3. Scroll lock while signing: SignaturePad gained onSigningChange(true/false) fired on touch-down/release/terminate + capture-phase responder claims + onShouldBlockNativeResponder; screen sets ScrollView scrollEnabled={false} during signing so the page no longer moves under the patient's finger.
 Verified on web (curl + e2e draw, zero page errors). Device verification of scroll-lock pending user redeploy.
+
+## Iteration 418 (Jun 2026) — Ask 3: Advanced Clinical (Zygoma) DECOUPLED from Phase 2 + Independent Approval
+UX ask: The Advanced Clinical (Zygoma) block (ORIS + Immediate Loading Day 0/7/30) must NOT block Phase 2 submission. Move it out of Phase 2, place as a standalone card on Case Details, add react-native-calendars pickers for the 3 days, and give it its own "Send for Approval" → Supervisor/In-Charge approval workflow. Also fix the red 0/4 ORIS pill that was overlapping the header on the old inline widget.
+CHANGES:
+1) NEW /app/frontend/components/AdvancedClinicalCard.tsx — standalone card, ZAGA + 5 ORIS toggles + 3 calendar tiles (Day 0/7/30, react-native-calendars modal). ORIS + Approval pills render on their OWN row below the header (23-px gap; overlap regression fixed). Partial submission with Alert confirmation when Day 30 empty ("Send Anyway"/Cancel per user's UX choice).
+2) Mounted the card in /app/frontend/app/procedures/[id].tsx right after ZygomaPterygoidPhase1Review. Auto-hides for non-Zygoma/Pterygoid procedures.
+3) /app/frontend/components/PhaseStep2TabbedView.tsx — removed inline ZygomaAdvancedClinicalSection render; Phase 2 tabbed PATCH now omits advanced_clinical entirely (does not clobber approval state).
+4) NEW backend endpoints in /app/backend/server.py:
+   - POST /api/procedures/{id}/advanced-clinical/send-for-approval — student stamps submitted_by/at + approval_status=pending.
+   - POST /api/procedures/{id}/advanced-clinical/approve — supervisor / implant_incharge / administrator only; 403 for student; 400 if not already pending.
+TESTED (iter-418): backend 8/8 pytest PASS; frontend Playwright 7/7 PASS on mobile 390x844. Report /app/test_reports/iteration_418.json.

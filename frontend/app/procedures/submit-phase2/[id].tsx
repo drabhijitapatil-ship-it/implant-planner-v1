@@ -1185,6 +1185,34 @@ export default function Phase2SubmissionScreen() {
                 placeholder="Additional surgical observations..." multiline data-testid="implant-other-notes" />
             </View>
 
+            {/* iter-Jun-2026 (v13, Chunk B, Ask 5): Read-only reference banner
+                showing Phase 1 Prosthetic Treatment Plan / Loading Type selections
+                so the operator has the plan context when picking Phase 2's
+                Prosthetic Component with the same option set. */}
+            {loadingType && loadingType.length > 0 && (
+              <View style={{
+                marginBottom: 10, padding: 10, borderRadius: 8,
+                backgroundColor: '#EDE7F6', borderWidth: 1, borderColor: '#B39DDB',
+              }} testID="phase1-treatment-plan-ref">
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#4527A0', letterSpacing: 0.4, marginBottom: 4 }}>
+                  PHASE 1 PROSTHETIC TREATMENT PLAN (REFERENCE)
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                  {loadingType.map((lt: string) => (
+                    <View key={lt} style={{
+                      paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+                      backgroundColor: '#5E35B1',
+                    }}>
+                      <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>{lt}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={{ fontSize: 10, color: '#5E35B1', fontStyle: 'italic', marginTop: 6 }}>
+                  Pick your Phase 2 Prosthetic Component below against the same option set.
+                </Text>
+              </View>
+            )}
+
             {/* Prosthetic Component
                 iter-310: if Phase 1 declared "Immediate Loading" in
                 loading_type but the operator now picks Cover Screw or
