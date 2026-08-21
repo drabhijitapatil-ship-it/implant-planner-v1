@@ -72,15 +72,37 @@ const AdvancedClinicalCard: React.FC<Props> = ({ procedure, onChanged, currentUs
     immediate_loading_day0_completed: !!state.immediate_loading_day0_at,
   }), [state, minTorque]);
 
+  // iter-Jun-2026 (v13, Chunk F, Ask 1): "Locking soon" trigger — the
+  // Advanced Clinical (Zygoma) block should stay editable until Phase 3 has
+  // been proceeded to OR 30 days have elapsed since the surgery date. Past
+  // that boundary we surface an amber hint prompting the Student to close
+  // it out via "Send for Approval". Section stays editable regardless.
+  // Must be declared BEFORE the early `return null` so hook order is stable.
+  const closeOutReady = useMemo(() => {
+    const currentPhase = Number(procedure?.current_phase || 0);
+    if (currentPhase >= 3) return { ready: true, reason: 'Phase 3 already proceeded' };
+    const surgery = procedure?.phase2_data?.surgery_date || procedure?.phase2_submitted_at || procedure?.surgery_date;
+    if (surgery) {
+      const surgeryDate = new Date(surgery);
+      if (!Number.isNaN(surgeryDate.getTime())) {
+        const daysSince = (Date.now() - surgeryDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSince >= 30) return { ready: true, reason: '30 days elapsed since surgery' };
+      }
+    }
+    return { ready: false, reason: '' };
+  }, [procedure]);
+
   if (!isZyg) return null;
 
   const set = (k: keyof AdvancedClinical, v: any) => setState(prev => ({ ...prev, [k]: v }));
   const toggle = (k: keyof AdvancedClinical) => set(k, !state[k]);
 
+  const day0Filled = !!state.immediate_loading_day0_at;
   const day30Filled = !!state.immediate_loading_day30_at;
   const approvalStatus = state.approval_status || 'draft';
   const canApprove = ['supervisor', 'implant_incharge', 'administrator'].includes(String(currentUserRole || '').toLowerCase()) && approvalStatus === 'pending';
-  const readOnly = approvalStatus === 'approved';
+  const readOnly = approvalStatus !== 'draft';
+  const canReopen = approvalStatus !== 'draft' && ['supervisor', 'implant_incharge', 'administrator'].includes(String(currentUserRole || '').toLowerCase());
 
   const procId = String(procedure?.id || procedure?._id || '');
 
@@ -145,6 +167,34 @@ const AdvancedClinicalCard: React.FC<Props> = ({ procedure, onChanged, currentUs
     }
   };
 
+  // iter-Jun-2026 (v13, Chunk F, Ask 1): Reopen the Advanced Clinical block
+  // for further edits. Used when a section was prematurely sent for approval
+  // (e.g. before Day 7 / Day 30 dates were captured). Only Supervisor /
+  // Implant In-Charge / Administrator can reset the state back to 'draft'.
+  const reopen = async () => {
+    const proceed = async () => {
+      setSaving(true);
+      try {
+        await api.post(`/procedures/${procId}/advanced-clinical/reopen`, {});
+        Alert.alert('Reopened', 'Advanced Clinical is editable again.');
+        onChanged && onChanged();
+        setState(prev => ({ ...prev, approval_status: 'draft' }));
+      } catch (e: any) {
+        Alert.alert('Failed', e?.response?.data?.detail || e?.message || 'Unknown error');
+      } finally {
+        setSaving(false);
+      }
+    };
+    Alert.alert(
+      'Reopen Advanced Clinical?',
+      'This will let the Student edit Day 0 / Day 7 / Day 30 dates and ORIS toggles again. They will need to re-send for approval when done.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reopen', style: 'destructive', onPress: proceed },
+      ],
+    );
+  };
+
   const orisColor = oris.code >= 3 ? '#2E7D32' : oris.code === 2 ? '#F57F17' : '#C62828';
   const statusColor = approvalStatus === 'approved' ? '#2E7D32' : approvalStatus === 'pending' ? '#F57F17' : '#78909C';
 
@@ -207,17 +257,27 @@ const AdvancedClinicalCard: React.FC<Props> = ({ procedure, onChanged, currentUs
             </TouchableOpacity>
           ))}
 
-          {/* Immediate Loading — 3 centred calendar tiles */}
+          {/* Immediate Loading — 3 centred calendar tiles with per-day pills */}
           <Text style={[s.label, { marginTop: 12 }]}>Immediate Loading Protocol</Text>
           <View style={s.dayRow}>
             {(['day0', 'day7', 'day30'] as const).map(day => {
               const key = `immediate_loading_${day}_at` as keyof AdvancedClinical;
               const dateStr = String(state[key] || '');
+              const done = !!dateStr;
               return (
                 <TouchableOpacity key={day} style={s.dayTile}
                   onPress={() => !readOnly && setPickerFor(day)}
                   testID={`adv-day-${day}`}>
-                  <Text style={s.dayLabel}>{day === 'day0' ? 'Day 0' : day === 'day7' ? 'Day 7' : 'Day 30'}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={s.dayLabel}>{day === 'day0' ? 'Day 0' : day === 'day7' ? 'Day 7' : 'Day 30'}</Text>
+                    {/* iter-Jun-2026 (v13, Chunk F, Ask 1): per-day "done" mini pill. */}
+                    {done && (
+                      <View style={s.dayDonePill} testID={`adv-day-${day}-done-pill`}>
+                        <Ionicons name="checkmark" size={9} color="#FFF" />
+                        <Text style={s.dayDonePillText}>DONE</Text>
+                      </View>
+                    )}
+                  </View>
                   <Ionicons name="calendar-outline" size={24} color={dateStr ? '#5E35B1' : '#B0BEC5'} />
                   <Text style={[s.dayDate, { color: dateStr ? '#37474F' : '#B0BEC5' }]}>{dateStr || 'Pick date'}</Text>
                 </TouchableOpacity>
@@ -225,9 +285,22 @@ const AdvancedClinicalCard: React.FC<Props> = ({ procedure, onChanged, currentUs
             })}
           </View>
 
+          {/* iter-Jun-2026 (v13, Chunk F, Ask 1): Amber "Locking soon" hint
+              — surfaces once we're past Phase 3 or 30 days since surgery.
+              The section remains editable; the hint only prompts the
+              Student to close it out via Send for Approval. */}
+          {closeOutReady.ready && approvalStatus === 'draft' && (
+            <View style={s.lockingSoonBanner} testID="adv-locking-soon">
+              <Ionicons name="time-outline" size={16} color="#F57C00" />
+              <Text style={s.lockingSoonText}>
+                Locking soon — {closeOutReady.reason}. Please review the dates above and tap “Send Advanced Clinical for Approval” to close this section out.
+              </Text>
+            </View>
+          )}
+
           {/* Approval workflow buttons */}
           <View style={s.actionsRow}>
-            {approvalStatus === 'draft' && (
+            {approvalStatus === 'draft' && (day0Filled || closeOutReady.ready) && (
               <TouchableOpacity
                 style={s.actionBtn}
                 disabled={saving}
@@ -251,9 +324,26 @@ const AdvancedClinicalCard: React.FC<Props> = ({ procedure, onChanged, currentUs
                 )}
               </TouchableOpacity>
             )}
+            {/* iter-Jun-2026 (v13, Chunk F, Ask 1): Reopen for approvers. */}
+            {canReopen && (
+              <TouchableOpacity style={s.reopenBtn} onPress={reopen} disabled={saving} testID="adv-reopen">
+                {saving ? <ActivityIndicator color="#FFF" size="small" /> : (
+                  <>
+                    <Ionicons name="lock-open-outline" size={14} color="#FFF" />
+                    <Text style={s.actionBtnText}>Reopen for Edits</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
-          {!day30Filled && approvalStatus === 'draft' && (
-            <Text style={s.hint}>Day 30 follow-up not yet recorded — you can still send for approval, but reviewers may ask you to complete it first.</Text>
+          {approvalStatus === 'draft' && !closeOutReady.ready && !day0Filled && (
+            <Text style={s.hint}>Fill Day 0 to begin the Immediate Loading Protocol. Send for Approval will unlock once you have all three follow-ups (or 30 days from surgery / Phase 3 has proceeded).</Text>
+          )}
+          {approvalStatus === 'draft' && !closeOutReady.ready && day0Filled && !day30Filled && (
+            <Text style={s.hint}>Continue filling Day 7 and Day 30 as follow-ups happen. Send for Approval becomes available once Phase 3 is proceeded to or 30 days have elapsed since surgery.</Text>
+          )}
+          {approvalStatus === 'draft' && !closeOutReady.ready && day30Filled && (
+            <Text style={s.hint}>Day 30 recorded — you can now Send for Approval when ready.</Text>
           )}
         </View>
       )}
@@ -306,8 +396,21 @@ const s = StyleSheet.create({
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: '#5E35B1' },
   actionBtnDisabled: { backgroundColor: '#B0BEC5' },
   approveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: '#2E7D32' },
+  reopenBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: '#455A64' },
   actionBtnText: { color: '#FFF', fontWeight: '800', fontSize: 12 },
   hint: { fontSize: 10, color: '#78909C', fontStyle: 'italic', marginTop: 6, textAlign: 'center' },
+  // iter-Jun-2026 (v13, Chunk F, Ask 1): amber "Locking soon" banner + per-day done pill.
+  lockingSoonBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    backgroundColor: '#FFF3E0', borderColor: '#FFCC80', borderWidth: 1,
+    borderRadius: 8, padding: 8, marginTop: 10,
+  },
+  lockingSoonText: { flex: 1, fontSize: 11, color: '#E65100', fontWeight: '600', lineHeight: 15 },
+  dayDonePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: '#2E7D32', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 999,
+  },
+  dayDonePillText: { color: '#FFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.3 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 12 },
   modalCard: { backgroundColor: '#FFF', borderRadius: 12, padding: 12, width: '100%', maxWidth: 380 },
   modalTitle: { fontSize: 13, fontWeight: '800', color: '#4527A0', marginBottom: 8, textAlign: 'center' },

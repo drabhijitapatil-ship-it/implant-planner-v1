@@ -2854,6 +2854,66 @@ async def advanced_clinical_approve(
     return {"ok": True, "approval_status": "approved", "advanced_clinical": adv}
 
 
+@api_router.post("/procedures/{procedure_id}/advanced-clinical/reopen")
+async def advanced_clinical_reopen(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """iter-Jun-2026 (v13, Chunk F, Ask 1): Reopen an Advanced Clinical block
+    that was prematurely sent for approval / approved so the Student can
+    continue filling Day 7 / Day 30 dates. Only Supervisor / Implant In-
+    Charge / Administrator can reopen; resets approval_status back to
+    `draft`, stamps a `reopen_log` entry for audit."""
+    role = str(current_user.get("role") or "").lower()
+    if role not in {"supervisor", "implant_incharge", "administrator"}:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' cannot reopen Advanced Clinical")
+
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    p2 = proc.get("phase2_data") or {}
+    adv = (p2.get("advanced_clinical") or {}).copy()
+    if adv.get("approval_status") == "draft" or not adv.get("approval_status"):
+        return {"ok": True, "already_draft": True, "advanced_clinical": adv}
+
+    now = datetime.utcnow()
+    reopen_entry = {
+        "from_status": adv.get("approval_status"),
+        "reopened_by": str(current_user.get("_id") or current_user.get("id") or ""),
+        "reopened_by_name": (
+            f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip()
+            or current_user.get("username", "")
+        ),
+        "reopened_by_role": role,
+        "reopened_at": now.isoformat(),
+    }
+    log = list(adv.get("reopen_log") or [])
+    log.append(reopen_entry)
+
+    adv["approval_status"] = "draft"
+    adv["reopen_log"] = log
+    # Clear the previously-stamped approver so the audit trail is honest.
+    adv.pop("approved_by", None)
+    adv.pop("approved_by_name", None)
+    adv.pop("approved_by_role", None)
+    adv.pop("approved_at", None)
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"phase2_data.advanced_clinical": adv, "updated_at": now}},
+    )
+    return {"ok": True, "approval_status": "draft", "advanced_clinical": adv}
+
+
+
+
 # ─────────────────────────────────────────────────────────────
 # iter-Jun-2026 (v13, Chunk C): Phase-2 Prosthetic Plan edit
 # Allows Student / Supervisor / Implant In-Charge / Administrator to change
