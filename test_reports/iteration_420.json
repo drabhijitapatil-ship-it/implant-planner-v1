@@ -1,0 +1,43 @@
+{
+  "summary": "iter-420 Chunk C hotfix regression VERIFIED. Backend 5/5 pytest PASS. POST /api/procedures/{id}/submit-phase2 no longer raises MongoDB code 40 ('would create a conflict at phase2_data') when the payload contains per_implant_data / advanced_clinical / mua_placed / mua_details. Confirmed on both a Conventional case (Gaurav.pandey / Student@123 on 6a6b7fbf6633443cf356df15) and a Zygoma+Pterygoid case (admin Abhijit.patil on 6a8337dd64ad3269dc584a69). Post-call GET shows phase2_data.per_implant/mua_placed/mua_details populated alongside all top-level surgical keys (anesthesia_adequate, flap_design, drilling_type, prosthetic_component, sutures_placed, hemostasis_achieved). PRESERVATION test: seeded phase2_data.advanced_clinical.approval_status='pending' + submitted_by_name + oris_success_code via Mongo, then submit-phase2 WITHOUT advanced_clinical → GET shows advanced_clinical.approval_status still 'pending' with the same submitted_by_name and oris_success_code (existing_phase2 merge loop confirmed working). IDEMPOTENCY: two consecutive submits with the same payload (status reset to phase1_approved between them) yield identical phase2_data key set + identical submitted-field values. iter-419 REGRESSION: submit-phase2 leaves prosthetic_plan and prosthetic_plan_change_log completely untouched (pre/post snapshot via direct Mongo diff — no length change, no changed_at drift). Backend server logs show 6 consecutive submit-phase2 → 200 OK with zero WriteError/CommandError entries during the run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/procedures/{id}/submit-phase2",
+        "issue": "State gate at server.py:15707 rejects any re-submit once status transitions to 'pending_phase2' (returns 400 'Phase 1 must be approved before submitting Phase 2'). The idempotency test therefore has to reset status → phase1_approved in Mongo between the two calls to exercise identical-payload behaviour. If the product intent is that Phase 2 can be re-submitted (e.g. after a rejection round-trip), consider widening the guard to also allow status in {'pending_phase2', 'phase2_rejected'}. Not a hotfix regression — pre-existing behaviour."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter420_submit_phase2_hotfix.py",
+    "/app/test_reports/pytest/iter420_submit_phase2.xml",
+    "/app/test_reports/iteration_420.json"
+  ],
+  "action_items": [
+    "OPTIONAL (P3): Consider updating the submit-phase2 state guard so a case in 'pending_phase2' or 'phase2_rejected' can be re-submitted with the same payload without a manual admin reset. Today the endpoint returns 400 on a second POST, which technically breaks true API-level idempotency (the hotfix test worked around it by resetting status in the fixture)."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py:15767-15786 — the Chunk C hotfix is correctly ordered: (a) sub-fields merged into phase2_surgical_data, (b) existing phase2_data.* keys copied in via `for _k, _v in existing_phase2.items(): if _k not in phase2_surgical_data`. Overwrite priority is 'new payload wins, then existing fills gaps' — this preserves advanced_clinical (which is never in phase2_surgical_data unless payload sends it) while still allowing a caller who does send advanced_clinical to replace the old one. Good defensive shape.",
+    "backend/server.py:15828-15832 — the leftover comment block is retained on purpose to warn future editors not to reintroduce the dotted-path $set. Nice fence.",
+    "backend/server.py:15788-15795 — update_data still writes the whole phase2_data object; no dotted-path collision remains. Verified in production logs (zero WriteError during 6 test submits)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter420_submit_phase2_hotfix.py (new)",
+    "/app/test_reports/iteration_420.json (new)",
+    "/app/test_reports/pytest/iter420_submit_phase2.xml (new)",
+    "/app/test_result.md (appended iter-420 result note)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "N/A — backend-only per request"},
+  "seed_data_creation": "None. Reused Gaurav's Single Conventional case 6a6b7fbf6633443cf356df15 (phase1_approved, preop=True, consent=True, phase2_data={}) and the seed 'Test Patient Zygoma' 6a8337dd64ad3269dc584a69 (Zygoma+Pterygoid, phase1_approved, preop=True, 5 implant_plans). The Zygoma case had consent=False, so the fixture writes a dummy `patient_consent_form` directly in Mongo before each test that needs it. Fixture also snapshots + restores phase2_data / status per-test so all 5 scenarios can run on 2 cases. After the run: CONV case is in status='pending_phase2' with the test payload persisted; ZYG case is in status='pending_phase2' with per_implant/mua_placed/mua_details from T2 (or the T3 preserved-advanced_clinical shape — depends on last op). prosthetic_plan_change_log unchanged across all runs. Safe to re-run — every test resets state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The Chunk C submit-phase2 hotfix at backend/server.py:15767-15786 is green — no MongoDB code-40 collision on payloads containing per_implant_data / advanced_clinical / mua_placed / mua_details. Preservation of pre-existing phase2_data.advanced_clinical (set via /advanced-clinical/send-for-approval) across a partial Phase 2 submit is also green. Regression: submit-phase2 continues to leave prosthetic_plan + prosthetic_plan_change_log untouched (iter-419 promise held). One pre-existing observation: the endpoint has a strict state gate at server.py:15707 that rejects any re-submit once status != phase1_approved — the idempotency test resets status via Mongo. Fixture uses Mongo-backed state reset (`_reset_to_phase1_approved`) — pattern is reusable for any downstream Phase 2 API testing.",
+  "rca_of_issue": "N/A — hotfix verified working. Reproduction of the original bug (before fix) would be: send POST /api/procedures/{ZYGOMA_ID}/submit-phase2 with a body containing `mua_placed: true` (or `per_implant_data`, or `advanced_clinical`, or `mua_details`) while the endpoint composes an update_data dict that has both `phase2_data` (whole object) AND `phase2_data.mua_placed` (dotted path) — Mongo rejects with code 40 'Updating the path phase2_data.mua_placed would create a conflict at phase2_data'. Fix (server.py:15772-15786): merge those four sub-fields INTO phase2_surgical_data BEFORE composing update_data, plus a follow-up loop to backfill any existing phase2_data.* keys not present in the new payload so the write does not wipe them. Mitigation validated in T2 (writes) and T3 (preserves)."
+}

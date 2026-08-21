@@ -7430,3 +7430,10 @@ CHANGES:
    - On change: overwrites procedure.prosthetic_plan / prosthetic_plan_other and APPENDS to procedure.prosthetic_plan_change_log[] with {from, to, changed_by, changed_by_name, changed_by_role, changed_in_phase:2, changed_at ISO}.
 3) Regression verified: /submit-phase2 POST leaves prosthetic_plan + audit log untouched.
 TESTED (iter-419): backend 9/9 pytest PASS, frontend Playwright PASS on mobile 390x844. Reports /app/test_reports/iteration_419.json. Native-only caveat: RN Alert.alert doesn't render on react-native-web preview — the "Change" confirm and hence the PATCH happens fine on Expo Go / iOS / Android; verify inside preview only after deploying and opening via the Expo Go QR.
+
+## Iteration 420 (Jun 2026) — HOTFIX: submit-phase2 MongoDB code-40 conflict
+Bug (production): Users saw "Updating the path 'phase2_data.mua_placed' would create a conflict at 'phase2_data' (code 40)" when submitting Phase 2 for Conventional / Zygoma / Pterygoid cases.
+Root cause: POST /api/procedures/{id}/submit-phase2 issued a single $set that combined "phase2_data": <whole object> AND dotted sub-paths "phase2_data.per_implant" / .advanced_clinical / .mua_placed / .mua_details. MongoDB rejects mixing full-object and dot-path writes to the same field in one update.
+Fix: /app/backend/server.py (~line 15767) — merge those sub-fields INTO phase2_surgical_data BEFORE composing update_data, and also merge any pre-existing phase2_data.* keys so a Phase 2 submit does not wipe advanced_clinical / other state written by the standalone AdvancedClinicalCard.
+TESTED (iter-420): backend 5/5 pytest PASS. Reports /app/test_reports/iteration_420.json. Advanced Clinical preservation regression confirmed. iter-419 prosthetic_plan audit trail untouched.
+Deployment: User needs to redeploy backend on Emergent to push this hotfix to production.
