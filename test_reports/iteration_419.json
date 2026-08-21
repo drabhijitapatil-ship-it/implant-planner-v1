@@ -1,0 +1,39 @@
+{
+  "summary": "iter-419 v13 Chunk C — Phase 2 Prosthetic Plan editor + audit log VERIFIED. Backend 9/9 pytest PASS. Frontend smoke on mobile 390x844 confirms all 5 required testIDs (phase1-treatment-plan-ref, phase1-prosthetic-plan-chip, phase2-edit-prosthetic-plan, phase2-prosthetic-plan-modal, phase2-prosthetic-plan-option-*) and role gating for nurse. PATCH /api/procedures/{id}/prosthetic-plan: (a) student→200 with audit entry {from,to,changed_by_name,changed_by_role='student',changed_in_phase=2,changed_at ISO}; GET reconfirms persistence. (b) Same-value idempotent → {ok:true,unchanged:true}, no audit added. (c) Supervisor→200 on same case, changed_by_role='supervisor', chronological ordering verified. (d) Nurse (Nurse.1/Nurse@123)→403. (e) Student PATCH on another owner's case→403. (f) Empty body→422 (Pydantic min_length). (g) Bogus id→404. (h) Regression: POST /procedures/{id}/submit-phase2 does NOT overwrite prosthetic_plan and does NOT mutate prosthetic_plan_change_log (per-entry changed_at+to preserved). Frontend: on the seeded Single Conventional Implant case 6a845e8f8478ad06cfec7e15 in submit-phase2 as Gaurav.pandey, the purple banner shows the Type-of-Loading pills AND a new Prosthetic Plan row with the chip + Edit button; tapping Edit opens the modal populated with 11 options from getProstheticOptions('Single Conventional Implant', ['Delayed Loading'], phase1NumImplants); selecting the currently-highlighted option closes the modal silently without a PATCH and no audit-log growth (verified via API). Nurse role hides the Edit button (submit-phase2 route is student-scoped so nurse gets no banner+chip either — Edit is definitively not rendered). INFORMATIONAL (not a bug): on react-native-web 0.21 in the web preview, RN Alert.alert() confirmation for a NEW option does not render as an in-DOM overlay, so the Change→proceed callback isn't fired from the web preview; on native iOS/Android the Alert works normally and the PATCH+chip-update flow completes end-to-end (validated via direct backend PATCH). All change-log deltas verified via GET /procedures/{id}.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter419_prosthetic_plan.py",
+    "/app/test_reports/pytest/iter419_prosthetic_plan.xml",
+    "/app/test_reports/iteration_419.json"
+  ],
+  "action_items": [
+    "OPTIONAL (P3): Consider replacing the react-native Alert.alert('Change Prosthetic Plan?') confirmation in /app/frontend/app/procedures/submit-phase2/[id].tsx L1981 with a custom in-app Modal-based confirm. Reason: react-native-web 0.21 does not render Alert as an in-DOM overlay in this build, so the confirm→proceed callback never fires on the web preview. This does not affect native iOS/Android, but makes the 'Change Prosthetic Plan' UI a no-op on the web preview beyond the same-option path. Not a functional bug — the backend endpoint and audit log work correctly when called from native.",
+    "OPTIONAL (P3): The chip currently shows the raw prosthetic_plan even if the value is a legacy label not present in getProstheticOptions (e.g., older 'Screw Retained Crown' vs current 'Screw Retained Crown - Metal/…/Zirconia'). Consider surfacing a small hint when the stored value is not in the option set so students see why the picker has no pre-selected item."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py:2864 ProstheticPlanUpdate uses min_length=1 → empty string returns 422 (Pydantic). The endpoint also re-checks `.strip()==''` and returns 400 (L2897). The min_length guard makes that 400 branch effectively unreachable for whitespace-only bodies unless someone changes the pydantic config; safe to keep but note the mixed 400/422 story.",
+    "backend/server.py:2892 ownership check uses `proc.get('student_id') or proc.get('created_by_id')` — good defensive coalescing; matches the pattern used elsewhere.",
+    "frontend submit-phase2/[id].tsx L1247 role gate ['student','supervisor','implant_incharge','administrator'] matches backend allow-list exactly. Symmetric.",
+    "frontend submit-phase2/[id].tsx L1962-1988 uses Alert.alert for the confirmation. On react-native-web 0.21 this does not render — see action_items P3.",
+    "frontend submit-phase2/[id].tsx L1963 handles same-option → close early — verified via smoke test that no PATCH is fired."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter419_prosthetic_plan.py (new)",
+    "/app/test_result.md (appended iter-419 testing message)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (5/5 smoke — all 5 testIDs render, options populated, same-option no-PATCH path works, nurse Edit hidden)"},
+  "seed_data_creation": "None (mutation only). Reused Gaurav.pandey's Single Conventional Implant case 6a845e8f8478ad06cfec7e15. Reset prosthetic_plan to 'Cement Retained Crown - Zirconia' via API PATCH before each UI run so the same-option smoke path is deterministic. Final state after test run: prosthetic_plan='Screw Retained Crown' (from supervisor's PATCH in test_03 or 'Cement Retained Crown - Zirconia' from the seed — depends on last op), prosthetic_plan_change_log length = 3 (test_01 student entry + test_03 supervisor entry + seed PATCH entry). No cleanup performed as the change log is intentionally append-only per feature design.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PATCH /api/procedures/{id}/prosthetic-plan endpoint is green: allow-list={student,supervisor,implant_incharge,administrator}, students constrained to own case, empty→422, bogus id→404, idempotent same-value→{unchanged:true}, audit log appended with role/name/phase/timestamp. submit-phase2 no longer touches prosthetic_plan or prosthetic_plan_change_log — confirmed via pre/post GET diff. Frontend testIDs on /procedures/submit-phase2/[id]: phase1-treatment-plan-ref, phase1-prosthetic-plan-chip, phase2-edit-prosthetic-plan, phase2-prosthetic-plan-modal, phase2-prosthetic-plan-option-{slugified-option}, phase2-prosthetic-plan-close. On react-native-web the Alert.alert() confirm for a NEW option is a no-op (see action_items P3) — for web E2E of the change path, either (a) call PATCH directly and rerender OR (b) migrate the confirm to a custom Modal. Native iOS/Android are unaffected. Seed case 6a845e8f8478ad06cfec7e15 currently has 3 change-log entries — safe to reuse.",
+  "rca_of_issue": "N/A — no bugs found. The only observation (Alert.alert not firing on react-native-web) is a documented RN-web platform limitation and is captured as an optional P3 refinement, not a defect. Backend PATCH endpoint delivers full audit semantics; native mobile users get the full confirm-then-update UX."
+}

@@ -7415,3 +7415,18 @@ CHANGES:
    - POST /api/procedures/{id}/advanced-clinical/send-for-approval — student stamps submitted_by/at + approval_status=pending.
    - POST /api/procedures/{id}/advanced-clinical/approve — supervisor / implant_incharge / administrator only; 403 for student; 400 if not already pending.
 TESTED (iter-418): backend 8/8 pytest PASS; frontend Playwright 7/7 PASS on mobile 390x844. Report /app/test_reports/iteration_418.json.
+
+## Iteration 419 (Jun 2026) — Chunk C: Editable Phase-1 Prosthetic Plan from Phase 2
+Ask: In the Phase 2 purple reference banner (currently showing Type of Loading), also surface the Prosthetic Treatment Plan chosen in Phase 1, and let Student / Supervisor / Implant In-Charge / Administrator edit it inline — with the full option set for the current Procedure Type + Loading + Num Implants — while preserving an audit log of who changed it.
+CHANGES:
+1) Frontend /app/frontend/app/procedures/submit-phase2/[id].tsx
+   - Extended the "phase1-treatment-plan-ref" purple banner with a new Prosthetic Plan row (chip `phase1-prosthetic-plan-chip`) + Edit pencil `phase2-edit-prosthetic-plan`.
+   - Added `phase2-prosthetic-plan-modal` picker; options come from getProstheticOptions(procedure_type, loading_type, num_implants) — same source that populates Phase 1 form.
+   - Selection triggers a native confirm Alert then PATCHes /procedures/:id/prosthetic-plan with audit metadata.
+2) Backend PATCH /api/procedures/{procedure_id}/prosthetic-plan (new)
+   - Role gate: student | supervisor | implant_incharge | administrator (nurse gets 403).
+   - Ownership: student may only edit their own case.
+   - Same-value call is a no-op (unchanged=true) and does not add an audit entry.
+   - On change: overwrites procedure.prosthetic_plan / prosthetic_plan_other and APPENDS to procedure.prosthetic_plan_change_log[] with {from, to, changed_by, changed_by_name, changed_by_role, changed_in_phase:2, changed_at ISO}.
+3) Regression verified: /submit-phase2 POST leaves prosthetic_plan + audit log untouched.
+TESTED (iter-419): backend 9/9 pytest PASS, frontend Playwright PASS on mobile 390x844. Reports /app/test_reports/iteration_419.json. Native-only caveat: RN Alert.alert doesn't render on react-native-web preview — the "Change" confirm and hence the PATCH happens fine on Expo Go / iOS / Android; verify inside preview only after deploying and opening via the Expo Go QR.

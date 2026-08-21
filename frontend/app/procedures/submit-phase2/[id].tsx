@@ -20,6 +20,7 @@ import {
   PROSTHETIC_COMPONENT_OPTIONS,
   GUIDED_SURGERY_TYPES, STATIC_GUIDE_TYPES, SLEEVE_TYPES, DYNAMIC_NAV_SYSTEMS,
   normalizeSurgeryApproach, isGuidedApproach,
+  getProstheticOptions, PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
 } from '../../../constants/checklist';
 import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
 import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
@@ -105,6 +106,14 @@ export default function Phase2SubmissionScreen() {
   // Phase-1 stores loading_type as a multi-select string[] (e.g. ['Immediate Loading']).
   // We keep the state as an array and gate the MUA UI via Array.includes below.
   const [loadingType, setLoadingType] = useState<string[]>([]);
+  // iter-Jun-2026 (v13, Chunk C): Phase-1 Prosthetic Plan surfaced in the
+  // purple reference banner + editable in Phase 2. Overrides Phase 1 with an
+  // audit-logged PATCH so downstream views stay in sync.
+  const [phase1ProstheticPlan, setPhase1ProstheticPlan] = useState<string>('');
+  const [phase1ProstheticPlanOther, setPhase1ProstheticPlanOther] = useState<string>('');
+  const [phase1NumImplants, setPhase1NumImplants] = useState<string>('');
+  const [prosthPlanPickerOpen, setProsthPlanPickerOpen] = useState<boolean>(false);
+  const [prosthPlanSaving, setProsthPlanSaving] = useState<boolean>(false);
   // '' = not yet chosen (forces explicit pick), 'yes' | 'no' once user picks.
   const [multiUnitPlaced, setMultiUnitPlaced] = useState<'' | 'yes' | 'no'>('');
   // Per-implant angulation (°) and cuff-height (mm) — same length as
@@ -217,6 +226,10 @@ export default function Phase2SubmissionScreen() {
       // render a catalogue-constrained dropdown instead of free text.
       setAttachmentType(procRes.data.attachment_type || '');
       setLoadingType(Array.isArray(procRes.data.loading_type) ? procRes.data.loading_type : (procRes.data.loading_type ? [procRes.data.loading_type] : []));
+      // iter-Jun-2026 (v13, Chunk C): Phase-1 Prosthetic Plan hydration.
+      setPhase1ProstheticPlan(procRes.data.prosthetic_plan || '');
+      setPhase1ProstheticPlanOther(procRes.data.prosthetic_plan_other || '');
+      setPhase1NumImplants(procRes.data.num_implants || '');
       // teeth_present drives the Group A (single) vs Group B (multiple) split
       // for Prosthesis Type options when one of the 4 overlapping procedure
       // types (Immediate Implant, PET, GBR, Guided Surgery) is chosen.
@@ -1185,11 +1198,14 @@ export default function Phase2SubmissionScreen() {
                 placeholder="Additional surgical observations..." multiline data-testid="implant-other-notes" />
             </View>
 
-            {/* iter-Jun-2026 (v13, Chunk B, Ask 5): Read-only reference banner
+            {/* iter-Jun-2026 (v13, Chunk B, Ask 5 + Chunk C): Read-only reference banner
                 showing Phase 1 Prosthetic Treatment Plan / Loading Type selections
                 so the operator has the plan context when picking Phase 2's
-                Prosthetic Component with the same option set. */}
-            {loadingType && loadingType.length > 0 && (
+                Prosthetic Component with the same option set.
+                Chunk C: The Prosthetic Plan row is now EDITABLE — clicking the pencil
+                opens a modal with all options valid for the Phase-1 procedure type
+                and loading, and PATCHes the case with an audit-log entry. */}
+            {((loadingType && loadingType.length > 0) || phase1ProstheticPlan) && (
               <View style={{
                 marginBottom: 10, padding: 10, borderRadius: 8,
                 backgroundColor: '#EDE7F6', borderWidth: 1, borderColor: '#B39DDB',
@@ -1197,18 +1213,51 @@ export default function Phase2SubmissionScreen() {
                 <Text style={{ fontSize: 10, fontWeight: '800', color: '#4527A0', letterSpacing: 0.4, marginBottom: 4 }}>
                   PHASE 1 PROSTHETIC TREATMENT PLAN (REFERENCE)
                 </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                  {loadingType.map((lt: string) => (
-                    <View key={lt} style={{
-                      paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
-                      backgroundColor: '#5E35B1',
-                    }}>
-                      <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>{lt}</Text>
+                {loadingType && loadingType.length > 0 && (
+                  <>
+                    <Text style={{ fontSize: 10, color: '#4527A0', fontWeight: '700', marginTop: 4, marginBottom: 4 }}>Type of Loading</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                      {loadingType.map((lt: string) => (
+                        <View key={lt} style={{
+                          paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+                          backgroundColor: '#5E35B1',
+                        }}>
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>{lt}</Text>
+                        </View>
+                      ))}
                     </View>
-                  ))}
+                  </>
+                )}
+
+                {/* Prosthetic Plan row (editable) */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 6 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 10, color: '#4527A0', fontWeight: '700', marginBottom: 4 }}>Prosthetic Plan</Text>
+                    {phase1ProstheticPlan ? (
+                      <View style={{ alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: '#7E57C2' }} testID="phase1-prosthetic-plan-chip">
+                        <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>
+                          {phase1ProstheticPlan}
+                          {phase1ProstheticPlan === 'Other' && phase1ProstheticPlanOther ? ` — ${phase1ProstheticPlanOther}` : ''}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={{ fontSize: 11, color: '#78909C', fontStyle: 'italic' }}>Not selected in Phase 1</Text>
+                    )}
+                  </View>
+                  {['student', 'supervisor', 'implant_incharge', 'administrator'].includes(String(user?.role || '').toLowerCase()) && (
+                    <TouchableOpacity
+                      onPress={() => setProsthPlanPickerOpen(true)}
+                      testID="phase2-edit-prosthetic-plan"
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#5E35B1' }}
+                    >
+                      <Ionicons name="pencil" size={12} color="#FFF" />
+                      <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>Edit</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
+
                 <Text style={{ fontSize: 10, color: '#5E35B1', fontStyle: 'italic', marginTop: 6 }}>
-                  Pick your Phase 2 Prosthetic Component below against the same option set.
+                  Pick your Phase 2 Prosthetic Component below against the same option set. You can also change the Prosthetic Plan above if it needs correcting; the change will be audit-logged.
                 </Text>
               </View>
             )}
@@ -1862,6 +1911,98 @@ export default function Phase2SubmissionScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
+    </Modal>
+
+    {/* iter-Jun-2026 (v13, Chunk C): Phase-2 Prosthetic Plan editor modal.
+        Options are derived from Phase 1 procedure type + loading + num_implants
+        via getProstheticOptions(). Selection triggers a confirm dialog then
+        PATCHes the case with an audit-log entry (see backend endpoint
+        PATCH /api/procedures/{id}/prosthetic-plan). */}
+    <Modal
+      visible={prosthPlanPickerOpen}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setProsthPlanPickerOpen(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 20 }}>
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, maxHeight: '85%' }} testID="phase2-prosthetic-plan-modal">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Ionicons name="build" size={18} color="#4527A0" />
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#4527A0', flex: 1 }}>Change Prosthetic Plan</Text>
+            <TouchableOpacity onPress={() => setProsthPlanPickerOpen(false)} testID="phase2-prosthetic-plan-close">
+              <Ionicons name="close" size={22} color="#78909C" />
+            </TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 11, color: '#5E35B1', fontStyle: 'italic', marginBottom: 10 }}>
+            Options auto-derived from the Phase 1 Procedure Type
+            {procedureType ? ` (${procedureType})` : ''}
+            {loadingType && loadingType.length ? ` + Loading (${loadingType.join(', ')})` : ''}
+            {PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(procedureType) && phase1NumImplants ? ` + Number of Implants (${phase1NumImplants})` : ''}
+            . Change will overwrite Phase 1 and be audit-logged.
+          </Text>
+          <ScrollView style={{ maxHeight: 380 }}>
+            {(() => {
+              const opts: string[] = getProstheticOptions(procedureType, loadingType || [], phase1NumImplants || '') || [];
+              if (opts.length === 0) {
+                return <Text style={{ fontSize: 12, color: '#78909C', fontStyle: 'italic', padding: 12 }}>No options available for the current Phase 1 selections. Please set Procedure Type / Number of Implants in Phase 1 first.</Text>;
+              }
+              return opts.map((opt) => {
+                const isSelected = opt === phase1ProstheticPlan;
+                return (
+                  <TouchableOpacity
+                    key={opt}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8,
+                      borderWidth: 1, borderColor: isSelected ? '#5E35B1' : '#E1BEE7',
+                      backgroundColor: isSelected ? '#F3E5F5' : '#FFFFFF',
+                      marginBottom: 6, flexDirection: 'row', alignItems: 'center', gap: 8,
+                    }}
+                    testID={`phase2-prosthetic-plan-option-${opt.replace(/\s+/g, '-').toLowerCase()}`}
+                    disabled={prosthPlanSaving}
+                    onPress={async () => {
+                      if (opt === phase1ProstheticPlan) { setProsthPlanPickerOpen(false); return; }
+                      const proceed = async () => {
+                        setProsthPlanSaving(true);
+                        try {
+                          const res = await api.patch(`/procedures/${id}/prosthetic-plan`, {
+                            prosthetic_plan: opt,
+                            prosthetic_plan_other: opt === 'Other' ? phase1ProstheticPlanOther : '',
+                          });
+                          setPhase1ProstheticPlan(res.data?.prosthetic_plan || opt);
+                          if (opt !== 'Other') setPhase1ProstheticPlanOther('');
+                          setProsthPlanPickerOpen(false);
+                          Alert.alert('Updated', 'Prosthetic Plan updated. Change has been logged.');
+                        } catch (e: any) {
+                          Alert.alert('Failed', e?.response?.data?.detail || e?.message || 'Unable to update Prosthetic Plan');
+                        } finally {
+                          setProsthPlanSaving(false);
+                        }
+                      };
+                      Alert.alert(
+                        'Change Prosthetic Plan?',
+                        `Replace “${phase1ProstheticPlan || '—'}” with “${opt}”? This overrides Phase 1 and is logged in the audit trail.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Change', onPress: proceed, style: 'destructive' },
+                        ],
+                      );
+                    }}
+                  >
+                    <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={16} color={isSelected ? '#5E35B1' : '#B39DDB'} />
+                    <Text style={{ flex: 1, fontSize: 13, color: '#37474F', fontWeight: isSelected ? '700' : '500' }}>{opt}</Text>
+                  </TouchableOpacity>
+                );
+              });
+            })()}
+          </ScrollView>
+          {prosthPlanSaving && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <ActivityIndicator size="small" color="#5E35B1" />
+              <Text style={{ fontSize: 11, color: '#5E35B1' }}>Saving…</Text>
+            </View>
+          )}
+        </View>
+      </View>
     </Modal>
     </>
   );
