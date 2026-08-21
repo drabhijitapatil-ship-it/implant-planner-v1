@@ -1292,7 +1292,7 @@ export default function ProcedureDetailScreen() {
                 <View key={idx} style={{ backgroundColor: '#F8FBFF', borderRadius: 8, borderWidth: 1, borderColor: '#BBDEFB', padding: 10, marginBottom: 8 }} testID={`existing-implant-row-${idx}`}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <View style={{ backgroundColor: '#0277BD', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }}>
-                      <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>Tooth #{row.tooth || '—'}</Text>
+                      <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 12 }}>Implant {row.tooth || '—'}</Text>
                     </View>
                     {row.system_unknown ? (
                       <View style={{ backgroundColor: '#FFF8E1', borderColor: '#FFE082', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 }}>
@@ -1330,7 +1330,7 @@ export default function ProcedureDetailScreen() {
                   {(() => {
                     const perImplant = row.iopa_url || (procedure.radiographs?.iopas || [])[idx] || '';
                     if (!perImplant) return null;
-                    return <RadiographThumb filename={String(perImplant)} testID={`existing-impl-iopa-${idx}`} label={`IOPA · Tooth ${row.tooth || '—'}`} />;
+                    return <RadiographThumb filename={String(perImplant)} testID={`existing-impl-iopa-${idx}`} label={`IOPA · Implant ${row.tooth || '—'}`} />;
                   })()}
                 </View>
               ))
@@ -3048,7 +3048,7 @@ export default function ProcedureDetailScreen() {
                 const _fdi = (i: number) => {
                   const p = plans[i] || {};
                   const t = p.tooth_number || p.tooth || p.position;
-                  return t ? `Tooth #${t}` : 'Tooth #—';
+                  return t ? `Implant ${t}` : 'Implant —';
                 };
                 if (Array.isArray(perImplant) && perImplant.length > 0) {
                   return (
@@ -3158,7 +3158,7 @@ export default function ProcedureDetailScreen() {
                         <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: idx < procedure.phase2_data.multi_unit_abutment_details.length - 1 ? 1 : 0, borderBottomColor: '#B3E5FC' }} data-testid={`mua-readonly-row-${idx}`}>
                           <View style={{ backgroundColor: '#B3E5FC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, minWidth: 70, alignItems: 'center' }}>
                             <Text style={{ fontSize: 12, fontWeight: '700', color: '#01579B' }}>
-                              Tooth #{row?.tooth ?? '—'}
+                              Implant {row?.tooth ?? '—'}
                             </Text>
                           </View>
                           <View style={{ flex: 1, flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
@@ -3204,7 +3204,7 @@ export default function ProcedureDetailScreen() {
                           </View>
                         )}
                         <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label ? `Tooth #${f.tooth_label}` : 'Tooth #—'}</Text>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label ? `Implant ${f.tooth_label}` : 'Implant —'}</Text>
                           <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
                         </View>
                         <TouchableOpacity
@@ -3493,7 +3493,7 @@ export default function ProcedureDetailScreen() {
               const _fdi = (i: number) => {
                 const p = plans[i] || {};
                 const t = p.tooth_number || p.tooth || p.position;
-                return t ? `Tooth #${t}` : 'Tooth #—';
+                return t ? `Implant ${t}` : 'Implant —';
               };
 
               return (
@@ -3620,7 +3620,7 @@ export default function ProcedureDetailScreen() {
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label ? `Tooth #${f.tooth_label}` : 'Tooth #—'}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#333' }}>{f.tooth_label ? `Implant ${f.tooth_label}` : 'Implant —'}</Text>
                         <Text style={{ fontSize: 11, color: '#888' }} numberOfLines={1}>{f.original_name}</Text>
                       </View>
                       <TouchableOpacity
@@ -4418,7 +4418,7 @@ export default function ProcedureDetailScreen() {
             {procedure.implant_edit_history.slice().reverse().map((h: any, idx: number) => (
               <View key={h.id || idx} style={resStyles.editHistoryItem}>
                 <View style={resStyles.editHistoryItemHeader}>
-                  <Text style={resStyles.editHistoryPosition}>Tooth #{h.position}</Text>
+                  <Text style={resStyles.editHistoryPosition}>Implant {h.position}</Text>
                   <View style={[resStyles.editHistoryKindChip, h.kind === 'added' ? resStyles.kindAdded : h.kind === 'removed' ? resStyles.kindRemoved : resStyles.kindEdited]}>
                     <Text style={resStyles.editHistoryKindTxt}>
                       {h.kind === 'added' ? 'Added' : h.kind === 'removed' ? 'Removed' : 'Edited'}

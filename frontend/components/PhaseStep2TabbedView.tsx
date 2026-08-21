@@ -105,7 +105,7 @@ const rowTitle = (p: ImplantPlan, idx: number): string => {
   const t = (p.implant_type as ImplantType) || 'conventional';
   if (t === 'zygoma')    return p.row_label || `Zygoma ${p.side || 'TBD'}`;
   if (t === 'pterygoid') return p.row_label || `Pterygoid ${p.side || 'TBD'}`;
-  return p.position ? `FDI ${p.position}` : `Implant #${idx + 1}`;
+  return p.position ? `Implant ${p.position}` : `Implant #${idx + 1}`;
 };
 
 // ── Sub-component: ImplantTypeTabs ───────────────────────────
@@ -251,20 +251,9 @@ const PerImplantPhaseCard: React.FC<{
             </View>
           </View>
 
-          {/* MUA angulation */}
-          <Text style={styles.label}>MUA Angulation</Text>
-          <View style={styles.chipRow}>
-            {['0°', '17°', '30°', '45°', 'Other'].map(a => (
-              <TouchableOpacity
-                key={a}
-                style={[styles.chip, record.mua_angulation === a && { backgroundColor: c.bg, borderColor: c.border }]}
-                onPress={() => !readOnly && upd({ mua_angulation: a })}
-                testID={`mua-${plan.position}-${a}`}
-              >
-                <Text style={[styles.chipText, record.mua_angulation === a && { color: c.fg, fontWeight: '800' }]}>{a}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* MUA angulation moved to the universal MUA section in Phase 2
+              Step 2 (iter-Jun-2026 v11). Field removed here so we have a
+              single source of truth. */}
 
           {/* Complications */}
           <Text style={styles.label}>Complications</Text>

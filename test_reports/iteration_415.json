@@ -1,0 +1,27 @@
+{
+  "summary": "iter-415 v11 MUA T3 (Phase 2 Step 2 pointer-events fix) — ALL 9/9 sub-checks PASS with real Playwright clicks (no force, no synthetic dispatchEvent). The L942 fix in /app/frontend/app/procedures/submit-phase2/[id].tsx — migrating the deprecated JSX prop `<View pointerEvents={isPreopUnlocked?'auto':'none'}>` to `style={[s.section, !isPreopUnlocked && {opacity:0.55, pointerEvents:'none' as any}]}` — eliminates the RN-Web cascade of pointer-events:'none' onto descendant MUA Yes/No TouchableOpacity buttons. Ancestor pointer-events chain on mua-placed-no is now [auto×6] (was [none×4, auto, auto] pre-fix). Real Playwright click on mua-placed-no now hides mua-details-section; Yes-No-Yes cycle correctly clears cuff-ZR1 back to empty via setMuaDetails({}). Regression T4 (Post-Surgical Radiographs labels) confirmed: 'Implant 1 — Zygoma R1' / 'Implant 5 — Pterygoid L1', 0 hits for legacy 'Tooth#ZR1'. NOTE: The DB seed for Test Patient Zygoma 6a8337dd64ad3269dc584a69 has phase2_preop_completed_at=null / mua_placed=null (contrary to review-request assumption). Test first POSTs /api/procedures/{id}/phase2-preop with 13 mandatory items to unlock Step 2 — this is the correct user flow and does not indicate a regression.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "props.pointerEvents deprecation warning (submit-phase2/[id].tsx)", "issue": "Console still emits 'props.pointerEvents is deprecated. Use style.pointerEvents' on page load. Source is likely inside expo-router / @react-navigation node_modules (BottomTabBar.tsx, ResourceSavingView.tsx, Header.tsx all still use the legacy JSX prop). App-level source files are clean after the L942 migration. This is a benign upstream warning and does NOT block the MUA T3 flow."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_415.json"],
+  "action_items": [
+    "OPTIONAL: In future Expo SDK upgrades, monitor whether @react-navigation removes the legacy pointerEvents JSX prop so the console warning goes away.",
+    "OPTIONAL: Consider seeding phase2_preop_completed_at on Test Patient Zygoma so future MUA tests do not need to POST /phase2-preop as a prep step."
+  ],
+  "critical_code_review_comments": [
+    "L942 fix is minimal, targeted, and correct. Only applies pointerEvents:'none' via inline style when !isPreopUnlocked, so the Surgery section is intentionally non-tappable while pre-op is incomplete (expected UX). When pre-op is completed, the inline style is absent and descendants receive real pointer events.",
+    "The muaHydratedRef guard (L133/L181-185 added in iter-414) is still in place and defensively correct — combined with the pointer-events fix, T3 now passes end-to-end."
+  ],
+  "updated_files": ["/app/test_result.md (marked v11 MUA working=true, needs_retesting=false, stuck_count=0)"],
+  "success_rate": {"backend": "N/A (not re-tested)", "frontend": "100% (9/9 sub-checks)"},
+  "seed_data_creation": "None persistent. Test transiently unlocked pre-op on 6a8337dd64ad3269dc584a69 via POST /api/procedures/{id}/phase2-preop with 13 mandatory items to enable Step-2 interactions.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Auth: identifier=Abhijit.patil password=Admin@123. localStorage prefix 'implanr_'. Backend URL from frontend/.env EXPO_PUBLIC_BACKEND_URL. When testing Step-2 UI on submit-phase2, first check the DB has phase2_preop_completed_at set; if not, POST /api/procedures/{id}/phase2-preop with all 13 items in PHASE2_PREOP_MANDATORY (backend/server.py L15709-15723) before attempting to interact with any Step-2 field. Real Playwright locator.click() now works on mua-placed-yes/no without force=True."
+}

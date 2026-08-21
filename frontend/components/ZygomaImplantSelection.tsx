@@ -149,7 +149,7 @@ const ZygomaImplantSelection: React.FC<Props> = ({ procedureType, configuration,
           ? `Zygoma ${row.side || 'TBD'}`
           : row.implant_type === 'pterygoid'
             ? `Pterygoid ${row.side || 'TBD'}`
-            : row.tooth_position ? `FDI ${row.tooth_position}` : `Implant #${idx + 1}`;
+            : row.tooth_position ? `Implant ${row.tooth_position}` : `Implant #${idx + 1}`;
         return (
           <View key={idx} style={[cardSt.card, isEmpty && cardSt.cardEmpty]} testID={`zyg-implant-row-${idx}`}>
             <View style={cardSt.header}>

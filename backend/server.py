@@ -649,6 +649,13 @@ class Phase2Submit(BaseModel):
     # ORIS success code, immediate-loading Day 0/7/30 timestamps, ZAGA
     # confirmation, screw-retained enforcement flag, supervisor co-sign.
     advanced_clinical: Optional[Dict[str, Any]] = None
+    # iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement (universal —
+    # applies to every implant procedure type in Phase 2). `mua_placed` is
+    # a case-level Yes/No; when Yes, `mua_details` maps position → {
+    # cuff_height, angulation }. Angulation is stored as a string ("0°",
+    # "17°", "30°", "45°", or free-text via Other).
+    mua_placed: Optional[bool] = None
+    mua_details: Optional[Dict[str, Dict[str, Any]]] = None
     # Surgical procedure data
     anesthesia_adequate: Optional[str] = Field("Yes", max_length=10)  # Yes/No
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
@@ -10634,7 +10641,7 @@ def _build_case_context(proc: dict) -> str:
     # Implant plans
     plans = proc.get('implant_plans') or []
     for i, p in enumerate(plans):
-        parts.append(f"Implant Plan {i+1}: Tooth {p.get('position', p.get('tooth_number','?'))}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
+        parts.append(f"Implant Plan {i+1}: Implant {p.get('position', p.get('tooth_number','?'))}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
 
     # ── Full-Arch atrophy assessment (silently injected institutional guidance) ──
     aa = proc.get('atrophy_assessment') or {}
@@ -10704,7 +10711,7 @@ def _build_case_context(proc: dict) -> str:
                     t = r.get('tooth', '')
                     a = r.get('angulation', '')
                     c = r.get('cuff_height', '')
-                    rows.append(f"Tooth {t}: {a}° / {c}mm")
+                    rows.append(f"Implant {t}: {a}° / {c}mm")
                 if rows:
                     parts.append(f"MUA Details: {'; '.join(rows)}")
 
@@ -11305,7 +11312,7 @@ def _build_exit_summary_prompt(proc: dict) -> str:
         ]).strip(" ·") or "—"
         status = s.get("status") or "Active"
         reason = s.get("reason") or ""
-        rline = f"  - Tooth #{tooth} | {system} | {size} | Final: {status}"
+        rline = f"  - Implant {tooth} | {system} | {size} | Final: {status}"
         if reason:
             rline += f" — {reason}"
         imp_lines.append(rline)
@@ -11322,7 +11329,7 @@ def _build_exit_summary_prompt(proc: dict) -> str:
                    else "replaced" if f.get("replaced")
                    else "removed" if f.get("removed") else "reviewed")
             ev_lines.append(
-                f"  - {at}: Tooth #{f.get('tooth','?')} — {f.get('reason','?')} ({tag})"
+                f"  - {at}: Implant {f.get('tooth','?')} — {f.get('reason','?')} ({tag})"
             )
 
     imp_block = "\n".join(imp_lines) or "  (none on record)"
@@ -11629,10 +11636,10 @@ async def generate_radiograph_ai_notes(
     image_descriptors = []
     if baseline and baseline.get("b64"):
         image_attachments.append(ImageContent(image_base64=baseline["b64"]))
-        image_descriptors.append(f"Image 1: {body.baseline_phase_label} (Tooth {body.tooth_label})")
+        image_descriptors.append(f"Image 1: {body.baseline_phase_label} (Implant {body.tooth_label})")
     if current_img and current_img.get("b64"):
         image_attachments.append(ImageContent(image_base64=current_img["b64"]))
-        image_descriptors.append(f"Image {len(image_attachments)}: {body.current_phase_label} (Tooth {body.tooth_label})")
+        image_descriptors.append(f"Image {len(image_attachments)}: {body.current_phase_label} (Implant {body.tooth_label})")
 
     prompt = f"""You are reviewing two periapical radiographs of the SAME implant site to support a prosthodontist's final-delivery sign-off. Compare the two images and write concise clinical notes (4-7 bullet points) that a supervising clinician would find useful.
 
@@ -12620,6 +12627,15 @@ P. Treatment Outcome (overall assessment, prognosis)"""
             "  • Discuss immediate-loading protocol (Day 0 / Day 7 / Day 30 checkpoints) and screw-retained prosthesis enforcement.\n"
             "  • Note supervisor co-sign status where applicable.\n"
             "  • DO NOT mention ISQ readings for zygoma or pterygoid implants (they are not clinically valid on those anchors)."
+        )
+    # iter-Jun-2026 (v11): Multiunit Abutment placement instruction (universal).
+    _p2_mua = ((proc.get("phase2_data") or {}).get("mua_placed"))
+    if _p2_mua is True:
+        _mua_detail = (proc.get("phase2_data") or {}).get("mua_details") or {}
+        case_type_instruction += (
+            "\n\nMultiunit Abutments (MUA) were placed in Phase 2 for this case."
+            f" Per-implant MUA details (position → cuff height in mm, angulation): {_mua_detail}."
+            " Comment on the choice of cuff heights/angulations vs. the planned prosthetic emergence profile."
         )
     elif case_type == 'immediate_loading':
         case_type_instruction = "This case uses an immediate loading protocol. Discuss criteria for immediate loading (minimum insertion torque, ISQ thresholds, occlusal considerations)."
@@ -13851,7 +13867,7 @@ async def generate_case_report(
         for i, imp in enumerate(implant_plans):
             pdf.set_font("Helvetica", "B", 10)
             pdf.set_fill_color(230, 240, 255)
-            pdf.cell(0, 7, safe(f"  Implant {i+1} - Tooth {imp.get('position', '?')}"), ln=True, fill=True)
+            pdf.cell(0, 7, safe(f"  Implant {i+1} - Position {imp.get('position', '?')}"), ln=True, fill=True)
             pdf.set_font("Helvetica", "", 9)
             pdf.cell(0, 6, safe(f"    System: {imp.get('brand', '')} - {imp.get('system', '')}"), ln=True)
             pdf.cell(0, 6, safe(f"    Diameter: {imp.get('diameter', '')}mm | Length: {imp.get('length', '')}mm"), ln=True)
@@ -14071,8 +14087,42 @@ async def generate_case_report(
             for i, t in enumerate(tv):
                 pos_label = ""
                 if i < len(implant_plans):
-                    pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
+                    pos_label = f" (Position {implant_plans[i].get('position', '')})"
                 pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {t} Ncm"), ln=True)
+            pdf.ln(2)
+        # iter-Jun-2026 (v11/v12): MUA placement (universal, per-implant).
+        if p2.get("mua_placed") is not None:
+            add_field("Multiunit Abutments (MUA) Placed", "Yes" if p2["mua_placed"] else "No")
+        mua_det = p2.get("mua_details") or {}
+        if mua_det and p2.get("mua_placed"):
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(2, 136, 209)  # cyan #0288D1
+            pdf.cell(0, 7, safe("Multiunit Abutment (MUA) Details:"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Helvetica", "", 9)
+            for pos, det in mua_det.items():
+                placed_flag = (det or {}).get("placed")
+                # v12: per-implant Yes/No. Skip implants explicitly marked No.
+                if placed_flag is False:
+                    if pos.startswith("ZR") or pos.startswith("ZL"):
+                        label = f"Zygoma {pos[1:]}"
+                    elif pos.startswith("PR") or pos.startswith("PL"):
+                        label = f"Pterygoid {pos[1:]}"
+                    else:
+                        label = f"Implant {pos}"
+                    pdf.cell(0, 6, safe(f"  {label}: MUA not placed"), ln=True)
+                    continue
+                cuff = (det or {}).get("cuff_height") or ""
+                ang = (det or {}).get("angulation") or ""
+                # v12: angulation may be plain numeric (e.g. "17.5"); append ° for display.
+                ang_display = f"{ang}°" if ang and not str(ang).endswith("°") else str(ang)
+                if pos.startswith("ZR") or pos.startswith("ZL"):
+                    label = f"Zygoma {pos[1:]}"
+                elif pos.startswith("PR") or pos.startswith("PL"):
+                    label = f"Pterygoid {pos[1:]}"
+                else:
+                    label = f"Implant {pos}"
+                pdf.cell(0, 6, safe(f"  {label}: cuff {cuff or '-'} mm | angulation {ang_display or '-'}"), ln=True)
             pdf.ln(2)
         if p2.get("implant_other_notes"):
             add_field("Other Implant Notes", p2["implant_other_notes"])
@@ -14107,7 +14157,7 @@ async def generate_case_report(
                     cuff = row.get("cuff_height", "")
                     ang_s = f"{ang}°" if str(ang).strip() != "" else "—"
                     cuff_s = f"{cuff} mm" if str(cuff).strip() != "" else "—"
-                    pdf.cell(0, 6, safe(f"  Tooth {tooth}:  Angulation {ang_s}   Cuff Height {cuff_s}"), ln=True)
+                    pdf.cell(0, 6, safe(f"  Implant {tooth}:  Angulation {ang_s}   Cuff Height {cuff_s}"), ln=True)
                 pdf.ln(2)
         if p2.get("sutures_placed") is not None:
             add_field("Sutures Placed", "Yes" if p2["sutures_placed"] else "No")
@@ -14134,7 +14184,7 @@ async def generate_case_report(
             for i, tv in enumerate(torque):
                 pos_label = ""
                 if i < len(implant_plans):
-                    pos_label = f" (Tooth {implant_plans[i].get('position', '')})"
+                    pos_label = f" (Position {implant_plans[i].get('position', '')})"
                 pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {tv} Ncm"), ln=True)
             pdf.ln(2)
     # Bone and Soft Tissue Augmentation (iter-395; legacy: Bone Graft and Membrane)
@@ -14209,7 +14259,7 @@ async def generate_case_report(
             plans = procedure.get("implant_plans") or []
             for i, v in enumerate(hch):
                 label = plans[i].get("position") if i < len(plans) and isinstance(plans[i], dict) else None
-                prefix = f"Tooth #{label}" if label else f"Implant {i+1}"
+                prefix = f"Implant {label}" if label else f"Implant {i+1}"
                 pdf.cell(0, 6, safe(f"  {prefix}: {v or '-'} mm"), ln=True)
         elif hch:
             pdf.cell(0, 6, safe(f"  {hch} mm"), ln=True)
@@ -15587,6 +15637,11 @@ async def submit_phase2(
         update_data["phase2_data.per_implant"] = phase2_data.per_implant_data
     if phase2_data.advanced_clinical is not None:
         update_data["phase2_data.advanced_clinical"] = phase2_data.advanced_clinical
+    # iter-Jun-2026 (v11): Multiunit Abutment placement (universal Phase 2).
+    if phase2_data.mua_placed is not None:
+        update_data["phase2_data.mua_placed"] = phase2_data.mua_placed
+    if phase2_data.mua_details is not None:
+        update_data["phase2_data.mua_details"] = phase2_data.mua_details
 
     # iter-343: Materialize the top-level `implants[]` array from the
     # Phase-1 implant plan + captured torque values. This is the source

@@ -528,7 +528,7 @@ export default function SurvivalReview() {
 
           return (
             <View key={i} style={s.card}>
-              <Text style={s.itH}>Implant {i + 1} · Tooth {failedTooth || '-'}</Text>
+              <Text style={s.itH}>Implant {i + 1} · Implant {failedTooth || '-'}</Text>
               <Text style={s.itSub}>{imp.system || ''}  {imp.diameter}×{imp.length}mm</Text>
               <View style={{flexDirection:'row',gap:12,marginTop:12}}>
                 <TouchableOpacity style={[s.pillSm, !failed && s.pillOn]} onPress={() => toggleFailure(i, imp, 'yes')} data-testid={`imp-${i}-survived-yes`} testID={`imp-${i}-survived-yes`}><Text style={[s.pillTSm, !failed && s.pillTOn]}>Survived</Text></TouchableOpacity>

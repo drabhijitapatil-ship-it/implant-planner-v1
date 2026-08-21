@@ -123,6 +123,14 @@ export default function Phase2SubmissionScreen() {
   const [implantPlans, setImplantPlans] = useState<any[]>([]);
   const [initialPerImplant, setInitialPerImplant] = useState<Record<string, any>>({});
   const [initialAdvanced, setInitialAdvanced] = useState<Record<string, any>>({});
+  // iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement — universal
+  // Phase 2 section, applies to every implant procedure type.
+  const [muaPlaced, setMuaPlaced] = useState<boolean | null>(null);
+  const [muaDetails, setMuaDetails] = useState<Record<string, { cuff_height: string; angulation: string }>>({});
+  // iter-413 fix: prevent loadImplantPlan re-runs (triggered by tabbed-view
+  // onSaved) from overwriting user's Yes/No toggle. Ref-guarded so hydration
+  // only happens once per component lifetime.
+  const muaHydratedRef = useRef(false);
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
@@ -167,6 +175,14 @@ export default function Phase2SubmissionScreen() {
       const p2 = (procRes.data.phase2_data || {}) as any;
       setInitialPerImplant(p2.per_implant || {});
       setInitialAdvanced(p2.advanced_clinical || {});
+      // iter-Jun-2026 (v11): hydrate MUA state from prior submission —
+      // ONCE only. Subsequent loadImplantPlan() calls (triggered when the
+      // tabbed view saves) must NOT override the user's local toggle.
+      if (!muaHydratedRef.current) {
+        muaHydratedRef.current = true;
+        if (typeof p2.mua_placed === 'boolean') setMuaPlaced(p2.mua_placed);
+        if (p2.mua_details && typeof p2.mua_details === 'object') setMuaDetails(p2.mua_details);
+      }
       setTorqueValues(new Array(count).fill(''));
       setHealingAbutmentCuffHeight(new Array(count).fill(''));
       setAccessChannelOpenings(new Array(count).fill(''));
@@ -277,9 +293,19 @@ export default function Phase2SubmissionScreen() {
   };
 
   // ── IOPA / OPG Upload helpers ──
+  // iter-Jun-2026 (v12): Universal implant label — "Implant 15" for
+  // conventional (FDI), "Zygoma R1" / "Pterygoid L1" for advanced.
+  // Replaces earlier "Tooth #<n>" wording per user directive.
+  const implantDisplayLabel = (pos: string | undefined | null): string => {
+    if (!pos) return 'Implant —';
+    const p = String(pos);
+    if (p.startsWith('ZR') || p.startsWith('ZL')) return `Zygoma ${p.slice(1)}`;
+    if (p.startsWith('PR') || p.startsWith('PL')) return `Pterygoid ${p.slice(1)}`;
+    return `Implant ${p}`;
+  };
+
   const getIopaLabel = (idx: number): string => {
-    if (isFullArch) return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
-    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
+    return implantDisplayLabel(implantPositions[idx]);
   };
 
   const totalIopaSlots = iopaFiles.length + extraIopaCount;
@@ -409,7 +435,7 @@ export default function Phase2SubmissionScreen() {
       if (missingIdxs.length > 0) {
         Alert.alert(
           'Missing Prosthetic Component',
-          `Please select a Prosthetic Component for: ${missingIdxs.map(i => implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—').join(', ')}.`,
+          `Please select a Prosthetic Component for: ${missingIdxs.map(i => implantDisplayLabel(implantPositions[i])).join(', ')}.`,
         );
         return;
       }
@@ -486,6 +512,11 @@ export default function Phase2SubmissionScreen() {
         implant_seated_correctly: implantSeated,
         implant_seated_comment: implantSeatedComment || null,
         torque_values: torqueValues.map(v => parseFloat(v)),
+        // iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement — universal
+        // Phase 2 field. `mua_placed` is nullable; if user hasn't chosen
+        // Yes/No we send null. Details only sent when Yes.
+        mua_placed: muaPlaced,
+        mua_details: muaPlaced ? muaDetails : null,
         bone_graft_used: boneGraftUsed,
         bone_graft_details: null,
         // iter-395: Bone and Soft Tissue Augmentation (full Step-2 capture)
@@ -907,7 +938,10 @@ export default function Phase2SubmissionScreen() {
           </View>
 
           {/* ── Surgical Procedure (soft-locked until Pre-Op) ── */}
-          <View style={[s.section, !isPreopUnlocked && { opacity: 0.55 }]} pointerEvents={isPreopUnlocked ? 'auto' : 'none'} onLayout={onStepLayout(1)}>
+          <View
+            style={[s.section, !isPreopUnlocked && { opacity: 0.55, pointerEvents: 'none' as any }]}
+            onLayout={onStepLayout(1)}
+          >
             {!isPreopUnlocked && (
               <View style={{ backgroundColor: '#FFF3E0', borderLeftWidth: 4, borderLeftColor: '#FB8C00', borderRadius: 6, padding: 10, marginBottom: 10, flexDirection: 'row', gap: 8 }} testID="preop-locked-banner">
                 <Ionicons name="lock-closed-outline" size={18} color="#E65100" />
@@ -1009,7 +1043,7 @@ export default function Phase2SubmissionScreen() {
                 <View key={idx} style={s.torqueRow}>
                   <View style={s.torqueLabel}>
                     <Text style={s.torqueLabelText}>
-                      Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
+                      Implant {idx + 1}{implantPositions[idx] ? ` — ${implantDisplayLabel(implantPositions[idx])}` : ''}
                     </Text>
                   </View>
                   <TextInput style={s.torqueInput} value={val}
@@ -1018,6 +1052,108 @@ export default function Phase2SubmissionScreen() {
                   <Text style={s.torqueUnit}>Ncm</Text>
                 </View>
               ))}
+            </View>
+
+            {/* iter-Jun-2026 (v11): Multiunit Abutments (MUA) Placed — universal
+                Phase 2 section, applies to every implant procedure type.
+                Yes/No toggle; when Yes, reveals a cyan-themed per-implant
+                block for Cuff Height + Angulation, mirroring the Torque
+                Achieved layout. */}
+            <View style={s.field}>
+              <Text style={[s.label, { fontSize: 15, fontWeight: '700', color: '#1A1A2E' }]}>Multiunit Abutments (MUA) Placed</Text>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <TouchableOpacity
+                  style={[s.toggleBtn, muaPlaced === true && s.toggleBtnActive]}
+                  onPress={() => setMuaPlaced(true)}
+                  testID="mua-placed-yes"
+                >
+                  <Text style={[s.toggleBtnText, muaPlaced === true && s.toggleBtnTextActive]}>Yes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.toggleBtn, muaPlaced === false && s.toggleBtnActive]}
+                  onPress={() => { setMuaPlaced(false); setMuaDetails({}); }}
+                  testID="mua-placed-no"
+                >
+                  <Text style={[s.toggleBtnText, muaPlaced === false && s.toggleBtnTextActive]}>No</Text>
+                </TouchableOpacity>
+              </View>
+              {muaPlaced === true ? (
+                <View style={muaStyles.section} testID="mua-details-section">
+                  <Text style={muaStyles.title}>Multiunit Abutment (MUA) Details</Text>
+                  {/* iter-Jun-2026 (v12): 4-column responsive table — Implant |
+                      Placed | Cuff (mm) | Angulation (°). Per-implant Yes/No
+                      toggle; when Yes, Cuff + Angulation inputs are enabled. */}
+                  <View style={muaStyles.tableHeader}>
+                    <Text style={[muaStyles.thText, muaStyles.colImplant]}>Implant</Text>
+                    <Text style={[muaStyles.thText, muaStyles.colYesNo]}>Placed</Text>
+                    <Text style={[muaStyles.thText, muaStyles.colCuff]}>Cuff (mm)</Text>
+                    <Text style={[muaStyles.thText, muaStyles.colAng]}>Angulation (°)</Text>
+                  </View>
+                  {(implantPositions.length ? implantPositions : ['—']).map((pos, idx) => {
+                    const key = pos || `idx${idx}`;
+                    const val = muaDetails[key] || { cuff_height: '', angulation: '', placed: false } as any;
+                    const isPlaced = val.placed === true;
+                    return (
+                      <View key={key} style={muaStyles.tableRow}>
+                        <View style={muaStyles.colImplant}>
+                          <Text style={muaStyles.rowLabel} numberOfLines={2}>{implantDisplayLabel(pos)}</Text>
+                        </View>
+                        <View style={muaStyles.colYesNo}>
+                          <View style={muaStyles.yesNoRow}>
+                            <TouchableOpacity
+                              style={[muaStyles.miniChip, isPlaced && muaStyles.miniChipOn]}
+                              onPress={() => setMuaDetails(prev => ({ ...prev, [key]: { ...val, placed: true } }))}
+                              testID={`mua-row-yes-${key}`}
+                            >
+                              <Text style={[muaStyles.miniChipText, isPlaced && muaStyles.miniChipTextOn]}>Yes</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[muaStyles.miniChip, val.placed === false && muaStyles.miniChipOn]}
+                              onPress={() => setMuaDetails(prev => ({ ...prev, [key]: { placed: false, cuff_height: '', angulation: '' } }))}
+                              testID={`mua-row-no-${key}`}
+                            >
+                              <Text style={[muaStyles.miniChipText, val.placed === false && muaStyles.miniChipTextOn]}>No</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <View style={muaStyles.colCuff}>
+                          <TextInput
+                            style={[muaStyles.cellInput, !isPlaced && muaStyles.cellDisabled]}
+                            value={isPlaced ? val.cuff_height : ''}
+                            editable={isPlaced}
+                            onChangeText={v => setMuaDetails(prev => ({ ...prev, [key]: { ...val, cuff_height: v } }))}
+                            keyboardType="decimal-pad"
+                            maxLength={5}
+                            placeholder={isPlaced ? 'mm' : '—'}
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-cuff-${key}`}
+                          />
+                        </View>
+                        <View style={muaStyles.colAng}>
+                          <View style={muaStyles.angInputWrap}>
+                            <TextInput
+                              style={[muaStyles.cellInput, muaStyles.angInput, !isPlaced && muaStyles.cellDisabled]}
+                              value={isPlaced ? String(val.angulation ?? '') : ''}
+                              editable={isPlaced}
+                              onChangeText={v => {
+                                // Accept numeric with decimal (e.g. 17.5); allow empty.
+                                const cleaned = v.replace(/[^0-9.]/g, '');
+                                setMuaDetails(prev => ({ ...prev, [key]: { ...val, angulation: cleaned } }));
+                              }}
+                              keyboardType="decimal-pad"
+                              maxLength={5}
+                              placeholder={isPlaced ? '' : '—'}
+                              placeholderTextColor="#B0BEC5"
+                              testID={`mua-angulation-${key}`}
+                            />
+                            <Text style={[muaStyles.angSuffix, !isPlaced && { color: '#B0BEC5' }]}>°</Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
             </View>
 
             {/* iter-395: Bone and Soft Tissue Augmentation (replaces "Bone
@@ -1117,7 +1253,7 @@ export default function Phase2SubmissionScreen() {
                     if (phase1ImmediateLoading && conflicting) {
                       Alert.alert(
                         'Immediate Loading selected in Phase 1, Please check',
-                        `${implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}: you picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
+                        `${implantDisplayLabel(implantPositions[idx])}: you picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
                         [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Confirm', onPress: () => setVal(next), style: 'destructive' },
@@ -1262,8 +1398,8 @@ export default function Phase2SubmissionScreen() {
                   <TouchableOpacity
                     style={[s.muaPill, multiUnitPlaced === 'yes' && s.muaPillActive]}
                     onPress={() => setMultiUnitPlaced('yes')}
-                    testID="mua-placed-yes"
-                    /* @ts-ignore */ data-testid="mua-placed-yes"
+                    testID="mua-placed-yes-legacy"
+                    /* @ts-ignore */ data-testid="mua-placed-yes-legacy"
                   >
                     <Text style={[s.muaPillText, multiUnitPlaced === 'yes' && s.muaPillTextActive]}>Yes</Text>
                   </TouchableOpacity>
@@ -1275,8 +1411,8 @@ export default function Phase2SubmissionScreen() {
                       setMuaAngulation(new Array(implantPositions.length || 1).fill(''));
                       setMuaCuffHeight(new Array(implantPositions.length || 1).fill(''));
                     }}
-                    testID="mua-placed-no"
-                    /* @ts-ignore */ data-testid="mua-placed-no"
+                    testID="mua-placed-no-legacy"
+                    /* @ts-ignore */ data-testid="mua-placed-no-legacy"
                   >
                     <Text style={[s.muaPillText, multiUnitPlaced === 'no' && s.muaPillTextActive]}>No</Text>
                   </TouchableOpacity>
@@ -1296,8 +1432,8 @@ export default function Phase2SubmissionScreen() {
                             value={muaAngulation[idx] || ''}
                             onChangeText={v => { const u = [...muaAngulation]; u[idx] = v; setMuaAngulation(u); }}
                             keyboardType="decimal-pad" placeholder="°" maxLength={2}
-                            testID={`mua-angulation-${idx}`}
-                            /* @ts-ignore */ data-testid={`mua-angulation-${idx}`}
+                            testID={`mua-angulation-${idx}-legacy`}
+                            /* @ts-ignore */ data-testid={`mua-angulation-${idx}-legacy`}
                           />
                           <Text style={s.muaUnit}>°</Text>
                         </View>
@@ -1310,8 +1446,8 @@ export default function Phase2SubmissionScreen() {
                             value={muaCuffHeight[idx] || ''}
                             onChangeText={v => { const u = [...muaCuffHeight]; u[idx] = v; setMuaCuffHeight(u); }}
                             keyboardType="decimal-pad" placeholder="mm" maxLength={2}
-                            testID={`mua-cuff-${idx}`}
-                            /* @ts-ignore */ data-testid={`mua-cuff-${idx}`}
+                            testID={`mua-cuff-${idx}-legacy`}
+                            /* @ts-ignore */ data-testid={`mua-cuff-${idx}-legacy`}
                           />
                           <Text style={s.muaUnit}>mm</Text>
                         </View>
@@ -1784,4 +1920,95 @@ const s = StyleSheet.create({
   stepPillTextActive: { color: '#FFFFFF' },
   stepPillTextDone: { color: '#2E7D32' },
   stepPillTextLocked: { color: '#90A4AE' },
+});
+
+// iter-Jun-2026 (v11): Multiunit Abutment (MUA) Details — cyan/light-blue
+// palette, distinct from Torque Achieved (blue). Applies to every
+// implant procedure type in Phase 2 Step 2 → Surgical Procedure.
+const muaStyles = StyleSheet.create({
+  section: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#E1F5FE',
+    borderWidth: 1,
+    borderColor: '#0288D1',
+  },
+  title: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#01579B',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  // iter-Jun-2026 (v12): 4-column responsive table layout for MUA details.
+  tableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: '#0288D1',
+    marginBottom: 4,
+  },
+  thText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#01579B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#B3E5FC',
+    minHeight: 44,
+  },
+  colImplant: { flex: 1.9, paddingRight: 4, minWidth: 0, overflow: 'hidden' },
+  colYesNo:   { flex: 1.6, paddingHorizontal: 2, minWidth: 0 },
+  colCuff:    { flex: 1.2, paddingHorizontal: 2, minWidth: 0 },
+  colAng:     { flex: 1.4, paddingLeft: 2, minWidth: 0 },
+  rowLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#01579B',
+  },
+  yesNoRow: { flexDirection: 'row', gap: 3 },
+  miniChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0288D1',
+    backgroundColor: '#FFF',
+    minWidth: 26,
+    alignItems: 'center',
+  },
+  miniChipOn: { backgroundColor: '#0288D1', borderColor: '#0277BD' },
+  miniChipText: { fontSize: 10, fontWeight: '700', color: '#01579B' },
+  miniChipTextOn: { color: '#FFF' },
+  cellInput: {
+    backgroundColor: '#FFF',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0288D1',
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    fontSize: 11,
+    color: '#01579B',
+    textAlign: 'center',
+    flex: 1,
+    minWidth: 0,
+    width: '100%',
+  },
+  cellDisabled: {
+    backgroundColor: '#ECEFF1',
+    borderColor: '#CFD8DC',
+  },
+  angInputWrap: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  angInput: { flex: 1, minWidth: 0 },
+  angSuffix: { fontSize: 11, fontWeight: '700', color: '#01579B', marginLeft: 2 },
 });

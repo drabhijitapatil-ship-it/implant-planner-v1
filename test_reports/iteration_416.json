@@ -1,0 +1,43 @@
+{
+  "summary": "iter-416 v12 — Universal Implant Naming + MUA Table Restructure. Backend 7/7 pytest PASS (/app/backend/tests/test_v12_universal_naming.py, junit /app/test_reports/pytest/iter416_v12.xml): PDF label sweep on Test Patient Zygoma contains 'Zygoma R1: cuff 3 mm | angulation 17.5°', 'Zygoma L1: MUA not placed', 'Implant 15: cuff 2 mm' with 0 hits for 'Tooth #' / 'Tooth {'; non-zygoma Single Conventional PDF regression uses 'Implant N' prefix and has 0 'Tooth #'; Phase2Submit model exposes mua_placed+mua_details, DB round-trip preserves placed:bool and decimal angulation '17.5' verbatim. Frontend Playwright (mobile 390x844, Abhijit.patil, /procedures/submit-phase2/6a8337dd64ad3269dc584a69) all 8 tests PASS: (T1) 0 'Tooth #' hits, Torque rows label 'Implant 2 — Zygoma R2', 'Implant 3 — Zygoma L1', 'Implant 4 — Pterygoid R1', 'Implant 5 — Pterygoid L1'; (T2) mua-details-section reveals on Yes with header 'Implant/Placed/Cuff (mm)/Angulation (°)' and 5 rows (Zygoma R1, Zygoma R2, Zygoma L1, Pterygoid R1, Pterygoid L1) each with mua-row-yes/no + mua-cuff + mua-angulation testIDs; (T3) tapping mua-row-yes-ZR1 makes cuff+ang editable with 'mm' placeholder, fills 3.5/17.5 correctly, ° suffix rendered adjacent; (T4) typing 'abc12.5xyz' into ang filters to '12.5' (client-side .replace(/[^0-9.]/g,'') works); (T5) tapping mua-row-no-ZR1 clears both fields to '' and marks cuff readOnly:true (editable=false → readOnly in RN Web); (T6) no page-level horizontal scroll on 390 viewport (docScroll=docClient=390); (T8) Post-Surgical Radiographs labels contain 3× 'Zygoma R1', 3× 'Pterygoid L1', 10× 'Implant N' and 0× 'Tooth #'. Minor: MUA section internal scrollWidth (409px) slightly exceeds its client width (318px) — 91px inner overflow — but the row-container likely uses overflow:hidden so the page itself does not scroll. Screenshot confirms labels 'Zygoma R1', 'Pterygoid L1' are fully readable; some right-side clipping of the Angulation input in narrow devices is possible. Backend still contains one leftover 'Tooth #{label}' at server.py:14262 in Healing Abutment section — did not fire on Test Patient Zygoma (no phase3 healing_abutment_cuff_height on that case) but WILL fire on a case that populates healing_abutment_cuff_height list.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET/POST /api/procedures/{id}/case-report", "issue": "Leftover 'Tooth #{label}' at server.py:14262 in Healing Abutment cuff-height render branch. Will render 'Tooth #<pos>' for any case whose phase2_data.healing_abutment_cuff_height is a list AND has implant_plans. Should use the same implantDisplayLabel-style mapping used at L14119-14124."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MUA table (submit-phase2)", "issue": "Inner section scrollWidth 409px exceeds clientWidth 318px on 390 viewport — 91px of horizontal overflow inside the MUA card. Angulation input may clip on the right side. Consider tightening column widths (colImplant flex vs colAng width) or wrapping the ° suffix into the input's paddingRight.", "testID": "mua-details-section", "priority": "low"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "submit-phase2 → Step 2 Surgery", "issues": ["MUA table columns nudge horizontally on narrow viewports; page itself does not scroll but the section container may cut off the °/Angulation input value on Pterygoid rows."]}
+    ],
+    "react_native_issues": [
+      {"component": "props.pointerEvents (RN Web deprecation)", "issue": "Console still emits 'props.pointerEvents is deprecated. Use style.pointerEvents' on submit-phase2. Same warning documented in iter-414/415. Migrate remaining ancestor JSX to style.pointerEvents. Reference: /app/frontend/app/procedures/submit-phase2/[id].tsx L942."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v12_universal_naming.py",
+    "/app/test_reports/pytest/iter416_v12.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (P3): Replace leftover 'Tooth #{label}' at /app/backend/server.py:14262 (Healing Abutment cuff-height render) with the same implantDisplayLabel-style mapping used at L14119-14124 for full 'Tooth #' eradication.",
+    "OPTIONAL (P3): Tighten MUA table column widths so the section fits within 390-px viewport without inner overflow (colAng might need width shrink + smaller padding, or move ° into TextInput as adorned suffix).",
+    "OPTIONAL (P3): Migrate remaining legacy `pointerEvents=` prop usages in submit-phase2 tree to `style.pointerEvents` to silence the RN Web deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "submit-phase2/[id].tsx is ~2012 lines — consider splitting the MUA table + torque section into their own components for maintainability (file exceeds the 700-line threshold in the code review guidelines).",
+    "Backend PDF render code duplicates the position-prefix mapping (Zygoma/Pterygoid/Implant) at L14107-14124 vs helper elsewhere — DRY refactor recommended."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v12_universal_naming.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Seeded phase2_data.torque_values (5 slots) + phase2_data.mua_placed=true + phase2_data.mua_details on Test Patient Zygoma (6a8337dd64ad3269dc584a69) directly via MongoDB (same approach as iter-412) because /submit-phase2 gates on phase2_preop_completed_at + patient_consent_form. Seed keys: ZR1(placed:true, cuff:3, ang:17.5), ZL1(placed:false), PR1(placed:true, cuff:2, ang:0), PL1(placed:false), 15(placed:true, cuff:2, ang:0).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "MUA table renders correctly with per-implant Yes/No + decimal angulation. Universal naming is applied everywhere: 'Implant 15' for FDI numbers, 'Zygoma R1/L1', 'Pterygoid R1/L1' for advanced positions. Only remaining Tooth wording is at backend/server.py:14262 (Healing Abutment cuff render) which won't fire on the seed Zygoma case. The inner MUA table overflow (409 vs 318px) is cosmetic — no page-level scroll.",
+  "rca_of_issue": "N/A — no functional bugs. Only cosmetic column-width overflow and one leftover Tooth #{label} branch that doesn't fire on the current test case."
+}
