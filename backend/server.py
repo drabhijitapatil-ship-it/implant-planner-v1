@@ -15764,6 +15764,27 @@ async def submit_phase2(
     if phase2_data.checklist_surgical:
         new_checklist["surgical"] = phase2_data.checklist_surgical.model_dump()
     
+    # iter-Jun-2026 (Chunk C hotfix): MongoDB $set cannot update both
+    # `phase2_data` (whole object) AND `phase2_data.<sub>` (dot path) in the
+    # same call — it raises "would create a conflict at 'phase2_data'"
+    # (code 40). We merge the sub-fields INTO `phase2_surgical_data` before
+    # composing update_data instead of setting them via dotted paths.
+    if phase2_data.per_implant_data is not None:
+        phase2_surgical_data["per_implant"] = phase2_data.per_implant_data
+    if phase2_data.advanced_clinical is not None:
+        phase2_surgical_data["advanced_clinical"] = phase2_data.advanced_clinical
+    if phase2_data.mua_placed is not None:
+        phase2_surgical_data["mua_placed"] = phase2_data.mua_placed
+    if phase2_data.mua_details is not None:
+        phase2_surgical_data["mua_details"] = phase2_data.mua_details
+
+    # Preserve any existing phase2_data.* sub-fields not covered above so a
+    # partial Phase-2 re-submission does not wipe advanced_clinical etc.
+    existing_phase2 = procedure.get("phase2_data") or {}
+    for _k, _v in existing_phase2.items():
+        if _k not in phase2_surgical_data:
+            phase2_surgical_data[_k] = _v
+
     update_data = {
         "checklist": new_checklist,
         "phase2_data": phase2_surgical_data,
@@ -15804,17 +15825,11 @@ async def submit_phase2(
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
 
-    # iter-Jun-2026 (v10, Chunk 3): Persist per-implant + advanced clinical
-    # blocks under phase2_data.* so PDF/AI/review can read a unified schema.
-    if phase2_data.per_implant_data is not None:
-        update_data["phase2_data.per_implant"] = phase2_data.per_implant_data
-    if phase2_data.advanced_clinical is not None:
-        update_data["phase2_data.advanced_clinical"] = phase2_data.advanced_clinical
-    # iter-Jun-2026 (v11): Multiunit Abutment placement (universal Phase 2).
-    if phase2_data.mua_placed is not None:
-        update_data["phase2_data.mua_placed"] = phase2_data.mua_placed
-    if phase2_data.mua_details is not None:
-        update_data["phase2_data.mua_details"] = phase2_data.mua_details
+    # iter-Jun-2026 (Chunk C hotfix): per_implant / advanced_clinical /
+    # mua_placed / mua_details are now merged into phase2_surgical_data above,
+    # BEFORE update_data is composed. Setting them here via dotted paths would
+    # collide with the `phase2_data` full-object $set and raise Mongo code 40.
+    # Left as an explicit comment so we don't reintroduce the conflict.
 
     # iter-343: Materialize the top-level `implants[]` array from the
     # Phase-1 implant plan + captured torque values. This is the source
