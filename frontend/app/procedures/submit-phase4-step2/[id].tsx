@@ -125,9 +125,11 @@ export default function Phase4Step2Screen() {
   // pure non-full-arch Conventional cases AND for mixed cases (where the
   // Conventional implants still need per-tooth IOPA alongside the OPG).
   const needsIopa = iopaImplantPositions.length > 0 && (zygPtrImplantPositions.length > 0 || !isFullArch);
-  // Baseline comparison only makes sense for Conventional (per-tooth IOPA).
-  // Cases with any Zygoma/Pterygoid implants skip the compare feature.
-  const supportsBaselineCompare = zygPtrImplantPositions.length === 0;
+  // Baseline comparison is available whenever the case has at least one
+  // Conventional implant (per-tooth IOPA history exists). Mixed Zyg+Ptr+Conv
+  // cases still get the compare — only the Conventional implants are
+  // included via `positionFilter` on the RadiographCompare component.
+  const supportsBaselineCompare = iopaImplantPositions.length > 0;
   const isInchargeSelfCreated =
     user?.role === 'implant_incharge'
     && procedure?.created_by_role === 'implant_incharge'
@@ -331,14 +333,18 @@ export default function Phase4Step2Screen() {
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
           {/* iter-Jun-2026 (v13, Chunk D, Ask 1): Zygoma/Pterygoid/Conventional
               3-tab sub-view removed from Phase 4 Step 2. */}
-          {/* iter-Jun-2026 (v13, Chunk H, Ask 1): Only show baseline
-              compare for pure-Conventional cases. Zygoma / Pterygoid cases
-              have no per-tooth IOPA history to diff against. */}
+          {/* iter-Jun-2026 (v13, Chunk I, Ask 1): Baseline compare now
+              available whenever the case has ANY Conventional implants —
+              mixed Zygoma/Pterygoid + Conventional cases too. The
+              positionFilter restricts the compare view to only the
+              Conventional implants (Zyg/Ptr have no per-tooth IOPA to
+              diff against). */}
           {supportsBaselineCompare && (
             <RadiographCompare
               procedure={procedure}
               iopaUploads={iopaUploads}
               opgUpload={opgUpload}
+              positionFilter={(pos: string) => !isZygPtrPosition(pos)}
             />
           )}
 
@@ -429,37 +435,54 @@ export default function Phase4Step2Screen() {
               {iopaImplantPositions.length === 0 && (
                 <Text style={s.helperText}>No Conventional implants on this case — IOPA upload is skipped.</Text>
               )}
+              {/* iter-Jun-2026 (v13, Chunk I, Ask 2): Mirror the Phase 2 IOPA
+                  row style — implant-label on the left ("Implant 12"), a
+                  compact upload / view / remove control cluster on the
+                  right. Uses the same visual language so students see a
+                  consistent flow between phases. */}
               {iopaImplantPositions.map(pos => {
                 const up = iopaUploads[pos];
                 return (
-                  <View key={pos} style={[s.uploadRow, { marginBottom: 8 }]} testID={`iopa-row-${pos}`}>
-                    <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
-                    {up ? (
-                      <>
-                        <TouchableOpacity style={[s.viewBtn, { flex: 1 }]}
-                          onPress={() => {
-                            const url = getAuthFileUrl(`/uploads/${up.filename}`);
-                            if (Platform.OS === 'web') window.open(url, '_blank');
-                          }}
-                          testID={`iopa-view-${pos}`}>
-                          <Ionicons name="document-text" size={16} color="#0D47A1" />
-                          <Text style={s.viewBtnText} numberOfLines={1}>{up.original_name}</Text>
+                  <View key={pos} style={s.iopaRow} testID={`iopa-row-${pos}`}>
+                    <View style={s.iopaLabelWrap}>
+                      <Text style={s.iopaLabelText}>Implant {pos}</Text>
+                    </View>
+                    <View style={s.iopaActionWrap}>
+                      {up ? (
+                        <>
+                          <TouchableOpacity
+                            style={s.iopaViewBtn}
+                            onPress={() => {
+                              const url = getAuthFileUrl(`/uploads/${up.filename}`);
+                              if (Platform.OS === 'web') window.open(url, '_blank');
+                            }}
+                            testID={`iopa-view-${pos}`}
+                          >
+                            <Ionicons name="document-attach" size={16} color="#FFF" />
+                            <Text style={s.iopaViewBtnText} numberOfLines={1}>View IOPA</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setIopaUploads(prev => { const c = { ...prev }; delete c[pos]; return c; })} testID={`iopa-remove-${pos}`}>
+                            <Ionicons name="close-circle" size={22} color="#E53935" />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <TouchableOpacity
+                          style={s.iopaUploadBtn}
+                          onPress={() => pickIopa(pos)}
+                          disabled={iopaUploadingFor === pos}
+                          testID={`iopa-upload-${pos}`}
+                        >
+                          {iopaUploadingFor === pos ? (
+                            <ActivityIndicator color="#FFF" size="small" />
+                          ) : (
+                            <>
+                              <Ionicons name="cloud-upload" size={16} color="#FFF" />
+                              <Text style={s.iopaUploadBtnText}>Upload IOPA</Text>
+                            </>
+                          )}
                         </TouchableOpacity>
-                        <TouchableOpacity onPress={() => setIopaUploads(prev => { const c = { ...prev }; delete c[pos]; return c; })} testID={`iopa-remove-${pos}`}>
-                          <Ionicons name="close-circle" size={22} color="#D32F2F" />
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <TouchableOpacity style={[s.uploadBtn, { flex: 1 }]} onPress={() => pickIopa(pos)}
-                        disabled={iopaUploadingFor === pos} testID={`iopa-upload-${pos}`}>
-                        {iopaUploadingFor === pos ? <ActivityIndicator color="#0D47A1" /> : (
-                          <>
-                            <Ionicons name="cloud-upload-outline" size={16} color="#0D47A1" />
-                            <Text style={s.uploadBtnText}>Upload IOPA — Implant {pos}</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    )}
+                      )}
+                    </View>
                   </View>
                 );
               })}
@@ -710,6 +733,46 @@ const s = StyleSheet.create({
   viewBtnText: { fontSize: 12, fontWeight: '600', color: '#0D47A1' },
   toothBadge: { backgroundColor: '#0D47A1', borderRadius: 6, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   toothBadgeText: { color: '#FFF', fontWeight: '800', fontSize: 13 },
+  // iter-Jun-2026 (v13, Chunk I, Ask 2): Phase-2 mirrored IOPA row style.
+  iopaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 8,
+    borderRadius: 8,
+    backgroundColor: '#F5F9FF',
+    borderWidth: 1,
+    borderColor: '#E3F2FD',
+    gap: 10,
+  },
+  iopaLabelWrap: { flex: 1.5, justifyContent: 'center' },
+  iopaLabelText: { fontSize: 14, fontWeight: '700', color: '#0D47A1' },
+  iopaActionWrap: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
+  iopaUploadBtn: {
+    flex: 1,
+    backgroundColor: '#1A73E8',
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  iopaUploadBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
+  iopaViewBtn: {
+    flex: 1,
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  iopaViewBtnText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   addPhotoBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center', paddingVertical: 10, borderRadius: 8, backgroundColor: '#F3E5F5', borderWidth: 1, borderColor: '#CE93D8', marginTop: 4 },
   successWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
