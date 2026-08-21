@@ -2854,6 +2854,91 @@ async def advanced_clinical_approve(
     return {"ok": True, "approval_status": "approved", "advanced_clinical": adv}
 
 
+# ─────────────────────────────────────────────────────────────
+# iter-Jun-2026 (v13, Chunk C): Phase-2 Prosthetic Plan edit
+# Allows Student / Supervisor / Implant In-Charge / Administrator to change
+# the Prosthetic Plan selected in Phase 1 from within the Phase 2 workflow.
+# Overwrites `procedure.prosthetic_plan` (single source of truth) AND appends
+# an audit entry to `procedure.prosthetic_plan_change_log` for traceability.
+# ─────────────────────────────────────────────────────────────
+class ProstheticPlanUpdate(BaseModel):
+    prosthetic_plan: str = Field(..., min_length=1, max_length=500)
+    prosthetic_plan_other: Optional[str] = Field(None, max_length=500)
+
+
+@api_router.patch("/procedures/{procedure_id}/prosthetic-plan")
+async def update_prosthetic_plan(
+    procedure_id: str,
+    payload: ProstheticPlanUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Overwrite `prosthetic_plan` on the procedure and append an audit entry
+    to `prosthetic_plan_change_log`. Callable from Phase 2 when the operator
+    needs to correct/replace the plan captured in Phase 1."""
+    role = str(current_user.get("role") or "").lower()
+    if role not in {"student", "supervisor", "implant_incharge", "administrator"}:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' cannot edit the prosthetic plan")
+
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    # Ownership: students may only edit their own case; other privileged roles
+    # can edit any case they are already involved in the workflow with.
+    if role == "student":
+        student_id = proc.get("student_id") or proc.get("created_by_id")
+        if str(student_id) != str(current_user.get("_id") or current_user.get("id") or ""):
+            raise HTTPException(status_code=403, detail="You are not the owner of this case")
+
+    new_plan = (payload.prosthetic_plan or "").strip()
+    if not new_plan:
+        raise HTTPException(status_code=400, detail="Prosthetic Plan cannot be empty")
+    new_other = (payload.prosthetic_plan_other or "").strip()
+
+    prev_plan = proc.get("prosthetic_plan") or ""
+    prev_other = proc.get("prosthetic_plan_other") or ""
+    if new_plan == prev_plan and new_other == prev_other:
+        return {"ok": True, "unchanged": True, "prosthetic_plan": prev_plan}
+
+    now = datetime.utcnow()
+    audit_entry = {
+        "from": prev_plan,
+        "from_other": prev_other,
+        "to": new_plan,
+        "to_other": new_other,
+        "changed_by": str(current_user.get("_id") or current_user.get("id") or ""),
+        "changed_by_name": (
+            f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip()
+            or current_user.get("username", "")
+        ),
+        "changed_by_role": role,
+        "changed_in_phase": 2,
+        "changed_at": now.isoformat(),
+    }
+    change_log = list(proc.get("prosthetic_plan_change_log") or [])
+    change_log.append(audit_entry)
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "prosthetic_plan": new_plan,
+            "prosthetic_plan_other": new_other,
+            "prosthetic_plan_change_log": change_log,
+            "updated_at": now,
+        }},
+    )
+    return {
+        "ok": True,
+        "prosthetic_plan": new_plan,
+        "prosthetic_plan_other": new_other,
+        "prosthetic_plan_change_log": change_log,
+    }
+
+
+
 
 
 # ─────────────────────────────────────────────────────────────
