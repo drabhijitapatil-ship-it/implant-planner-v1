@@ -7464,3 +7464,14 @@ CHANGES:
 - /app/frontend/components/ZygomaPterygoidPhase1Review.tsx — Full style refactor: white cards with `#E8EDF5` border + `borderRadius: 16` + blue-tinted shadow; blue `#1565C0` section titles at fontSize 16 fontWeight 700; InfoRow-mirror row (icon left, label above value, `#F0F4F8` divider). All 14 existing testIDs preserved.
 TESTED (iter-422): backend 11/11 pytest PASS (Zygoma classifier + full-arch classification + dentulous regression). Frontend Playwright PASS across Phase 2 summary, per-implant inline, Phase 3 banner + review, and layout uniformity. Report /app/test_reports/iteration_422.json.
 Deployment: User needs to redeploy (Publish button) so backend classifier change + frontend refresh ship to production.
+
+## Iteration 423 (Jun 2026) — Chunk F: Advanced Clinical (Zygoma) close-out gating + Radiograph split
+User asks:
+1. Advanced Clinical (Zygoma) ORIS: fix bug where submitting Day 0 marks section approved and blocks Day 7 / Day 30. Section must stay active until Phase 3 is proceeded to OR 30 days from surgery.
+2. Post-surgical Radiograph split by modality — Conventional implants use IOPA (per-tooth FDI-labelled), Zygoma/Pterygoid implants use whole-arch OPG. Mixed cases render two separate sections.
+CHANGES:
+- /app/backend/server.py — new endpoint POST /api/procedures/{id}/advanced-clinical/reopen (role: supervisor|implant_incharge|administrator). Resets approval_status='draft', appends reopen_log with from_status/reopened_by_name/reopened_by_role/reopened_at, clears approver stamps. Idempotent for already-draft.
+- /app/frontend/components/AdvancedClinicalCard.tsx — closeOutReady (useMemo, hook order-safe): true when current_phase>=3 OR (now - surgery_date)>=30 days. Per-day DONE mini pills (adv-day-{d}-done-pill). Amber "Locking soon" banner (adv-locking-soon) — visual only, no lock. Send-for-approval button (adv-send-approval) visibility gated to (day0Filled OR closeOutReady). Reopen button (adv-reopen) for approvers with confirm modal + PATCH.
+- /app/frontend/app/procedures/submit-phase2/[id].tsx — iopaImplantPositions / zygPtrImplantPositions helpers, needsOpg/needsIopa flags. Section title auto: "Post Surgical Radiographs - OPG" (pure Zyg/Ptr), "Post Surgical Radiograph - IOPA" (pure Conv), combined when mixed. IOPA slots seeded from convPositions.length; getIopaLabel uses Conventional FDI. Submit-time validation blocks IOPA only when needsIopa, OPG required for any Zygoma/Pterygoid or full-arch case. Missing-pill panel refined for Zygoma/Pterygoid label.
+TESTED (iter-423): Backend 7/7 pytest PASS (reopen endpoint - role gate + idempotency + audit log + approver-clear). Frontend code-inspection PASS across 10 procedure-type matrix. Report /app/test_reports/iteration_423.json.
+Deployment: User needs to redeploy (Publish button) so backend + frontend ship to production and users stuck in premature-approved state are unblocked via the new Reopen button.

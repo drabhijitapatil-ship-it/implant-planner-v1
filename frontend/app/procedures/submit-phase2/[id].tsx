@@ -236,12 +236,18 @@ export default function Phase2SubmissionScreen() {
       const teeth = Array.isArray(procRes.data.teeth_present) ? procRes.data.teeth_present : [];
       setTeethCount(teeth.length);
 
-      // Determine IOPA slot count
+      // Determine IOPA slot count.
+      // iter-Jun-2026 (v13, Chunk F, Ask 2): Only Conventional implants
+      // get IOPA slots. Zygoma / Pterygoid implants are captured on the
+      // OPG instead. `positions` are already loaded from implant_plans;
+      // filter out ZR/ZL/PR/PL codes to get the Conventional set.
+      const _isZygPtr = (p: string) => p.startsWith('ZR') || p.startsWith('ZL') || p.startsWith('PR') || p.startsWith('PL');
+      const convPositions: string[] = positions.filter((p: string) => !_isZygPtr(String(p || '')));
       let iopaCount: number;
       if (pType === 'All on 4') iopaCount = 4;
       else if (pType === 'All on 6') iopaCount = 6;
       else if (pType === 'All on X') iopaCount = 5;
-      else iopaCount = count;
+      else iopaCount = convPositions.length; // 0 for pure Zygoma/Pterygoid cases
       setIopaFiles(new Array(iopaCount).fill(null));
 
       // iter-189: hydrate Pre-Op state if it was already completed.
@@ -317,8 +323,31 @@ export default function Phase2SubmissionScreen() {
     return `Implant ${p}`;
   };
 
+  // iter-Jun-2026 (v13, Chunk F, Ask 2): Split Post Surgical Radiograph by
+  // implant modality — Conventional implants use IOPA (per-tooth), Zygoma
+  // and Pterygoid implants use a whole-arch OPG. When a case mixes both,
+  // we render two separate sections: OPG (for Zygoma/Pterygoid) + IOPA
+  // (only for Conventional implants, labelled by FDI).
+  const isZygPtrPosition = (pos: string | undefined | null): boolean => {
+    const p = String(pos || '');
+    return p.startsWith('ZR') || p.startsWith('ZL') || p.startsWith('PR') || p.startsWith('PL');
+  };
+  const iopaImplantPositions = React.useMemo(
+    () => implantPositions.filter(p => !isZygPtrPosition(p)),
+    [implantPositions],
+  );
+  const zygPtrImplantPositions = React.useMemo(
+    () => implantPositions.filter(p => isZygPtrPosition(p)),
+    [implantPositions],
+  );
+  const needsOpg = isFullArch || zygPtrImplantPositions.length > 0;
+  const needsIopa = iopaImplantPositions.length > 0;
+
   const getIopaLabel = (idx: number): string => {
-    return implantDisplayLabel(implantPositions[idx]);
+    // With the Ask-2 split, iopaFiles indices align 1:1 with
+    // iopaImplantPositions (Conventional-only). Fall back to legacy behaviour
+    // if the split hasn't been re-seeded yet after a partial load.
+    return implantDisplayLabel(iopaImplantPositions[idx] || implantPositions[idx]);
   };
 
   const totalIopaSlots = iopaFiles.length + extraIopaCount;
@@ -470,12 +499,28 @@ export default function Phase2SubmissionScreen() {
       }
     }
 
-    // Validate mandatory IOPA uploads
-    const allIopaSlots = [...iopaFiles, ...new Array(extraIopaCount).fill(null)];
-    const baseIopaCount = iopaFiles.length;
-    const missingIopa = allIopaSlots.slice(0, baseIopaCount).filter(f => f === null);
-    if (missingIopa.length > 0) {
-      Alert.alert('Missing IOPA', `Please upload all ${baseIopaCount} IOPA Radiographs before submitting.`);
+    // Validate mandatory IOPA uploads (only for Conventional implants).
+    // iter-Jun-2026 (v13, Chunk F, Ask 2): Pure Zygoma/Pterygoid cases have
+    // no IOPA slots — skip this block entirely for them.
+    if (needsIopa) {
+      const allIopaSlots = [...iopaFiles, ...new Array(extraIopaCount).fill(null)];
+      const baseIopaCount = iopaFiles.length;
+      const missingIopa = allIopaSlots.slice(0, baseIopaCount).filter(f => f === null).length;
+      if (missingIopa > 0) {
+        Alert.alert('Missing IOPA', `Please upload all ${baseIopaCount} IOPA Radiographs before submitting.`);
+        return;
+      }
+    }
+    // iter-Jun-2026 (v13, Chunk F, Ask 2): OPG required for any case with
+    // Zygoma/Pterygoid implants (whole-arch imaging) as well as full-arch
+    // Conventional cases (existing behaviour).
+    if (needsOpg && !opgFile) {
+      Alert.alert(
+        'Missing OPG',
+        zygPtrImplantPositions.length > 0
+          ? 'Please upload the OPG for Zygoma / Pterygoid implants before submitting.'
+          : 'Please upload the OPG before submitting.',
+      );
       return;
     }
 
@@ -707,9 +752,21 @@ export default function Phase2SubmissionScreen() {
     const missRadiographs: string[] = [];
     const baseIopaCount = iopaFiles.length;
     const missingIopa = iopaFiles.slice(0, baseIopaCount).filter(f => f === null).length;
-    if (baseIopaCount === 0) missRadiographs.push('At least one IOPA Radiograph');
-    if (missingIopa > 0) missRadiographs.push(`${missingIopa} IOPA upload${missingIopa > 1 ? 's' : ''} pending`);
-    if (isFullArch && !opgFile) missRadiographs.push('OPG Radiograph (full-arch case)');
+    // iter-Jun-2026 (v13, Chunk F, Ask 2): IOPA missing only counts against
+    // cases that HAVE Conventional implants. Zygoma/Pterygoid-only cases skip
+    // this rung entirely. OPG becomes mandatory whenever any Zygoma/Pterygoid
+    // implant is present OR the case is a Conventional full-arch.
+    if (needsIopa) {
+      if (baseIopaCount === 0) missRadiographs.push('At least one IOPA Radiograph (Conventional implants)');
+      if (missingIopa > 0) missRadiographs.push(`${missingIopa} IOPA upload${missingIopa > 1 ? 's' : ''} pending`);
+    }
+    if (needsOpg && !opgFile) {
+      missRadiographs.push(
+        zygPtrImplantPositions.length > 0
+          ? 'Post Surgical Radiograph - OPG (Zygoma/Pterygoid implants)'
+          : 'OPG Radiograph (full-arch case)',
+      );
+    }
 
     const missPostOp: string[] = [];
     ['post_op_radiograph', 'post_op_instructions', 'medications_prescribed'].forEach(k => {
@@ -726,7 +783,8 @@ export default function Phase2SubmissionScreen() {
     // Notes pill is informational — never "missing" (notes are optional).
     return [missPreop, missSurgery, missRadiographs, missPostOp, []];
   }, [isPreopUnlocked, flapDesign, drillingType, guidedSurgeryType, staticGuideType, sleeveType, dynamicNavSystem, torqueValues, prostheticComponent, prostheticComponents, usePerImplantProsthetic, implantPositions,
-      prosthesisType, prosthesisTypeOther, iopaFiles, isFullArch, opgFile, postOpChecklist]);
+      prosthesisType, prosthesisTypeOther, iopaFiles, isFullArch, opgFile, postOpChecklist,
+      needsOpg, needsIopa, zygPtrImplantPositions]);
   const stepDone = stepMissing.map(arr => arr.length === 0);
 
   return (
@@ -1640,18 +1698,30 @@ export default function Phase2SubmissionScreen() {
           </View>
 
           {/* ── Post Surgical Radiograph(s) ── */}
+          {/* iter-Jun-2026 (v13, Chunk F, Ask 2): section title reflects
+              which modalities are required. Pure Zygoma/Pterygoid cases
+              show only "Post Surgical Radiographs - OPG"; mixed cases
+              show OPG (for Zygoma/Pterygoid implants) + IOPA (only for
+              Conventional implants, labelled by FDI tooth number). */}
           <View style={s.section} onLayout={onStepLayout(2)}>
             <View style={s.sectionHeader}>
               <Ionicons name="images-outline" size={20} color="#1565C0" />
               <Text style={s.sectionTitle}>
-                {isSingleImplant ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs'}
+                {needsOpg && !needsIopa
+                  ? 'Post Surgical Radiographs - OPG'
+                  : !needsOpg && needsIopa
+                    ? (isSingleImplant ? 'Post Surgical Radiograph - IOPA' : 'Post Surgical Radiographs - IOPA')
+                    : (isSingleImplant ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs')}
               </Text>
             </View>
 
-            {/* IOPA upload slots */}
-            <View style={s.uploadSection}>
-              <Text style={s.uploadTitle}>Upload IOPA Radiograph</Text>
-              {Array.from({ length: totalIopaSlots }).map((_, idx) => {
+            {/* IOPA upload slots — Conventional implants only */}
+            {needsIopa && (
+              <View style={s.uploadSection}>
+                <Text style={s.uploadTitle}>
+                  {needsOpg ? 'Post Surgical Radiograph - IOPA (Conventional Implants)' : 'Upload IOPA Radiograph'}
+                </Text>
+                {Array.from({ length: totalIopaSlots }).map((_, idx) => {
                 const baseCount = iopaFiles.length;
                 const isExtra = idx >= baseCount;
                 const file = isExtra ? null : iopaFiles[idx];
@@ -1719,12 +1789,17 @@ export default function Phase2SubmissionScreen() {
                   <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add IOPA Radiograph</Text>
                 </TouchableOpacity>
               )}
-            </View>
+              </View>
+            )}
 
-            {/* OPG upload for Full Arch cases */}
-            {isFullArch && (
+            {/* OPG upload — full-arch OR any Zygoma/Pterygoid case (Ask 2). */}
+            {needsOpg && (
               <View style={[s.uploadSection, { marginTop: 12 }]}>
-                <Text style={s.uploadTitle}>Upload OPG</Text>
+                <Text style={s.uploadTitle}>
+                  {needsIopa
+                    ? 'Post Surgical Radiographs - OPG (Zygoma / Pterygoid Implants)'
+                    : 'Upload OPG'}
+                </Text>
                 <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
                   {opgFile ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
