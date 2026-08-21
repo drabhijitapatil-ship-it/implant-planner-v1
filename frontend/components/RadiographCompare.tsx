@@ -32,6 +32,11 @@ type Props = {
   // iter-389: Phase 5 mode — adds a middle Phase-4 pane per row and relabels
   // the current pane; AI notes compare against the Phase-4 baseline.
   followupMode?: { phase4ByTooth: Record<string, string>; phase4Opg: string | null; currentLabel: string };
+  // iter-Jun-2026 (v13, Chunk I, Ask 1): optional per-position filter — used
+  // in Phase 4 Step 2 to hide Zygoma / Pterygoid implants from the compare
+  // view (they don't have per-tooth IOPA history). Mixed cases still see the
+  // Conventional implants compared.
+  positionFilter?: (pos: string) => boolean;
 };
 
 /**
@@ -46,7 +51,7 @@ type Props = {
  *
  * Full-arch cases compare OPGs instead of per-tooth IOPAs.
  */
-export default function RadiographCompare({ procedure, iopaUploads, opgUpload, followupMode }: Props) {
+export default function RadiographCompare({ procedure, iopaUploads, opgUpload, followupMode, positionFilter }: Props) {
   const [expanded, setExpanded] = useState(true);
   const [viewer, setViewer] = useState<{ baseline: string | null; mid?: string | null; current: string | null; toothKey: string; toothLabel: string } | null>(null);
 
@@ -112,15 +117,20 @@ export default function RadiographCompare({ procedure, iopaUploads, opgUpload, f
 
   const teeth: string[] = useMemo(() => {
     if (isFullArch) return [];
+    let raw: string[];
     if (isExisting) {
-      return (procedure?.existing_implants || [])
+      raw = (procedure?.existing_implants || [])
         .map((r: any) => String(r.tooth || ''))
         .filter(Boolean);
+    } else {
+      raw = (procedure?.implant_plans || [])
+        .map((p: any) => String(p.position || ''))
+        .filter(Boolean);
     }
-    return (procedure?.implant_plans || [])
-      .map((p: any) => String(p.position || ''))
-      .filter(Boolean);
-  }, [procedure, isExisting, isFullArch]);
+    // iter-Jun-2026 (v13, Chunk I, Ask 1): apply the optional per-position
+    // filter so mixed cases compare only Conventional implants.
+    return positionFilter ? raw.filter(positionFilter) : raw;
+  }, [procedure, isExisting, isFullArch, positionFilter]);
 
   const baselineLabel = isExisting ? 'Baseline — Phase 1 (intake)' : 'Baseline — Phase 2 (post-surgical)';
   const currentLabel = followupMode?.currentLabel || 'Current — Phase 4 (post-delivery)';

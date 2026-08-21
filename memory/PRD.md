@@ -7501,3 +7501,13 @@ CHANGES:
    • Ask 3: `sectionHeader` alignItems="flex-start" + `Text style={{flex:1, flexShrink:1, flexWrap:'wrap'}}` on the probing title; info-btn shifted to `marginTop: 2`.
 TESTED (iter-425 + 425b hotfix): Frontend Playwright 12/12 PASS across 6 procedure-type scenarios on mobile 390x844. Reports /app/test_reports/iteration_425.json + iteration_425b.json.
 Deployment: User needs to redeploy (Publish) so the split imaging + baseline gate reach production.
+
+## Iteration 426 (Jun 2026) — Chunk I: Phase 4 Step 2 baseline-compare gate widened + IOPA row UI unified
+User asks:
+1. Baseline compare should be available whenever the case has Conventional implants (including mixed Zygoma+Conv / Pterygoid+Conv / Zyg+Ptr+Conv), not just pure Conventional cases. Compare view must exclude Zygoma/Pterygoid positions.
+2. Phase 4 Step 2 IOPA row UI should mirror the Phase 2 style: "Implant {FDI}" label on left, plain "Upload IOPA" button on the right (no per-implant suffix).
+CHANGES:
+- /app/frontend/components/RadiographCompare.tsx — new optional prop `positionFilter?: (pos: string) => boolean`; applied inside the `teeth` useMemo so Zygoma/Pterygoid positions get filtered out in mixed cases.
+- /app/frontend/app/procedures/submit-phase4-step2/[id].tsx — `supportsBaselineCompare` widened to `iopaImplantPositions.length > 0`; passes `positionFilter={p => !isZygPtrPosition(p)}` to RadiographCompare. IOPA rows now render with `iopaRow` / `iopaLabelWrap` / `iopaActionWrap` styles matching Phase 2's row (label on left, blue Upload / green View buttons on right, red close for removal). No more `toothBadge` circle. Empty-state button text simplified to "Upload IOPA".
+TESTED (iter-426): Frontend Playwright 8/8 PASS across A–I scenarios. Report /app/test_reports/iteration_426.json.
+Deployment: User needs to redeploy (Publish) so the widened gate + new row UI reach production.
