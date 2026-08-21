@@ -820,18 +820,12 @@ export default function Phase2SubmissionScreen() {
             </View>
           </View>
 
-          {/* iter-Jun-2026 (v10, Chunk 3): Tabbed per-implant + Advanced
-              Clinical view (Zygoma / Pterygoid / Conventional). Renders
-              only for Zygoma/Pterygoid mixed cases; returns null otherwise. */}
-          <PhaseStep2TabbedView
-            phase={2}
-            procedureId={String(id)}
-            token={authToken}
-            implantPlans={implantPlans}
-            initialPerImplant={initialPerImplant}
-            initialAdvancedClinical={initialAdvanced}
-            onSaved={loadImplantPlan}
-          />
+          {/* iter-Jun-2026 (v13, Chunk A, Ask 2): PhaseStep2TabbedView was
+              removed from Phase 2 — the same per-implant data (torque,
+              insertion date, timing, complications, notes) is already
+              captured in the Surgical Procedure section below. Kept in
+              Phase 3/4/5 screens for continuity. Advanced Clinical (Zygoma)
+              will be re-added in Chunk B with the new approval workflow. */}
 
           {/* ── Pre-Surgical Checklist (iter-189) ── */}
           <View style={s.section} testID="phase2-preop-checklist" onLayout={onStepLayout(0)}>
@@ -1514,16 +1508,24 @@ export default function Phase2SubmissionScreen() {
                   const anteriorTeeth = new Set([11,12,13,21,22,23,31,32,33,41,42,43]);
                   const upperPosterior = new Set([14,15,16,17,24,25,26,27]);
                   const lowerPosterior = new Set([34,35,36,37,44,45,46,47]);
-                  const options: string[] = ['Facial'];
-                  if (upperPosterior.has(toothNum) || lowerPosterior.has(toothNum)) options.push('Occlusal');
-                  if (anteriorTeeth.has(toothNum)) options.push('Incisal/Cingulum');
-                  if (lowerPosterior.has(toothNum)) options.push('Lingual');
-                  if (upperPosterior.has(toothNum)) options.push('Palatal');
+                  // iter-Jun-2026 (v13, Chunk A): Zygoma/Pterygoid Access
+                  // Channel options — Buccal / Occlusal / Palatal.
+                  const isZygPter = /^(ZR|ZL|PR|PL)/i.test(String(pos || ''));
+                  let options: string[];
+                  if (isZygPter) {
+                    options = ['Buccal', 'Occlusal', 'Palatal'];
+                  } else {
+                    options = ['Facial'];
+                    if (upperPosterior.has(toothNum) || lowerPosterior.has(toothNum)) options.push('Occlusal');
+                    if (anteriorTeeth.has(toothNum)) options.push('Incisal/Cingulum');
+                    if (lowerPosterior.has(toothNum)) options.push('Lingual');
+                    if (upperPosterior.has(toothNum)) options.push('Palatal');
+                  }
                   const selected = accessChannelOpenings[idx] || '';
                   return (
                     <View key={idx} style={{ marginBottom: 12 }}>
                       <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C', marginBottom: 6 }}>
-                        Implant {idx + 1}{pos ? ` (#${pos})` : ''} <Text style={{ color: '#DC3545' }}>*</Text>
+                        {implantDisplayLabel(pos)} <Text style={{ color: '#DC3545' }}>*</Text>
                       </Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                         {options.map(opt => (
