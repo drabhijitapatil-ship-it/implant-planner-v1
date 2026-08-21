@@ -12,7 +12,7 @@ import { getImplantSite } from '../../../utils/implantPlan';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
-import PhaseTabbedAutoFetch from '../../../components/PhaseTabbedAutoFetch';
+// iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 4 Step 1.
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -340,8 +340,7 @@ export default function Phase4Step1Screen() {
       />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
-          {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid tabbed view (Phase 4 Step 1) */}
-          <PhaseTabbedAutoFetch phase={4} procedureId={String(id)} />
+          {/* iter-Jun-2026 (v13, Chunk D, Ask 1): 3-tab sub-view removed. */}
           {/* ── Final Prosthesis Selection ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>

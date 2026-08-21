@@ -11,7 +11,7 @@ import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
-import PhaseTabbedAutoFetch from '../../../components/PhaseTabbedAutoFetch';
+// iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 3.
 import { Ionicons } from '@expo/vector-icons';
 import { CHECKLIST_DATA } from '../../../constants/checklist';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
@@ -40,6 +40,11 @@ export default function Stage2SurgicalSubmissionScreen() {
   //   2. Filter which implants show up as needing second-stage uncovering.
   const [phase2Components, setPhase2Components] = useState<string[]>([]);
   const [phase2ProsthesisType, setPhase2ProsthesisType] = useState<string>('');
+  // iter-Jun-2026 (v13, Chunk D, Ask 4): Phase-1 Prosthetic Plan surfaced
+  // inside the Phase 3 "Immediate Prosthesis Done" banner so surgeons see
+  // the plan (not just the Fixed/Removable classifier) at Phase 3.
+  const [prostheticPlan, setProstheticPlan] = useState<string>('');
+  const [prostheticPlanOther, setProstheticPlanOther] = useState<string>('');
   const [phase2ProsthesisOther, setPhase2ProsthesisOther] = useState<string>('');
   const [phase2HealingCuffs, setPhase2HealingCuffs] = useState<string[]>([]);
   const [createdById, setCreatedById] = useState<string | null>(null);
@@ -148,6 +153,10 @@ export default function Stage2SurgicalSubmissionScreen() {
       setPhase2Components(Array.isArray(p2.prosthetic_components) ? p2.prosthetic_components : []);
       setPhase2ProsthesisType(p2.prosthesis_type || '');
       setPhase2ProsthesisOther(p2.prosthesis_type_other || '');
+      // iter-Jun-2026 (v13, Chunk D, Ask 4): Prosthetic Plan (from Phase 1,
+      // possibly overridden in Phase 2 via iter-419) surfaced in Phase 3.
+      setProstheticPlan(d.prosthetic_plan || '');
+      setProstheticPlanOther(d.prosthetic_plan_other || '');
       setCreatedById(d.created_by_id || null);
       setCreatedByRole(d.created_by_role || null);
       if (Array.isArray(p2.healing_abutment_cuff_height)) setPhase2HealingCuffs(p2.healing_abutment_cuff_height);
@@ -272,9 +281,13 @@ export default function Stage2SurgicalSubmissionScreen() {
     if (missingIopaCount > 0) missing.push(`IOPA Radiographs (${missingIopaCount} pending)`);
     // iter-357: per-implant Phase 3 healing abutment configuration (Q3-a).
     // Every implant must have a completed selection.
+    // iter-Jun-2026 (v13, Chunk D, Ask 5): Skip validation for implants that
+    // received Immediate Loading in Phase 2 — those implants have no healing
+    // abutment concept in Phase 3.
     const haMissingIdxs: number[] = [];
     const haOverWordsIdxs: number[] = [];
     haConfig.forEach((cfg, i) => {
+      if (cfg.phase2_component === 'Immediate Loading Done') return;
       if (!cfg.mode) haMissingIdxs.push(i);
       else if (cfg.mode === 'standard' && !cfg.cuff_height_mm.trim()) haMissingIdxs.push(i);
       else if (cfg.mode === 'customised') {
@@ -385,8 +398,10 @@ export default function Stage2SurgicalSubmissionScreen() {
       />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
-          {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid tabbed view */}
-          <PhaseTabbedAutoFetch phase={3} procedureId={String(id)} />
+          {/* iter-Jun-2026 (v13, Chunk D, Ask 1): Removed the Zygoma /
+              Pterygoid / Conventional 3-tab per-implant sub-view from Phase
+              3 — the equivalent per-implant data is captured via the
+              Healing Abutment Configuration and Checklist sections below. */}
           <View style={s.infoBox}>
             <Ionicons name="information-circle" size={22} color="#1565C0" />
             <Text style={s.infoText}>
@@ -399,8 +414,16 @@ export default function Stage2SurgicalSubmissionScreen() {
             <View style={[s.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32', backgroundColor: '#F1F8E9' }]} testID="phase3-immediate-prosthesis-banner">
               <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20' }}>Immediate Prosthesis Done</Text>
               <Text style={{ marginTop: 6, fontSize: 13, color: '#33691E' }}>
+                <Text style={{ fontWeight: '700' }}>Prosthesis Type:</Text>{' '}
                 {phase2ProsthesisType === 'Other' ? (phase2ProsthesisOther || 'Other') : (phase2ProsthesisType || '—')}
               </Text>
+              {/* iter-Jun-2026 (v13, Chunk D, Ask 4): also surface the Prosthetic Plan */}
+              {prostheticPlan ? (
+                <Text style={{ marginTop: 4, fontSize: 13, color: '#33691E' }} testID="phase3-banner-prosthetic-plan">
+                  <Text style={{ fontWeight: '700' }}>Prosthetic Plan:</Text>{' '}
+                  {prostheticPlan === 'Other' ? (prostheticPlanOther || 'Other') : prostheticPlan}
+                </Text>
+              ) : null}
               {isOwner && !pendingEditRequest && (
                 <TouchableOpacity style={s.requestEditBtn} onPress={openEditRequestModal} data-testid="phase3-request-edit-btn">
                   <Ionicons name="alert-circle-outline" size={16} color="#E65100" />
@@ -479,7 +502,10 @@ export default function Stage2SurgicalSubmissionScreen() {
                    Healing Abutment was already placed).
                 b. Customised healing abutment (free-text, ≤ 100 words, hard block).
               Every implant must have a selection before submit. */}
-          {haConfig.length > 0 && (
+          {/* iter-Jun-2026 (v13, Chunk D, Ask 5): only show the section if
+              at least one implant NEEDS healing abutment (i.e. not all
+              implants were Immediate-Loaded in Phase 2). */}
+          {haConfig.length > 0 && haConfig.some(c => c.phase2_component !== 'Immediate Loading Done') && (
             <View style={s.section} data-testid="phase3-per-implant-ha-section">
               <View style={s.sectionHeader}>
                 <Ionicons name="options-outline" size={20} color="#00695C" />
@@ -491,6 +517,10 @@ export default function Stage2SurgicalSubmissionScreen() {
                 Per implant — pick Standard cuff height OR Customised healing abutment.
               </Text>
               {haConfig.map((cfg, idx) => {
+                // iter-Jun-2026 (v13, Chunk D, Ask 5): skip cards for implants
+                // that were Immediate-Loaded in Phase 2 — Healing Abutment is
+                // not applicable to those implants.
+                if (cfg.phase2_component === 'Immediate Loading Done') return null;
                 const wc = countWords(cfg.customised_details);
                 const overWords = wc > WORDS_MAX;
                 const pos = implantPositions[idx];
