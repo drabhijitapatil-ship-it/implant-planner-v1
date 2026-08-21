@@ -90,3 +90,9 @@ memory/test_credentials.md
 # Backup files
 *.bak
 frontend/eas.json.bak
+.env
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
