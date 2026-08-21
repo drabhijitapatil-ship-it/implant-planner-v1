@@ -72,12 +72,19 @@ export default function Phase4Step1Screen() {
   // remodelling, lab feedback). State seeded on mount from
   // phase4_step1_data.multi_unit_abutment_details when present (the live
   // override) and falls back to phase2_data on Copy.
-  type MuaRow = { tooth: string; angulation: string; cuff_height: string };
+  // iter-Jun-2026 (v13, Chunk G, Ask 1): each row now carries a
+  // `confirmed` flag — Student must tick each row before Lab Slip PDF
+  // export becomes available. Rows are always editable (cuff height +
+  // angulation) so the prosthodontist can correct values first.
+  type MuaRow = { tooth: string; angulation: string; cuff_height: string; confirmed?: boolean };
   const [muaRows, setMuaRows] = useState<MuaRow[]>([]);
-  // Tracks whether the user has interacted with MUA in Phase 4. Without this
-  // flag we cannot tell "no MUA" from "haven't touched it yet" when deciding
-  // whether to fall back to Phase 2 in the Lab Slip.
   const [muaTouched, setMuaTouched] = useState(false);
+
+  // iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-Oral Scan sub-fields —
+  // multi-select. Exported to Lab Slip PDF as bulleted lists.
+  const [scanBodyTypes, setScanBodyTypes] = useState<string[]>([]);
+  const [scanTypes, setScanTypes] = useState<string[]>([]);
+  const [scanLevels, setScanLevels] = useState<string[]>([]);
 
   // Per-implant prosthetic plan for multiple implants (non-bridge)
   const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
@@ -129,15 +136,38 @@ export default function Phase4Step1Screen() {
       // iter-210: hydrate MUA override from any saved phase4_step1_data.
       // This makes the form sticky across reloads and lets the user keep
       // editing instead of re-typing everything.
+      // iter-Jun-2026 (v13, Chunk G, Ask 1): Auto-seed MUA rows from Phase 2
+      // when Phase 4 has not been saved yet. Each row also carries a
+      // `confirmed` flag — Student must tick each row before Lab Slip PDF
+      // export becomes enabled. Cuff height / angulation stay editable.
       const savedMua: any[] | undefined = procRes.data?.phase4_step1_data?.multi_unit_abutment_details;
       if (Array.isArray(savedMua) && savedMua.length > 0) {
         setMuaRows(savedMua.map((r: any) => ({
           tooth: String(r?.tooth ?? ''),
           angulation: String(r?.angulation ?? ''),
           cuff_height: String(r?.cuff_height ?? ''),
+          confirmed: !!r?.confirmed,
         })));
         setMuaTouched(true);
+      } else {
+        const phase2Mua = procRes.data?.phase2_data?.multi_unit_abutment_placed;
+        const phase2Details: any[] = procRes.data?.phase2_data?.multi_unit_abutment_details || [];
+        if (phase2Mua === 'yes' && phase2Details.length > 0) {
+          setMuaRows(phase2Details.map((r: any) => ({
+            tooth: String(r?.tooth ?? ''),
+            angulation: String(r?.angulation ?? ''),
+            cuff_height: String(r?.cuff_height ?? ''),
+            confirmed: false,
+          })));
+          setMuaTouched(true);
+        }
       }
+
+      // iter-Jun-2026 (v13, Chunk G, Ask 3): hydrate Intra-Oral Scan sub-fields.
+      const p4 = procRes.data?.phase4_step1_data || {};
+      setScanBodyTypes(Array.isArray(p4.scan_body_types) ? p4.scan_body_types : []);
+      setScanTypes(Array.isArray(p4.scan_types) ? p4.scan_types : []);
+      setScanLevels(Array.isArray(p4.scan_levels) ? p4.scan_levels : []);
     } catch {}
   };
 
@@ -227,6 +257,11 @@ export default function Phase4Step1Screen() {
       impression_type: impressionType,
       conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
       impression_material: impressionType === 'conventional' ? impressionMaterial : null,
+      // iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields persisted only
+      // when intra-oral scan is picked.
+      scan_body_types: impressionType === 'intraoral_scans' ? scanBodyTypes : null,
+      scan_types: impressionType === 'intraoral_scans' ? scanTypes : null,
+      scan_levels: impressionType === 'intraoral_scans' ? scanLevels : null,
       // iter-194: shade
       shade_values: (isFullArch ? shadeValues.slice(0, 2) : shadeValues.slice(0, Math.max(1, implantPositions.length || 1))).map(v => (v || '').trim()),
       shade_notes: shadeNotes ? shadeNotes.trim() : null,
@@ -257,6 +292,9 @@ export default function Phase4Step1Screen() {
           tooth: (r.tooth ?? '').trim(),
           angulation: (r.angulation ?? '').trim(),
           cuff_height: (r.cuff_height ?? '').trim(),
+          // iter-Jun-2026 (v13, Chunk G, Ask 1): confirmed flag persisted so
+          // the Lab Slip button can guard on it and re-hydration remembers.
+          confirmed: !!r.confirmed,
         }))
         .filter(r => r.tooth || r.angulation || r.cuff_height);
       payload.multi_unit_abutment_details = cleaned.length > 0 ? cleaned : null;
@@ -292,6 +330,18 @@ export default function Phase4Step1Screen() {
   const handleGenerateLabSlip = async () => {
     const err = validateForm();
     if (err) { Alert.alert('Missing', err); return; }
+    // iter-Jun-2026 (v13, Chunk G, Ask 1): block Lab Slip export until every
+    // MUA row has been confirmed (cuff height / angulation reviewed).
+    if (muaRows.length > 0) {
+      const unconfirmed = muaRows.filter(r => !r.confirmed).length;
+      if (unconfirmed > 0) {
+        Alert.alert(
+          'Confirm MUA details',
+          `Please confirm all Multi-Unit Abutment rows before generating the Lab Slip. ${unconfirmed} row${unconfirmed > 1 ? 's are' : ' is'} still awaiting confirmation.`,
+        );
+        return;
+      }
+    }
     setLabSlipLoading(true);
     try {
       const payload = buildPayload();
@@ -571,6 +621,53 @@ export default function Phase4Step1Screen() {
                   )}
                 </View>
               )}
+
+              {/* iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-Oral Scan sub-fields.
+                  When "Intra-Oral Scans Made" is picked, capture the scan
+                  body type, scan technique and scan level as multi-select
+                  chip rows. All 3 lists are exported to the Lab Slip PDF
+                  as bulleted lists per implant order. */}
+              {impressionType === 'intraoral_scans' && (
+                <View style={{ marginTop: 4, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#4CAF50' }} testID="intraoral-scan-options">
+                  {([
+                    { field: 'scan_body_types', label: 'Type of Scan Body', state: scanBodyTypes, setState: setScanBodyTypes, options: ['PEEK', 'Metal', 'Hybrid'] },
+                    { field: 'scan_types', label: 'Scan Type', state: scanTypes, setState: setScanTypes, options: ['Vertical Scan Body', 'Horizontal Scan Bodies (Flags)', 'Photogrammetry'] },
+                    { field: 'scan_levels', label: 'Scan Level', state: scanLevels, setState: setScanLevels, options: ['Abutment/Multiunit Level', 'Implant Level'] },
+                  ] as const).map(group => (
+                    <View key={group.field} style={{ marginTop: 12 }} testID={`intraoral-${group.field}`}>
+                      <Text style={[s.label, { marginTop: 0 }]}>
+                        {group.label} <Text style={{ fontSize: 11, color: '#78909C', fontWeight: '500' }}>(choose one or more)</Text>
+                      </Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                        {group.options.map(opt => {
+                          const active = group.state.includes(opt);
+                          return (
+                            <TouchableOpacity
+                              key={opt}
+                              onPress={() => {
+                                group.setState(prev => active ? prev.filter(x => x !== opt) : [...prev, opt]);
+                              }}
+                              style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 6,
+                                paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+                                borderWidth: 1.5,
+                                borderColor: active ? '#2E7D32' : '#CFD8DC',
+                                backgroundColor: active ? '#E8F5E9' : '#FFF',
+                              }}
+                              testID={`intraoral-${group.field}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
+                            >
+                              <Ionicons name={active ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={active ? '#2E7D32' : '#78909C'} />
+                              <Text style={{ fontSize: 13, color: active ? '#1B5E20' : '#37474F', fontWeight: active ? '700' : '500' }}>
+                                {opt}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
 
@@ -691,7 +788,7 @@ export default function Phase4Step1Screen() {
                   </View>
                 ) : (
                   muaRows.map((row, idx) => (
-                    <View key={idx} style={s.muaRow} testID={`mua-row-${idx}`}>
+                    <View key={idx} style={[s.muaRow, row.confirmed && { borderColor: '#2E7D32', borderWidth: 2 }]} testID={`mua-row-${idx}`}>
                       <View style={s.muaRowHeader}>
                         <Text style={s.muaRowTitle}>{row.tooth ? `Implant ${row.tooth}` : `Implant ${idx + 1}`}</Text>
                         <TouchableOpacity
@@ -739,6 +836,30 @@ export default function Phase4Step1Screen() {
                           />
                         </View>
                       </View>
+                      {/* iter-Jun-2026 (v13, Chunk G, Ask 1): per-row Confirm
+                          checkbox. Lab Slip PDF export is blocked until every
+                          MUA row is ticked, ensuring the Cuff Height /
+                          Angulation values have been reviewed by the
+                          prosthodontist. */}
+                      <TouchableOpacity
+                        style={s.muaConfirmRow}
+                        onPress={() => {
+                          setMuaTouched(true);
+                          setMuaRows(prev => prev.map((r, i) => i === idx ? { ...r, confirmed: !r.confirmed } : r));
+                        }}
+                        testID={`mua-confirm-${idx}`}
+                      >
+                        <Ionicons
+                          name={row.confirmed ? 'checkbox' : 'square-outline'}
+                          size={20}
+                          color={row.confirmed ? '#2E7D32' : '#78909C'}
+                        />
+                        <Text style={[s.muaConfirmText, row.confirmed && { color: '#2E7D32', fontWeight: '700' }]}>
+                          {row.confirmed
+                            ? 'Confirmed — values reviewed for lab'
+                            : 'Confirm cuff height & angulation for this implant'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   ))
                 )}
@@ -985,5 +1106,21 @@ const s = StyleSheet.create({
     fontWeight: '700',
     color: '#0277BD',
     letterSpacing: 0.2,
+  },
+  // iter-Jun-2026 (v13, Chunk G, Ask 1): per-row Confirm checkbox.
+  muaConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#ECEFF1',
+  },
+  muaConfirmText: {
+    fontSize: 12,
+    color: '#546E7A',
+    fontWeight: '600',
+    flex: 1,
   },
 });

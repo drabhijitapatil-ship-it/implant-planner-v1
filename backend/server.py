@@ -756,6 +756,13 @@ class Stage2ProstheticSubmit(BaseModel):
     # iter-192: impression material — required when impression_type == 'conventional'.
     # One of: polyether / heavy_light_body / putty_light_body.
     impression_material: Optional[str] = Field(None, max_length=30)
+    # iter-Jun-2026 (v13, Chunk G, Ask 3): when impression_type ==
+    # 'intraoral_scans' the operator can further specify the scan modality.
+    # Each field is a multi-select list; validated only at UI level. Values
+    # are echoed to the Lab Slip PDF as a bulleted list.
+    scan_body_types: Optional[List[str]] = None      # PEEK / Metal / Hybrid
+    scan_types: Optional[List[str]] = None           # Vertical Scan Body / Horizontal Scan Bodies (Flags) / Photogrammetry
+    scan_levels: Optional[List[str]] = None          # Abutment/Multiunit Level / Implant Level
     # iter-194: shade selection (mandatory; per-implant or anterior+posterior).
     shade_values: Optional[List[str]] = None
     shade_notes: Optional[str] = Field(None, max_length=2000)
@@ -14573,6 +14580,23 @@ async def generate_case_report(
                     "putty_light_body": "Putty and Light body",
                 }.get(mat, mat)
                 add_field("Impression Material", mat_label)
+            # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — rendered
+            # as bulleted lists per user's preference.
+            if p4s1["impression_type"] == "intraoral_scans":
+                def _bullet_list(label: str, values):
+                    if not values:
+                        return
+                    pdf.set_font("Arial", "B", 10)
+                    pdf.cell(0, 6, safe(f"{label}:"), ln=True)
+                    pdf.set_font("Arial", "", 10)
+                    for v in values:
+                        v_str = str(v or "").strip()
+                        if v_str:
+                            pdf.cell(6, 5, "", ln=False)  # indent
+                            pdf.cell(0, 5, safe(f"- {v_str}"), ln=True)
+                _bullet_list("Type of Scan Body", p4s1.get("scan_body_types"))
+                _bullet_list("Scan Type", p4s1.get("scan_types"))
+                _bullet_list("Scan Level", p4s1.get("scan_levels"))
         if p4s1.get("payment_complete") is not None:
             add_field("Payment Complete", "Yes" if p4s1["payment_complete"] else "No")
         if p4s1.get("components_available") is not None:
@@ -16235,13 +16259,28 @@ async def submit_stage2_prosthetic(
     is_creator = procedure.get("created_by_id") == current_user["_id"]
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission")
-    # iter-194: save_only=true (Generate-Lab-Slip on the form) tolerates the
-    # case being mid-flow — it's a soft draft. The full submit (save_only=false)
-    # still requires the strict status precondition below.
-    if not save_only and procedure["status"] != "stage2_surgical_approved":
-        raise HTTPException(status_code=400, detail="Phase 3 must be approved before starting Phase 4")
-    if save_only and procedure["status"] not in ("stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved"):
-        raise HTTPException(status_code=400, detail="Phase 3 must be approved before drafting Phase 4 data")
+    # iter-Jun-2026 (v13, Chunk G, Ask 2): The strict "must be exactly
+    # stage2_surgical_approved" check was rejecting legitimate cases whose
+    # status had already advanced (e.g. pending_stage2_prosthetic after a
+    # prior save, or stage2_prosthetic_step1_approved on re-submit). Zygoma /
+    # Pterygoid / Conventional cases were most affected because their
+    # Advanced-Clinical workflow can leave the case in intermediate states.
+    # We now accept the same status set for both `save_only=True` and the
+    # full submit path.
+    allowed_phase4_statuses = (
+        "stage2_surgical_approved",
+        "pending_stage2_prosthetic",
+        "stage2_prosthetic_step1_approved",
+        "pending_final_delivery",
+    )
+    if procedure["status"] not in allowed_phase4_statuses:
+        # Fallback: allow cases whose current_phase is already >= 4 even if
+        # the discrete status enum drifted (e.g. old data with `completed`
+        # relaunched into edit mode). Prevents legitimate resumptions from
+        # being blocked while still gating pre-Phase-3 attempts.
+        cp = int(procedure.get("current_phase") or 0)
+        if cp < 4:
+            raise HTTPException(status_code=400, detail="Phase 3 must be approved before starting Phase 4")
 
     # iter-191: when conventional impression is selected, the tray-type sub-choice
     # is mandatory and must be one of {open_tray, closed_tray}.
@@ -16286,6 +16325,21 @@ async def submit_stage2_prosthetic(
         # iter-192: same null-on-switch contract for impression_material.
         "impression_material": (
             data.impression_material if data.impression_type == "conventional" else None
+        ),
+        # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — persisted
+        # only when impression_type == 'intraoral_scans'. Nulled out on
+        # switch back to conventional so we don't leak stale data.
+        "scan_body_types": (
+            [s.strip() for s in (data.scan_body_types or [])]
+            if data.impression_type == "intraoral_scans" else None
+        ),
+        "scan_types": (
+            [s.strip() for s in (data.scan_types or [])]
+            if data.impression_type == "intraoral_scans" else None
+        ),
+        "scan_levels": (
+            [s.strip() for s in (data.scan_levels or [])]
+            if data.impression_type == "intraoral_scans" else None
         ),
         # iter-194: shade is always persisted (mandatory), with the layout flag
         # so renderers can label slots correctly (Anterior/Posterior vs per implant).
