@@ -225,7 +225,7 @@ export default function Stage2SurgicalSubmissionScreen() {
 
   // ── IOPA Upload helpers ──
   const getIopaLabel = (idx: number): string => {
-    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
+    return implantPositions[idx] ? `Implant ${implantPositions[idx]}` : 'Implant —';
   };
 
   const pickIopaFile = async (idx: number) => {
@@ -316,14 +316,14 @@ export default function Stage2SurgicalSubmissionScreen() {
     if (haMissingIdxs.length > 0) {
       Alert.alert(
         'Healing Abutment Configuration Incomplete',
-        `Please complete each implant: pick "Standard cuff height" (with mm value) OR "Customised healing abutment" (with details).\n\nMissing: ${haMissingIdxs.map(i => implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—').join(', ')}`,
+        `Please complete each implant: pick "Standard cuff height" (with mm value) OR "Customised healing abutment" (with details).\n\nMissing: ${haMissingIdxs.map(i => implantPositions[i] ? `Implant ${implantPositions[i]}` : 'Implant —').join(', ')}`,
       );
       return;
     }
     if (haOverWordsIdxs.length > 0) {
       Alert.alert(
         'Customised description too long',
-        `Customised healing abutment description exceeds ${WORDS_MAX} words on ${haOverWordsIdxs.map(i => implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—').join(', ')}. Please shorten before submitting.`,
+        `Customised healing abutment description exceeds ${WORDS_MAX} words on ${haOverWordsIdxs.map(i => implantPositions[i] ? `Implant ${implantPositions[i]}` : 'Implant —').join(', ')}. Please shorten before submitting.`,
       );
       return;
     }
@@ -414,7 +414,7 @@ export default function Stage2SurgicalSubmissionScreen() {
               <Text style={{ fontSize: 15, fontWeight: '800', color: '#0D47A1' }}>Healing Abutment Placed</Text>
               {phase2HealingCuffs.length > 0 ? phase2HealingCuffs.map((h, i) => (
                 <Text key={i} style={{ marginTop: 4, fontSize: 13, color: '#1A237E' }}>
-                  {implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—'}: {h || '—'} mm
+                  {implantPositions[i] ? `Implant ${implantPositions[i]}` : 'Implant —'}: {h || '—'} mm
                 </Text>
               )) : (
                 <Text style={{ marginTop: 4, fontSize: 13, color: '#1A237E' }}>No cuff heights recorded</Text>
@@ -446,7 +446,7 @@ export default function Stage2SurgicalSubmissionScreen() {
               </Text>
               {phase2Components.map((pc, i) => (
                 <Text key={i} style={{ marginTop: 4, fontSize: 13, color: '#4A148C' }}>
-                  {implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—'}: <Text style={{ fontWeight: '700' }}>{pc || '—'}</Text>
+                  {implantPositions[i] ? `Implant ${implantPositions[i]}` : 'Implant —'}: <Text style={{ fontWeight: '700' }}>{pc || '—'}</Text>
                 </Text>
               ))}
             </View>
@@ -633,7 +633,7 @@ export default function Stage2SurgicalSubmissionScreen() {
                   <View style={{ paddingLeft: 0, paddingVertical: 8, backgroundColor: '#E3F2FD', borderRadius: 8, marginBottom: 4, padding: 12, borderWidth: 1, borderColor: '#90CAF9' }}>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 10 }}>Upload IOPA Radiograph</Text>
                     {iopaFiles.map((file, idx) => {
-                      const label = implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
+                      const label = implantPositions[idx] ? `Implant ${implantPositions[idx]}` : 'Implant —';
                       const baseUrl = api.defaults.baseURL || '';
                       return (
                         <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }} data-testid={`p3-iopa-slot-${idx}`}>
@@ -689,7 +689,7 @@ export default function Stage2SurgicalSubmissionScreen() {
                   <View style={{ backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12, marginBottom: 4, borderWidth: 1, borderColor: '#A5D6A7' }}>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 10 }}>ISQ Values</Text>
                     {isqValues.map((val, idx) => {
-                      const label = implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
+                      const label = implantPositions[idx] ? `Implant ${implantPositions[idx]}` : 'Implant —';
                       return (
                         <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }} data-testid={`isq-slot-${idx}`}>
                           <View style={{ flex: 1, backgroundColor: '#C8E6C9', padding: 8, borderRadius: 8 }}>

@@ -407,7 +407,7 @@ export default function Phase4Step2Screen() {
                           {iopaUploadingFor === pos ? <ActivityIndicator color="#0D47A1" /> : (
                             <>
                               <Ionicons name="cloud-upload-outline" size={16} color="#0D47A1" />
-                              <Text style={s.uploadBtnText}>Upload IOPA — Tooth {pos}</Text>
+                              <Text style={s.uploadBtnText}>Upload IOPA — Implant {pos}</Text>
                             </>
                           )}
                         </TouchableOpacity>

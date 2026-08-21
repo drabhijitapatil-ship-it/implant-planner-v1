@@ -1379,7 +1379,7 @@ export default function CaseImplantPlanning({ procedureId, isOwner, userRole, to
                   activeOpacity={0.8}
                 >
                   <Ionicons name="add-circle" size={14} color="#E65100" />
-                  <Text style={st.pendingChipText}>FDI {t}</Text>
+                  <Text style={st.pendingChipText}>Implant {t}</Text>
                 </TouchableOpacity>
               ))}
             </View>

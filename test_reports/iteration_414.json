@@ -1,0 +1,32 @@
+{
+  "summary": "iter-414 v11 MUA — T3 (state-sync fix for No toggle) FAILED. The muaHydratedRef guard is in place at /app/frontend/app/procedures/submit-phase2/[id].tsx L133 and L181-185, but tapping [data-testid=mua-placed-no] still does NOT hide [data-testid=mua-details-section]. Playwright force=True click on the TouchableOpacity does not fire the onPress. Computed CSS on the No button shows pointerEvents:'none' (browser console also emits 'props.pointerEvents is deprecated. Use style.pointerEvents'). Synthetic dispatchEvent(click) on the same element DID flip state to false (proving the handler works when the pointer-events barrier is bypassed). Conclusion: the RCA in the review request (load useEffect re-hydration) is incorrect — the true blocker is a pointer-events issue on the MUA Yes/No TouchableOpacity buttons. muaHydratedRef guard is a valid defensive improvement but is not sufficient. 4/9 sub-checks pass; 4 fail; 1 mixed. Legacy testID rename verified (-legacy suffix, 0 collisions). Yes toggle still opens details block.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MUA No toggle (submit-phase2/[id].tsx L1070-1076)", "issue": "TouchableOpacity has computed style pointerEvents:'none' — real mouse/touch clicks do not trigger onPress; setMuaPlaced(false)+setMuaDetails({}) never fire. Only synthetic dispatchEvent bypasses this. Same issue affects mua-placed-yes button when tapped for real interaction, though Yes appears to work due to initial state already being true. Console shows deprecation warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — likely an ancestor View or the TouchableOpacity itself is applying legacy pointerEvents prop.", "testID": "mua-placed-no", "priority": "CRITICAL"},
+      {"component": "MUA hydration on Yes-No-Yes cycle", "issue": "Because No tap never fires setMuaDetails({}), cuff/angulation values are NOT cleared when user cycles Yes→No→Yes. Observed cuff=5 and ang=30° remain after cycle.", "testID": "mua-cuff-ZR1", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "TouchableOpacity/View pointerEvents legacy prop", "issue": "Browser console warns 'props.pointerEvents is deprecated. Use style.pointerEvents'. Some ancestor is likely still using the deprecated pointerEvents prop, and RN Web is mistranslating it into inline style pointerEvents:'none' on descendant TouchableOpacity buttons — this breaks tap handling on the MUA No button in the web preview."}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "PRIMARY: Investigate pointer-events:'none' on [data-testid=mua-placed-no] in submit-phase2/[id].tsx. Grep for any pointerEvents='none' or pointerEvents='box-none' props on ancestor Views around L1060-1077 (Multiunit Abutments block) and convert them to style={{pointerEvents:'none'}} or remove. Alternatively wrap the Yes/No buttons in a View without pointerEvents prop.",
+    "SECONDARY: The muaHydratedRef guard added at L133/L181-185 is a good defensive fix but does not resolve T3. Keep it, but also fix the pointer-events bug so setMuaPlaced(false) can actually fire from a real tap.",
+    "OPTIONAL: Migrate all legacy `pointerEvents=` JSX props across the codebase to `style={{pointerEvents:'…'}}` to eliminate the deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "The fix in the review request (useRef hydration guard) is aimed at the WRONG root cause. The real bug is pointer-events, not re-hydration. Verified via dispatchEvent(click) which DOES flip state — proving the onPress logic itself is correct, and there is no re-hydration overriding it (muaHydratedRef makes hydration a no-op after first pass anyway).",
+    "Legacy testIDs at L1376/L1389 correctly renamed with -legacy suffix (mua-placed-yes-legacy / mua-placed-no-legacy). Confirmed 0 collisions on Test Patient Zygoma case."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested this iteration)", "frontend": "44% (4/9 sub-checks)"},
+  "seed_data_creation": "None. Reused Test Patient Zygoma case 6a8337dd64ad3269dc584a69 with pre-existing mua_placed=true persistence.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The auth localStorage key prefix is 'implanr_' (see /app/frontend/utils/api.ts L21). To bypass the axios token race: page.goto(/login), localStorage.clear(), localStorage.setItem('implanr_access_token', token), localStorage.setItem('implanr_refresh_token', refresh), localStorage.setItem('implanr_user', json(user)), page.reload(). Then goto submit-phase2. Token obtained via POST /api/auth/login {identifier:'Abhijit.patil', password:'Admin@123'}. Case 6a8337dd64ad3269dc584a69 has mua_placed=true+mua_details for ZR1(cuff=3,ang=30°) & PL1(cuff=2,ang=17°) already saved. When testing MUA toggle, DO NOT rely on Playwright locator.click force=True — the buttons have pointer-events:none. Use page.evaluate to dispatchEvent(new MouseEvent('click',{bubbles:true})) if you must verify state logic; otherwise fix the pointer-events bug first.",
+  "rca_of_issue": "Real RCA (not the one in review request): The TouchableOpacity buttons for mua-placed-yes/no render with computed style pointerEvents:'none' on RN Web. Playwright's mouse.click at bbox coordinates passes through the button to elements below. Only synthetic DOM dispatchEvent bypasses the pointer-events barrier. Console emits 'props.pointerEvents is deprecated' warning, indicating a JSX `pointerEvents` prop somewhere in the ancestor chain of the MUA block is being mistranslated by RN Web into an inline style pointerEvents:'none' on child TouchableOpacity elements. Reproduction: (1) Login as Abhijit.patil via API, seed implanr_* localStorage, reload; (2) goto /procedures/submit-phase2/6a8337dd64ad3269dc584a69; (3) tap Surgery step; (4) tap [data-testid=mua-placed-no] with force=True; (5) observe details section still visible AND No button visual state unchanged. Mitigation: audit the JSX in /app/frontend/app/procedures/submit-phase2/[id].tsx around L1060-1130 for any ancestor View with pointerEvents='none' or pointerEvents='box-none' as a prop (not style) and migrate to style={{pointerEvents:'…'}}."
+}

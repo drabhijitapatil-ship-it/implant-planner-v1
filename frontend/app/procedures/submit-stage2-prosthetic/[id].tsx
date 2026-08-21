@@ -184,12 +184,12 @@ export default function Phase4Step1Screen() {
     if (isPerImplantMode) {
       for (let i = 0; i < perImplantPlans.length; i++) {
         if (!perImplantPlans[i].prosthesis) {
-          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          const _lbl = implantPositions[i] ? `Implant ${implantPositions[i]}` : `Implant ${i + 1}`;
           return `Please select prosthesis for ${_lbl}`;
         }
         const showMat = perImplantPlans[i].prosthesis.includes('FP1') || perImplantPlans[i].prosthesis.includes('FP2') || perImplantPlans[i].prosthesis.includes('FP3');
         if (showMat && !perImplantPlans[i].material) {
-          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          const _lbl = implantPositions[i] ? `Implant ${implantPositions[i]}` : `Implant ${i + 1}`;
           return `Please select material for ${_lbl}`;
         }
       }
@@ -207,7 +207,7 @@ export default function Phase4Step1Screen() {
       const slots = Math.max(1, implantPositions.length || 1);
       for (let i = 0; i < slots; i++) {
         if (!shadeValues[i]?.trim()) {
-          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          const _lbl = implantPositions[i] ? `Implant ${implantPositions[i]}` : `Implant ${i + 1}`;
           return `Please enter the shade for ${_lbl}`;
         }
       }
@@ -369,7 +369,7 @@ export default function Phase4Step1Screen() {
                   return (
                     <View key={idx} style={{ backgroundColor: '#F8F9FE', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E0E7EE' }}>
                       <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>
-                        {implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`}
+                        {implantPositions[idx] ? `Implant ${implantPositions[idx]}` : `Implant ${idx + 1}`}
                       </Text>
 
                       {/* Prosthesis Type */}
@@ -588,7 +588,7 @@ export default function Phase4Step1Screen() {
                 ? 'Full-arch case — record one shade for the anterior segment and one for the posterior segment.'
                 : 'Record one shade per implant. Use the natural standard (Vita Classic / Vita 3D-Master / chairside reference).'}
             </Text>
-            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => p ? `Tooth #${p}` : `Implant ${i + 1}`))
+            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => p ? `Implant ${p}` : `Implant ${i + 1}`))
               .map((label, idx) => (
                 <View key={idx} style={s.field}>
                   <Text style={[s.label, { color: '#5D4037' }]}>
@@ -694,7 +694,7 @@ export default function Phase4Step1Screen() {
                   muaRows.map((row, idx) => (
                     <View key={idx} style={s.muaRow} testID={`mua-row-${idx}`}>
                       <View style={s.muaRowHeader}>
-                        <Text style={s.muaRowTitle}>{row.tooth ? `Tooth #${row.tooth}` : `Implant ${idx + 1}`}</Text>
+                        <Text style={s.muaRowTitle}>{row.tooth ? `Implant ${row.tooth}` : `Implant ${idx + 1}`}</Text>
                         <TouchableOpacity
                           onPress={() => removeRow(idx)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

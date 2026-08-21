@@ -377,7 +377,7 @@ export default function FollowUpForm() {
                 <View key={pos} style={s.survCard} testID={`survival-card-${pos}`}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <View style={s.toothBadge}><Text style={s.toothBadgeText}>{pos}</Text></View>
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', flex: 1 }}>Tooth {pos}</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', flex: 1 }}>Implant {pos}</Text>
                     <TouchableOpacity style={[s.pillSm, e?.status === 'Surviving' && s.pillSmOn]} onPress={() => setSurvivalField(pos, { status: 'Surviving', reason: '', reason_other_text: '' })} testID={`survival-${pos}-surviving`}>
                       <Text style={[s.pillSmT, e?.status === 'Surviving' && s.pillSmTOn]}>Survived</Text>
                     </TouchableOpacity>
@@ -698,7 +698,7 @@ export default function FollowUpForm() {
       <Modal visible={reasonModalFor !== null} transparent animationType="fade" onRequestClose={() => setReasonModalFor(null)}>
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setReasonModalFor(null)}>
           <View style={s.modalCard}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 }}>Reason for failure — Tooth {reasonModalFor}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 }}>Reason for failure — Implant {reasonModalFor}</Text>
             <ScrollView style={{ maxHeight: 380 }}>
               {FAILURE_REASONS.map(opt => (
                 <TouchableOpacity key={opt} style={s.modalOption}
@@ -733,7 +733,7 @@ export default function FollowUpForm() {
               return (
                 <>
                   <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E' }}>{siteLbl}</Text>
-                  <Text style={{ fontSize: 12, color: '#78909C', marginBottom: 12 }}>Tooth {pos} — history across appointments</Text>
+                  <Text style={{ fontSize: 12, color: '#78909C', marginBottom: 12 }}>Implant {pos} — history across appointments</Text>
                   {rows.map((r, i) => {
                     const d = r.value != null && base != null && i > 0 ? +(r.value - base).toFixed(1) : null;
                     return (
@@ -765,7 +765,7 @@ export default function FollowUpForm() {
       <Modal visible={mobilityModalFor !== null} transparent animationType="fade" onRequestClose={() => setMobilityModalFor(null)}>
         <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setMobilityModalFor(null)}>
           <View style={s.modalCard}>
-            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 }}>Implant Mobility — Tooth {mobilityModalFor}</Text>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#1A1A2E', marginBottom: 10 }}>Implant Mobility — Implant {mobilityModalFor}</Text>
             {MOBILITY_OPTIONS.map(opt => (
               <TouchableOpacity key={opt} style={s.modalOption}
                 onPress={() => { if (mobilityModalFor) setImplantMobility(prev => ({ ...prev, [mobilityModalFor]: opt })); setMobilityModalFor(null); }}
