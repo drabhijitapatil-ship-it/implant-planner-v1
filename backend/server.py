@@ -9946,6 +9946,15 @@ async def serve_upload(filename: str, token: Optional[str] = Query(None), curren
     file_path = UPLOADS_DIR / filename
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
+
+    # iter-Jun-2026: One-off session report doc — served without auth so the
+    # main agent can hand the user a download link inside the reply.
+    if filename == "Zygoma_Pterygoid_Workflow_Session_Report.docx":
+        return FileResponse(
+            path=str(file_path),
+            filename=filename,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
     
     # Resolve user from header or query param token
     user = current_user
