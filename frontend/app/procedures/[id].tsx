@@ -2336,8 +2336,7 @@ export default function ProcedureDetailScreen() {
             {procedure.prosthetic_plan_other && (
               <InfoRow icon="create" label="Prosthetic Plan (Other)" value={procedure.prosthetic_plan_other} fieldKey="prosthetic_plan_other" />
             )}
-            {/* iter-Feb-2026 — Single-Conventional-Implant new plan fields.
-                Only visible when the case is Single Conventional Implant. */}
+            {/* iter-Feb-2026 — Single-Conventional-Implant new plan fields. */}
             {procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.type_of_provisional && (
               <InfoRow icon="medkit" label="Type of Provisional" value={procedure.type_of_provisional} fieldKey="type_of_provisional" />
             )}
@@ -2349,6 +2348,53 @@ export default function ProcedureDetailScreen() {
             )}
             {procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_crown_material && (
               <InfoRow icon="diamond" label="Crown Material" value={procedure.sc_crown_material} fieldKey="sc_crown_material" />
+            )}
+            {/* iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflow fields.
+                Rendered for any procedure type in Group A/B/C. `type_of_provisional`
+                is shared across all groups; group-specific plan fields are shown
+                below. */}
+            {procedure.implant_procedure_type !== 'Single Conventional Implant' && procedure.type_of_provisional && (
+              <InfoRow icon="medkit" label="Type of Provisional"
+                value={procedure.type_of_provisional === 'Other' && procedure.type_of_provisional_other
+                  ? `Other — ${procedure.type_of_provisional_other}`
+                  : procedure.type_of_provisional}
+                fieldKey="type_of_provisional" />
+            )}
+            {procedure.ma_prosthesis_type && (
+              <InfoRow icon="cube" label="Prosthesis Type"
+                value={procedure.ma_prosthesis_type === 'Other' && procedure.ma_prosthesis_type_other
+                  ? `Other — ${procedure.ma_prosthesis_type_other}` : procedure.ma_prosthesis_type}
+                fieldKey="ma_prosthesis_type" />
+            )}
+            {procedure.ma_abutment_type && (
+              <InfoRow icon="cube" label="Abutment Type"
+                value={procedure.ma_abutment_type === 'Other' && procedure.ma_abutment_type_other
+                  ? `Other — ${procedure.ma_abutment_type_other}` : procedure.ma_abutment_type}
+                fieldKey="ma_abutment_type" />
+            )}
+            {procedure.ma_retention_type && (
+              <InfoRow icon="link" label="Type of Retention"
+                value={procedure.ma_retention_type === 'Other' && procedure.ma_retention_type_other
+                  ? `Other — ${procedure.ma_retention_type_other}` : procedure.ma_retention_type}
+                fieldKey="ma_retention_type" />
+            )}
+            {procedure.ma_crown_material && (
+              <InfoRow icon="diamond" label="Crown/Bridge Material"
+                value={procedure.ma_crown_material === 'Other' && procedure.ma_crown_material_other
+                  ? `Other — ${procedure.ma_crown_material_other}` : procedure.ma_crown_material}
+                fieldKey="ma_crown_material" />
+            )}
+            {procedure.fa_prosthetic_plan && (
+              <InfoRow icon="build" label="Prosthetic Plan"
+                value={procedure.fa_prosthetic_plan === 'Other' && procedure.fa_prosthetic_plan_other
+                  ? `Other — ${procedure.fa_prosthetic_plan_other}` : procedure.fa_prosthetic_plan}
+                fieldKey="fa_prosthetic_plan" />
+            )}
+            {procedure.zp_prosthetic_plan && (
+              <InfoRow icon="build" label="Prosthetic Plan"
+                value={procedure.zp_prosthetic_plan === 'Other' && procedure.zp_prosthetic_plan_other
+                  ? `Other — ${procedure.zp_prosthetic_plan_other}` : procedure.zp_prosthetic_plan}
+                fieldKey="zp_prosthetic_plan" />
             )}
           </View>
         )}
@@ -2764,6 +2810,30 @@ export default function ProcedureDetailScreen() {
                       <Text style={{ fontWeight: '700' }}>Crown Material: </Text>{procedure.phase4_step1_data.sc_final_crown_material}
                     </Text>
                   )}
+                </View>
+              )}
+              {/* iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan breakdown. */}
+              {procedure.phase4_step1_data && (
+                (procedure.phase4_step1_data.ma_final_prosthesis_type
+                 || procedure.phase4_step1_data.ma_final_abutment_type
+                 || procedure.phase4_step1_data.ma_final_retention_type
+                 || procedure.phase4_step1_data.ma_final_crown_material
+                 || procedure.phase4_step1_data.fa_final_prosthetic_plan
+                 || procedure.phase4_step1_data.zp_final_prosthetic_plan)
+              ) && (
+                <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#FFE082' }}>
+                  {[
+                    ['Prosthesis Type', procedure.phase4_step1_data.ma_final_prosthesis_type_other || procedure.phase4_step1_data.ma_final_prosthesis_type],
+                    ['Abutment Type', procedure.phase4_step1_data.ma_final_abutment_type_other || procedure.phase4_step1_data.ma_final_abutment_type],
+                    ['Type of Retention', procedure.phase4_step1_data.ma_final_retention_type_other || procedure.phase4_step1_data.ma_final_retention_type],
+                    ['Crown/Bridge Material', procedure.phase4_step1_data.ma_final_crown_material_other || procedure.phase4_step1_data.ma_final_crown_material],
+                    ['Prosthetic Plan', procedure.phase4_step1_data.fa_final_prosthetic_plan_other || procedure.phase4_step1_data.fa_final_prosthetic_plan],
+                    ['Prosthetic Plan', procedure.phase4_step1_data.zp_final_prosthetic_plan_other || procedure.phase4_step1_data.zp_final_prosthetic_plan],
+                  ].filter(([, v]) => !!v).map(([lbl, v]) => (
+                    <Text key={String(lbl) + String(v)} style={{ fontSize: 13, color: '#4E342E', marginTop: 4 }}>
+                      <Text style={{ fontWeight: '700' }}>{lbl}: </Text>{v}
+                    </Text>
+                  ))}
                 </View>
               )}
             </View>

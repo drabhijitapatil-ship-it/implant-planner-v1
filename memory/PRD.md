@@ -1,5 +1,61 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration Feb-2026-B (Feb 2026) — Multiple / Full-Arch / Zygoma prosthesis workflow
+
+**Scope**: Extend the iter-Feb-2026 (SC) workflow to cover the remaining procedure types with 3 group-specific workflows across Phase 1, Phase 2 Step 2, and Phase 4 Step 1.
+
+### Group taxonomy (precedence C > B > A)
+- **Group A** — 4-part flow (Prosthesis Type / Abutment / Retention / Crown-Bridge Material)
+  - Multiple Conventional Implants
+  - Pterygoid and Conventional Implants *(per explicit user override — not Group B/C)*
+- **Group B** — Full-Arch grouped plan (Definitive Fixed / RP-5 / RP-4)
+  - All on 4 · All on 6 · All on X
+- **Group C** — Zygoma-specific 6-option plan
+  - Quad Zygoma Implants
+  - Zygoma and Pterygoid Implants
+  - Zygoma and Conventional Implants
+  - Zygoma, Pterygoid and Conventional Implants
+
+### User choices (from ask_human)
+- Q1 Precedence: Most-specific wins (C > B > A)
+- Q2 Pterygoid+Conv: Group A override
+- Q3 "Other": free-text input directly below the dropdown
+- Q4 "Zygoma, Pterygoid and Conv" procedure type: already exists
+- Q5 Audit: one consolidated entry per submit listing all changed fields
+
+### Delivered
+
+**Backend** (`server.py`)
+- `ProcedureCreate` + `ProcedureUpdate` gain: `type_of_provisional_other`; Group A `ma_prosthesis_type(+_other)`, `ma_abutment_type(+_other)`, `ma_retention_type(+_other)`, `ma_crown_material(+_other)`; Group B `fa_prosthetic_plan(+_other)`; Group C `zp_prosthetic_plan(+_other)`.
+- `Stage2ProstheticSubmit` gains: `ma_final_*`, `fa_final_*`, `zp_final_*` (+ `_other` for each).
+- Phase 4 Step 1 audit block extended to iterate all 3 groups. Baseline lookup: prior Phase 4 override → Phase 1. One consolidated entry per submit; idempotent on unchanged re-submit.
+- PDF text and structured builders emit "Prosthesis Type / Abutment Type / Type of Retention / Crown-Bridge Material / Type of Provisional" + "Final ..." variants for Phase 4.
+
+**Frontend**
+- New catalog file `/app/frontend/constants/prosthesisWorkflows.ts` — Group A/B/C provisional (with 2-3 groups per set) + Group A 4-part options + Group B 3-group plan + Group C single 6-option plan. Every dropdown includes "Other". `getWorkflowGroup(procType)` helper.
+- Phase 1 `(tabs)/new-procedure.tsx`:
+  - Provisional block renders for SC or any Group A/B/C case when Immediate Loading is picked (group-aware catalogue).
+  - Prosthetic Plan block branches: SC → 3-part flow (unchanged); Group A → 4-part flow; Group B/C → single grouped/flat dropdown.
+  - "Other" reveals a matching `_other` free-text input beneath the dropdown.
+  - Hard validation on submit and soft indicators in the review pill for every new field.
+- Phase 2 Step 2 `submit-phase2/[id].tsx`:
+  - When Prosthetic Component = "Immediate Loading Done", "Prosthesis Type" uses the group-aware provisional catalogue.
+- Phase 4 Step 1 `submit-stage2-prosthetic/[id].tsx`:
+  - "Phase 1 Plan (reference)" amber banner for any group (extracted `Phase1PlanReferenceBanner` helper).
+  - Group A 4-part flow (extracted `SCPickerRow` helper for dropdown+other pairs).
+  - Group B/C single-plan flows.
+  - `final_prosthetic_plan` composed server-friendly on the client (backwards compatible for existing renderers).
+- Case Details `procedures/[id].tsx`: new InfoRows for all Phase 1 + Phase 4 Group A/B/C fields.
+- PDF `utils/pdfGenerator.ts`: new HTML rows for Phase 1 SC/A/B/C fields and Phase 4 Final variants; Lab Slip Final Prosthesis Plan block extended.
+
+### Tests
+- Backend: `/app/backend/tests/test_iter_feb2026_b_multi_fullarch_zygoma.py` — 22/22 passing.
+- Regression: `/app/backend/tests/test_iter_feb2026_single_conventional.py` — 6/6 still passing.
+- Report: `/app/test_reports/iteration_428.json`.
+
+---
+
+
 ## Iteration Feb-2026-SC (Feb 2026) — Single Conventional Implant prosthesis workflow
 
 **Scope**: User request — implement a dedicated Single-Conventional-Implant prosthesis workflow with clinical descriptions across Phase 1, Phase 2 Step 2, and Phase 4 Step 1.

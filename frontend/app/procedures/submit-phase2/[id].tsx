@@ -27,6 +27,12 @@ import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
 import PhaseStep2TabbedView from '../../../components/PhaseStep2TabbedView';
 import GroupedDescDropdown from '../../../components/GroupedDescDropdown';
 import { PROVISIONAL_GROUPED_OPTIONS } from '../../../constants/singleConventional';
+import {
+  GROUP_A_PROVISIONAL_OPTIONS,
+  GROUP_B_PROVISIONAL_OPTIONS,
+  GROUP_C_PROVISIONAL_OPTIONS,
+  getWorkflowGroup,
+} from '../../../constants/prosthesisWorkflows';
 
 export default function Phase2SubmissionScreen() {
   const { id } = useLocalSearchParams();
@@ -1606,6 +1612,36 @@ export default function Phase2SubmissionScreen() {
                       placeholder="Select a provisional…"
                       testID="phase2-sc-provisional-dropdown"
                     />
+                  </View>
+                );
+              }
+              // iter-Feb-2026-B — Group A/B/C override.
+              const g = getWorkflowGroup(procedureType);
+              if (g) {
+                const groups =
+                  g === 'A' ? GROUP_A_PROVISIONAL_OPTIONS
+                  : g === 'B' ? GROUP_B_PROVISIONAL_OPTIONS
+                  : GROUP_C_PROVISIONAL_OPTIONS;
+                return (
+                  <View style={s.section}>
+                    <Text style={s.torqueTitle}>Prosthesis Type</Text>
+                    <GroupedDescDropdown
+                      value={prosthesisType}
+                      onChange={setProsthesisType}
+                      groups={groups}
+                      placeholder="Select a provisional…"
+                      testID={`phase2-group-${g?.toLowerCase()}-provisional-dropdown`}
+                    />
+                    {prosthesisType === 'Other' && (
+                      <TextInput
+                        style={[s.textArea, { marginTop: 8 }]}
+                        value={prosthesisTypeOther}
+                        onChangeText={setProsthesisTypeOther}
+                        placeholder="Describe the prosthesis type..."
+                        multiline
+                        data-testid="prosthesis-type-other-input"
+                      />
+                    )}
                   </View>
                 );
               }
