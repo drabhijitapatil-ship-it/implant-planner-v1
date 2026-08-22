@@ -528,6 +528,10 @@ class ProcedureCreate(BaseModel):
     sc_abutment_type: Optional[str] = Field(None, max_length=200)
     sc_retention_type: Optional[str] = Field(None, max_length=200)
     sc_crown_material: Optional[str] = Field(None, max_length=200)
+    # iter-Feb-2026-C — SC "Other" free-text siblings.
+    sc_abutment_type_other: Optional[str] = Field(None, max_length=500)
+    sc_retention_type_other: Optional[str] = Field(None, max_length=500)
+    sc_crown_material_other: Optional[str] = Field(None, max_length=500)
     type_of_provisional_other: Optional[str] = Field(None, max_length=500)
     # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflows.
     # Group A (Multiple Conv + Pterygoid+Conv): 4-part plan.
@@ -633,6 +637,10 @@ class ProcedureUpdate(BaseModel):
     sc_abutment_type: Optional[str] = Field(None, max_length=200)
     sc_retention_type: Optional[str] = Field(None, max_length=200)
     sc_crown_material: Optional[str] = Field(None, max_length=200)
+    # iter-Feb-2026-C — SC "Other" free-text siblings (Update mirror).
+    sc_abutment_type_other: Optional[str] = Field(None, max_length=500)
+    sc_retention_type_other: Optional[str] = Field(None, max_length=500)
+    sc_crown_material_other: Optional[str] = Field(None, max_length=500)
     type_of_provisional_other: Optional[str] = Field(None, max_length=500)
     # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflow fields (Update).
     ma_prosthesis_type: Optional[str] = Field(None, max_length=200)
@@ -830,6 +838,10 @@ class Stage2ProstheticSubmit(BaseModel):
     sc_final_abutment_type: Optional[str] = Field(None, max_length=200)
     sc_final_retention_type: Optional[str] = Field(None, max_length=200)
     sc_final_crown_material: Optional[str] = Field(None, max_length=200)
+    # iter-Feb-2026-C — SC "Other" free-text siblings for final plan.
+    sc_final_abutment_type_other: Optional[str] = Field(None, max_length=500)
+    sc_final_retention_type_other: Optional[str] = Field(None, max_length=500)
+    sc_final_crown_material_other: Optional[str] = Field(None, max_length=500)
     # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan overrides.
     # Same shape as Phase 1: 4-part for Group A, single field for Group B/C.
     # Change audit is appended to `prosthetic_plan_change_log`.
@@ -10920,23 +10932,40 @@ def _build_case_context(proc: dict) -> str:
         parts.append(f"Mesiodistal Space: {proc.get('mesiodistal_space')} mm")
     if proc.get('prosthetic_plan'):
         parts.append(f"Prosthetic Plan: {proc.get('prosthetic_plan')}")
-    # iter-Feb-2026 — Single-Conventional-Implant granular Phase 1 plan.
-    if proc.get('implant_procedure_type') == 'Single Conventional Implant':
+    # iter-Feb-2026 / -C — Single-Conventional-Implant granular Phase 1 plan.
+    # Applies to pure SC + the overlap types with num_implants == "Single Implant".
+    _num_impl = proc.get('num_implants') or ''
+    _overlap = proc.get('implant_procedure_type') in {
+        'Immediate Implant', 'Partial Extraction Therapy',
+        'Implant Placement with Guided Bone Regeneration', 'Guided Surgery', 'Sinus Lift',
+    }
+    _is_sc_effective = (
+        proc.get('implant_procedure_type') == 'Single Conventional Implant'
+        or (_overlap and _num_impl == 'Single Implant')
+    )
+    if _is_sc_effective:
         if proc.get('type_of_provisional'):
-            parts.append(f"Type of Provisional: {proc.get('type_of_provisional')}")
-        if proc.get('sc_abutment_type'):
-            parts.append(f"Abutment Type: {proc.get('sc_abutment_type')}")
-        if proc.get('sc_retention_type'):
-            parts.append(f"Type of Retention: {proc.get('sc_retention_type')}")
-        if proc.get('sc_crown_material'):
-            parts.append(f"Crown Material: {proc.get('sc_crown_material')}")
+            _tp = proc.get('type_of_provisional')
+            if proc.get('type_of_provisional_other'):
+                _tp = f"{_tp} — {proc.get('type_of_provisional_other')}"
+            parts.append(f"Type of Provisional: {_tp}")
+        for lbl, fld, other in (
+            ('Abutment Type', 'sc_abutment_type', 'sc_abutment_type_other'),
+            ('Type of Retention', 'sc_retention_type', 'sc_retention_type_other'),
+            ('Crown Material', 'sc_crown_material', 'sc_crown_material_other'),
+        ):
+            v = proc.get(fld)
+            if v:
+                if proc.get(other):
+                    v = f"{v} — {proc.get(other)}"
+                parts.append(f"{lbl}: {v}")
     # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Phase 1 plan.
     if proc.get('type_of_provisional'):
         _ = proc.get('type_of_provisional')
         if proc.get('type_of_provisional_other'):
             _ = f"{_} — {proc.get('type_of_provisional_other')}"
         # Avoid duplicate row from the SC branch above.
-        if proc.get('implant_procedure_type') != 'Single Conventional Implant':
+        if not _is_sc_effective:
             parts.append(f"Type of Provisional: {_}")
     for lbl, fld, other in (
         ('Prosthesis Type', 'ma_prosthesis_type', 'ma_prosthesis_type_other'),
@@ -11090,13 +11119,17 @@ def _build_case_context(proc: dict) -> str:
         parts.append("\n--- Phase 4: Prosthetic Rehabilitation ---")
         if p4.get('final_prosthetic_plan'):
             parts.append(f"Final Prosthetic Plan: {p4.get('final_prosthetic_plan')}")
-        # iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
-        if p4.get('sc_final_abutment_type'):
-            parts.append(f"Final Abutment Type: {p4.get('sc_final_abutment_type')}")
-        if p4.get('sc_final_retention_type'):
-            parts.append(f"Final Type of Retention: {p4.get('sc_final_retention_type')}")
-        if p4.get('sc_final_crown_material'):
-            parts.append(f"Final Crown Material: {p4.get('sc_final_crown_material')}")
+        # iter-Feb-2026 / -C — Single-Conventional-Implant granular Final Plan.
+        for lbl, fld, other in (
+            ('Final Abutment Type', 'sc_final_abutment_type', 'sc_final_abutment_type_other'),
+            ('Final Type of Retention', 'sc_final_retention_type', 'sc_final_retention_type_other'),
+            ('Final Crown Material', 'sc_final_crown_material', 'sc_final_crown_material_other'),
+        ):
+            v = p4.get(fld)
+            if v:
+                if p4.get(other):
+                    v = f"{v} — {p4.get(other)}"
+                parts.append(f"{lbl}: {v}")
         # iter-Feb-2026-B — Multiple/Full-Arch/Zygoma Final Plan.
         for lbl, fld, other in (
             ('Final Prosthesis Type', 'ma_final_prosthesis_type', 'ma_final_prosthesis_type_other'),
@@ -14086,18 +14119,37 @@ async def generate_case_report(
         add_field("Bone Graft Material Details", procedure.get("bone_graft_material_details"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
-    # iter-Feb-2026 — Single-Conventional-Implant Phase 1 granular fields.
-    if procedure.get("implant_procedure_type") == "Single Conventional Implant":
+    # iter-Feb-2026 / -C — Single-Conventional-Implant Phase 1 granular fields.
+    # Applies to pure SC and the overlap types with num_implants='Single Implant'.
+    _proc_type_pdf = procedure.get("implant_procedure_type") or ""
+    _num_impl_pdf = procedure.get("num_implants") or ""
+    _overlap_pdf = _proc_type_pdf in {
+        "Immediate Implant", "Partial Extraction Therapy",
+        "Implant Placement with Guided Bone Regeneration", "Guided Surgery", "Sinus Lift",
+    }
+    _is_sc_effective_pdf = (
+        _proc_type_pdf == "Single Conventional Implant"
+        or (_overlap_pdf and _num_impl_pdf == "Single Implant")
+    )
+    if _is_sc_effective_pdf:
         if procedure.get("type_of_provisional"):
-            add_field("Type of Provisional", procedure.get("type_of_provisional"))
-        if procedure.get("sc_abutment_type"):
-            add_field("Abutment Type", procedure.get("sc_abutment_type"))
-        if procedure.get("sc_retention_type"):
-            add_field("Type of Retention", procedure.get("sc_retention_type"))
-        if procedure.get("sc_crown_material"):
-            add_field("Crown Material", procedure.get("sc_crown_material"))
+            _v = procedure.get("type_of_provisional")
+            if procedure.get("type_of_provisional_other"):
+                _v = f"{_v} — {procedure.get('type_of_provisional_other')}"
+            add_field("Type of Provisional", _v)
+        for lbl, fld, other in (
+            ("Abutment Type", "sc_abutment_type", "sc_abutment_type_other"),
+            ("Type of Retention", "sc_retention_type", "sc_retention_type_other"),
+            ("Crown Material", "sc_crown_material", "sc_crown_material_other"),
+        ):
+            v = procedure.get(fld)
+            if v:
+                if procedure.get(other):
+                    v = f"{v} — {procedure.get(other)}"
+                add_field(lbl, v)
     else:
-        # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Phase 1 workflow.
+        # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Phase 1 workflow
+        # (also covers overlap types with num_implants='Multiple Implants').
         if procedure.get("type_of_provisional"):
             _v = procedure.get("type_of_provisional")
             if procedure.get("type_of_provisional_other"):
@@ -14721,13 +14773,17 @@ async def generate_case_report(
         pdf.cell(0, 8, safe("Step 1 — Prosthetic Plan & Impressions"), ln=True)
         if p4s1.get("final_prosthetic_plan"):
             add_field("Final Prosthetic Plan", p4s1["final_prosthetic_plan"])
-        # iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
-        if p4s1.get("sc_final_abutment_type"):
-            add_field("Final Abutment Type", p4s1["sc_final_abutment_type"])
-        if p4s1.get("sc_final_retention_type"):
-            add_field("Final Type of Retention", p4s1["sc_final_retention_type"])
-        if p4s1.get("sc_final_crown_material"):
-            add_field("Final Crown Material", p4s1["sc_final_crown_material"])
+        # iter-Feb-2026 / -C — Single-Conventional-Implant granular Final Plan.
+        for lbl, fld, other in (
+            ("Final Abutment Type", "sc_final_abutment_type", "sc_final_abutment_type_other"),
+            ("Final Type of Retention", "sc_final_retention_type", "sc_final_retention_type_other"),
+            ("Final Crown Material", "sc_final_crown_material", "sc_final_crown_material_other"),
+        ):
+            v = p4s1.get(fld)
+            if v:
+                if p4s1.get(other):
+                    v = f"{v} — {p4s1.get(other)}"
+                add_field(lbl, v)
         # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan.
         for lbl, fld, other in (
             ("Final Prosthesis Type", "ma_final_prosthesis_type", "ma_final_prosthesis_type_other"),
@@ -16544,6 +16600,9 @@ async def submit_stage2_prosthetic(
         "sc_final_abutment_type": data.sc_final_abutment_type,
         "sc_final_retention_type": data.sc_final_retention_type,
         "sc_final_crown_material": data.sc_final_crown_material,
+        "sc_final_abutment_type_other": data.sc_final_abutment_type_other,
+        "sc_final_retention_type_other": data.sc_final_retention_type_other,
+        "sc_final_crown_material_other": data.sc_final_crown_material_other,
         # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma final plans.
         "ma_final_prosthesis_type": data.ma_final_prosthesis_type,
         "ma_final_prosthesis_type_other": data.ma_final_prosthesis_type_other,
@@ -16593,11 +16652,14 @@ async def submit_stage2_prosthetic(
         data.done_date, prev_date=_prev, label="Phase 4 Step 1 Done Date",
     )
 
-    # iter-Feb-2026 / -B — Single-Conventional + Multiple/Full-Arch/Zygoma
-    # Final Plan audit trail. Compare each field against
-    #   (prior Phase-4 override) → (Phase-1 baseline).
+    # iter-Feb-2026 / -B / -C — Prosthesis Final Plan audit trail across
+    # Single-Conventional, Multiple/Full-Arch/Zygoma AND the 5 overlap
+    # procedure types (Immediate Implant / Sinus Lift / PET / GBR /
+    # Guided Surgery) whose workflow is decided by `num_implants`.
+    # Compare each field against (prior Phase-4 override) → (Phase-1 baseline).
     # One consolidated audit entry appended when any field changed.
     proc_type = procedure.get("implant_procedure_type") or ""
+    num_impl = procedure.get("num_implants") or ""
     prev_p4 = procedure.get("phase4_step1_data") or {}
 
     _group_c_set = {
@@ -16608,13 +16670,33 @@ async def submit_stage2_prosthetic(
     }
     _group_b_set = {"All on 4", "All on 6", "All on X"}
     _group_a_set = {"Multiple Conventional Implants", "Pterygoid and Conventional Implants"}
+    _overlap_set = {
+        "Immediate Implant",
+        "Partial Extraction Therapy",
+        "Implant Placement with Guided Bone Regeneration",
+        "Guided Surgery",
+        "Sinus Lift",
+    }
+
+    # Effective workflow (SC / A / B / C / None) — same rule as the frontend.
+    if proc_type == "Single Conventional Implant":
+        effective = "SC"
+    elif proc_type in _group_c_set:
+        effective = "C"
+    elif proc_type in _group_b_set:
+        effective = "B"
+    elif proc_type in _group_a_set:
+        effective = "A"
+    elif proc_type in _overlap_set and num_impl == "Single Implant":
+        effective = "SC"
+    elif proc_type in _overlap_set and num_impl == "Multiple Implants":
+        effective = "A"
+    else:
+        effective = None
 
     def _prev(field: str) -> str:
-        # Prefer any earlier Phase 4 submit value; else fall back to Phase 1.
         return (prev_p4.get(field) or procedure.get(field.replace("_final_", "_")) or "").strip() \
-            if field.startswith("sc_final_") or field.startswith("ma_final_") \
-                or field.startswith("fa_final_") or field.startswith("zp_final_") \
-            else ""
+            if field.startswith(("sc_final_", "ma_final_", "fa_final_", "zp_final_")) else ""
 
     def _new(field: str) -> str:
         v = getattr(data, field, None)
@@ -16627,12 +16709,14 @@ async def submit_stage2_prosthetic(
         if n and n != p:
             changed_fields.append({"field": field, "from": p, "to": n})
 
-    # Single-Conventional (iter-Feb-2026)
-    if proc_type == "Single Conventional Implant":
-        for f in ("sc_final_abutment_type", "sc_final_retention_type", "sc_final_crown_material"):
+    if effective == "SC":
+        for f in (
+            "sc_final_abutment_type", "sc_final_abutment_type_other",
+            "sc_final_retention_type", "sc_final_retention_type_other",
+            "sc_final_crown_material", "sc_final_crown_material_other",
+        ):
             _diff(f)
-    # Group A — Multiple Conventional / Pterygoid + Conventional
-    elif proc_type in _group_a_set:
+    elif effective == "A":
         for f in (
             "ma_final_prosthesis_type", "ma_final_prosthesis_type_other",
             "ma_final_abutment_type", "ma_final_abutment_type_other",
@@ -16640,12 +16724,10 @@ async def submit_stage2_prosthetic(
             "ma_final_crown_material", "ma_final_crown_material_other",
         ):
             _diff(f)
-    # Group B — All-on-X
-    elif proc_type in _group_b_set:
+    elif effective == "B":
         for f in ("fa_final_prosthetic_plan", "fa_final_prosthetic_plan_other"):
             _diff(f)
-    # Group C — Zygoma-specific
-    elif proc_type in _group_c_set:
+    elif effective == "C":
         for f in ("zp_final_prosthetic_plan", "zp_final_prosthetic_plan_other"):
             _diff(f)
 

@@ -17,6 +17,12 @@
 export type OptionDesc = { label: string; description: string };
 export type GroupedOptions = { group: string; options: OptionDesc[] }[];
 
+// Shared "Other" option — reveals a free-text input in the parent form.
+export const OTHER_OPTION: OptionDesc = {
+  label: 'Other',
+  description: 'Free text — specify a choice not listed above.',
+};
+
 // ─── Type of Provisional ─────────────────────────────────────────────
 export const PROVISIONAL_GROUPED_OPTIONS: GroupedOptions = [
   {
@@ -37,6 +43,7 @@ export const PROVISIONAL_GROUPED_OPTIONS: GroupedOptions = [
         description:
           'Socket shield (buccal root fragment retained), root-submergence, free gingival graft plug or collagen plug plus membrane. Not prostheses, but they occupy the provisional slot and dictate what the provisional can do.',
       },
+      OTHER_OPTION,
     ],
   },
   {
@@ -69,6 +76,7 @@ export const PROVISIONAL_GROUPED_OPTIONS: GroupedOptions = [
         label: 'Emergence-profile conditioning provisional',
         description: 'A provisional designed and serially modified to shape the peri-implant tissue.',
       },
+      OTHER_OPTION,
     ],
   },
   {
@@ -86,6 +94,7 @@ export const PROVISIONAL_GROUPED_OPTIONS: GroupedOptions = [
         label: 'Cast-metal interim RPD',
         description: 'Cobalt-chromium framework interim partial with proper tooth support.',
       },
+      OTHER_OPTION,
     ],
   },
   {
@@ -104,6 +113,7 @@ export const PROVISIONAL_GROUPED_OPTIONS: GroupedOptions = [
         label: 'Conventional provisional FPD on adjacent teeth',
         description: 'Full-coverage provisional bridge over prepared abutment teeth.',
       },
+      OTHER_OPTION,
     ],
   },
 ];
@@ -149,6 +159,7 @@ export const SC_ABUTMENT_TYPE_OPTIONS: OptionDesc[] = [
     description:
       'The definitive abutment is placed at surgery and never removed thereafter; only the crown is changed.',
   },
+  OTHER_OPTION,
 ];
 
 // ─── Type of Retention ───────────────────────────────────────────────
@@ -166,6 +177,7 @@ export const SC_RETENTION_TYPE_OPTIONS: OptionDesc[] = [
     description:
       'The crown is cemented extraorally onto its abutment on a lab replica, and the assembled unit is screwed in as one piece.',
   },
+  OTHER_OPTION,
 ];
 
 // ─── Crown Material ──────────────────────────────────────────────────
@@ -215,6 +227,7 @@ export const SC_CROWN_MATERIAL_OPTIONS: OptionDesc[] = [
     label: 'Milled titanium ceramic layered',
     description: 'Full-contour milled titanium crown, with a facial ceramic veneer.',
   },
+  OTHER_OPTION,
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────
