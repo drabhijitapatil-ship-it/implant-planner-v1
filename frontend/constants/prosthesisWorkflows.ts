@@ -23,11 +23,8 @@
  */
 
 import type { OptionDesc, GroupedOptions } from './singleConventional';
-
-export const OTHER_OPTION: OptionDesc = {
-  label: 'Other',
-  description: 'Free text — specify a plan not listed above.',
-};
+import { OTHER_OPTION } from './singleConventional';
+export { OTHER_OPTION } from './singleConventional';
 
 // ══════════════════════════════════════════════════════════════════════
 // GROUP A — Multiple Conventional / Pterygoid+Conventional
@@ -237,6 +234,46 @@ export function getWorkflowGroup(procType: string | null | undefined): WorkflowG
 export const isGroupA = (t?: string | null) => getWorkflowGroup(t) === 'A';
 export const isGroupB = (t?: string | null) => getWorkflowGroup(t) === 'B';
 export const isGroupC = (t?: string | null) => getWorkflowGroup(t) === 'C';
+
+/**
+ * iter-Feb-2026-C — Overlap procedure types that carry a "Number of
+ * Implants" sub-question. When the answer is:
+ *   Single Implant   → follow the Single-Conventional-Implant workflow (SC)
+ *   Multiple Implants → follow the Multiple-Conventional workflow (Group A)
+ */
+export const NUM_IMPLANTS_OVERLAP_TYPES: ReadonlySet<string> = new Set([
+  'Immediate Implant',
+  'Partial Extraction Therapy',
+  'Implant Placement with Guided Bone Regeneration',
+  'Guided Surgery',
+  'Sinus Lift',
+]);
+
+export type EffectiveWorkflow = 'SC' | 'A' | 'B' | 'C' | null;
+
+/**
+ * iter-Feb-2026-C — Resolve the *effective* prosthesis workflow.
+ *
+ * Considers the base procedure type and, for the overlap types listed
+ * above, the "Number of Implants" answer (Single Implant → SC,
+ * Multiple Implants → Group A). Returns null when no workflow applies
+ * (e.g. Existing Implant, or an overlap type before Number-of-Implants
+ * is answered).
+ */
+export function getEffectiveWorkflow(
+  procType: string | null | undefined,
+  numImplants?: string | null,
+): EffectiveWorkflow {
+  if (!procType) return null;
+  if (procType === 'Single Conventional Implant') return 'SC';
+  const g = getWorkflowGroup(procType);
+  if (g) return g;
+  if (NUM_IMPLANTS_OVERLAP_TYPES.has(procType)) {
+    if (numImplants === 'Single Implant') return 'SC';
+    if (numImplants === 'Multiple Implants') return 'A';
+  }
+  return null;
+}
 
 /** Provisional options for a given procedure type — null when not applicable. */
 export function getProvisionalOptionsForProcType(procType: string): GroupedOptions | null {

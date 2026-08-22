@@ -1,5 +1,52 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration Feb-2026-C (Feb 2026) — SC "Other" + Overlap-type routing by Number of Implants
+
+**Scope**: Two extensions to the previously-shipped prosthesis workflows.
+
+### Ask 1 — "Other" for the Single-Conventional-Implant dropdowns
+All 4 SC dropdowns now expose "Other" as the last option and reveal a free-text input directly below when picked. Applies at Phase 1 (Type of Provisional, Abutment, Retention, Crown Material) and Phase 4 Step 1 (Final Abutment, Retention, Crown Material). New `_other` sibling fields on `ProcedureCreate/Update` and `Stage2ProstheticSubmit`; audit compares them as changed fields.
+
+### Ask 2 — 5 overlap procedure types → SC/A based on num_implants
+For **Immediate Implant · Partial Extraction Therapy · Implant Placement with Guided Bone Regeneration · Guided Surgery · Sinus Lift** the effective workflow is decided by the existing "Number of Implants" answer:
+- `Single Implant` → follow **SC** workflow (uses `sc_*` on Phase 1 and `sc_final_*` on Phase 4)
+- `Multiple Implants` → follow **Group A** workflow (uses `ma_*` / `ma_final_*`)
+
+Data storage reuses the SC / MA schemas — no new fields per procedure type. Frontend + backend PDFs and audit trail all resolve the group via a single helper: `getEffectiveWorkflow(procType, numImplants)` (frontend) / mirrored backend rule inside the Phase 4 audit block.
+
+### Delivered
+
+**Backend** (`server.py`)
+- `ProcedureCreate` + `ProcedureUpdate`: added `sc_abutment_type_other`, `sc_retention_type_other`, `sc_crown_material_other`.
+- `Stage2ProstheticSubmit`: added `sc_final_abutment_type_other`, `sc_final_retention_type_other`, `sc_final_crown_material_other`.
+- Phase 4 audit block rewritten to compute the `effective` workflow (SC/A/B/C) from `implant_procedure_type` + `num_implants` and route the diff to the correct set of `_final_` fields. New SC `_other` fields are diffed alongside their parents.
+- PDF text and structured builders determine SC vs Group A rendering from the same effective-workflow rule (adds `_is_sc_effective`) so overlap-type cases surface the right labels.
+
+**Frontend**
+- `singleConventional.ts` — moved `OTHER_OPTION` here (shared) and appended to every SC catalogue (each of 4 provisional groups, abutment, retention, crown material).
+- `prosthesisWorkflows.ts` — new `NUM_IMPLANTS_OVERLAP_TYPES` set + `getEffectiveWorkflow(procType, numImplants)` helper returning 'SC' | 'A' | 'B' | 'C' | null.
+- Phase 1 `(tabs)/new-procedure.tsx`:
+  - New SC `_other` state + hydration + reset.
+  - Provisional block + Prosthetic-Plan block use `getEffectiveWorkflow`, so overlap types render SC or Group A UI based on the picked "Number of Implants".
+  - Each SC dropdown now shows a matching free-text input when the value is 'Other'.
+  - Hard-validation on submit and soft indicators in the review pill for every SC `_other`.
+- Phase 2 Step 2 `submit-phase2/[id].tsx` — group-aware provisional dropdown now uses `getEffectiveWorkflow` + Phase 1 `num_implants`.
+- Phase 4 Step 1 `submit-stage2-prosthetic/[id].tsx`:
+  - New SC `_other` state + hydration.
+  - `effectiveWorkflow` derived from procedure. SC UI uses the shared `SCPickerRow` (drops the "Other" input under the dropdown).
+  - Payload includes SC `_other` finals when Other is picked, plus the composed `final_prosthetic_plan` uses `_other` text where applicable.
+- Case Details `procedures/[id].tsx` — review UI + Final Prosthetic Plan card now use the same effective-workflow guard and surface `_other` values as `"Other — <text>"`.
+- PDF `utils/pdfGenerator.ts` — SC case-report rows + Phase-4 rows + Lab Slip block all render `_other` overrides.
+
+### Tests
+- New suite: `/app/backend/tests/test_iter_feb2026_c_sc_other_and_overlap.py` — 17 tests passing.
+- Regression: SC 6/6 + B 22/22 still passing.
+- Report: `/app/test_reports/iteration_429.json`.
+- **Total: 45/45 green.**
+
+---
+
+
 ## Iteration Feb-2026-B (Feb 2026) — Multiple / Full-Arch / Zygoma prosthesis workflow
 
 **Scope**: Extend the iter-Feb-2026 (SC) workflow to cover the remaining procedure types with 3 group-specific workflows across Phase 1, Phase 2 Step 2, and Phase 4 Step 1.

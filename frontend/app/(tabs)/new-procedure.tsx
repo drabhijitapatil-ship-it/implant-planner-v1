@@ -68,7 +68,7 @@ import {
   GROUP_B_PROSTHETIC_PLAN_OPTIONS,
   GROUP_C_PROVISIONAL_OPTIONS,
   GROUP_C_PROSTHETIC_PLAN_OPTIONS,
-  getWorkflowGroup,
+  getEffectiveWorkflow,
 } from '../../constants/prosthesisWorkflows';
 
 // ─── Multi-Select Dropdown ─────────────────────────────
@@ -420,8 +420,11 @@ export default function NewProcedureScreen() {
     type_of_provisional: '',
     type_of_provisional_other: '',
     sc_abutment_type: '',
+    sc_abutment_type_other: '',
     sc_retention_type: '',
+    sc_retention_type_other: '',
     sc_crown_material: '',
+    sc_crown_material_other: '',
     // iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflow.
     // Group A (Multi Conv + Pterygoid+Conv): 4 fields
     // Group B (All-on-X): fa_prosthetic_plan
@@ -743,8 +746,11 @@ export default function NewProcedureScreen() {
                 type_of_provisional: proc.type_of_provisional || '',
                 type_of_provisional_other: proc.type_of_provisional_other || '',
                 sc_abutment_type: proc.sc_abutment_type || '',
+                sc_abutment_type_other: proc.sc_abutment_type_other || '',
                 sc_retention_type: proc.sc_retention_type || '',
+                sc_retention_type_other: proc.sc_retention_type_other || '',
                 sc_crown_material: proc.sc_crown_material || '',
+                sc_crown_material_other: proc.sc_crown_material_other || '',
                 ma_prosthesis_type: proc.ma_prosthesis_type || '',
                 ma_prosthesis_type_other: proc.ma_prosthesis_type_other || '',
                 ma_abutment_type: proc.ma_abutment_type || '',
@@ -922,7 +928,9 @@ export default function NewProcedureScreen() {
           implant_procedure_type: '', num_implants: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
           prosthetic_plan: '', prosthetic_plan_other: '', attachment_type: '', attachment_type_other: '', bone_graft_specifications: '',
           type_of_provisional: '', type_of_provisional_other: '',
-          sc_abutment_type: '', sc_retention_type: '', sc_crown_material: '',
+          sc_abutment_type: '', sc_abutment_type_other: '',
+          sc_retention_type: '', sc_retention_type_other: '',
+          sc_crown_material: '', sc_crown_material_other: '',
           ma_prosthesis_type: '', ma_prosthesis_type_other: '',
           ma_abutment_type: '', ma_abutment_type_other: '',
           ma_retention_type: '', ma_retention_type_other: '',
@@ -1396,30 +1404,38 @@ export default function NewProcedureScreen() {
       Alert.alert('Missing Field', 'Please upload both mandatory CBCT Reports before continuing.');
       return;
     }
-    // iter-Feb-2026 — Single-Conventional-Implant new workflow validation.
-    if (sanitized.implant_procedure_type === 'Single Conventional Implant') {
+    // iter-Feb-2026 / -C — Single-Conventional-Implant workflow validation.
+    // Now includes overlap types with num_implants='Single Implant'.
+    if (getEffectiveWorkflow(sanitized.implant_procedure_type, sanitized.num_implants) === 'SC') {
+      const otherFilled = (v: string, o: string) => v !== 'Other' || (!!o && o.trim().length > 0);
       if (sanitized.loading_type.includes('Immediate Loading') && !sanitized.type_of_provisional) {
         Alert.alert('Missing Field', 'Please select the Type of Provisional for Immediate Loading.');
         return;
       }
       if (!sanitized.sc_abutment_type) {
-        Alert.alert('Missing Field', 'Please select the Abutment Type.');
-        return;
+        Alert.alert('Missing Field', 'Please select the Abutment Type.'); return;
+      }
+      if (!otherFilled(sanitized.sc_abutment_type, sanitized.sc_abutment_type_other)) {
+        Alert.alert('Missing Field', 'Please describe the custom Abutment Type.'); return;
       }
       if (!sanitized.sc_retention_type) {
-        Alert.alert('Missing Field', 'Please select the Type of Retention.');
-        return;
+        Alert.alert('Missing Field', 'Please select the Type of Retention.'); return;
+      }
+      if (!otherFilled(sanitized.sc_retention_type, sanitized.sc_retention_type_other)) {
+        Alert.alert('Missing Field', 'Please describe the custom Type of Retention.'); return;
       }
       if (!sanitized.sc_crown_material) {
-        Alert.alert('Missing Field', 'Please select the Crown Material.');
-        return;
+        Alert.alert('Missing Field', 'Please select the Crown Material.'); return;
+      }
+      if (!otherFilled(sanitized.sc_crown_material, sanitized.sc_crown_material_other)) {
+        Alert.alert('Missing Field', 'Please describe the custom Crown Material.'); return;
       }
     }
-    // iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflow validation.
+    // iter-Feb-2026-B / -C — Multiple / Full-Arch / Zygoma workflow validation.
     {
-      const g = getWorkflowGroup(sanitized.implant_procedure_type);
+      const g = getEffectiveWorkflow(sanitized.implant_procedure_type, sanitized.num_implants);
       const otherFilled = (v: string, o: string) => v !== 'Other' || (o && o.trim().length > 0);
-      if (g && sanitized.loading_type.includes('Immediate Loading')) {
+      if ((g === 'A' || g === 'B' || g === 'C') && sanitized.loading_type.includes('Immediate Loading')) {
         if (!sanitized.type_of_provisional) {
           Alert.alert('Missing Field', 'Please select the Type of Provisional.'); return;
         }
@@ -1544,21 +1560,28 @@ export default function NewProcedureScreen() {
         ...(needsConventionalImplantLocation(sanitized.implant_procedure_type) ? {
           conventional_implant_locations: sanitized.conventional_implant_locations || [],
         } : {}),
-        // iter-Feb-2026 — Single-Conventional-Implant new workflow payload.
-        // Only send these fields for the pure Single Conventional Implant
-        // procedure type. Blank strings ⇒ backend stores null.
-        ...(sanitized.implant_procedure_type === 'Single Conventional Implant' ? {
+        // iter-Feb-2026 / -C — SC + overlap-with-Single workflow payload.
+        // Send SC fields when effective workflow is 'SC' (pure SC OR overlap
+        // types with num_implants='Single Implant').
+        ...(getEffectiveWorkflow(sanitized.implant_procedure_type, sanitized.num_implants) === 'SC' ? {
           type_of_provisional: sanitized.loading_type.includes('Immediate Loading')
-            ? (sanitized.type_of_provisional || '')
-            : '',
+            ? (sanitized.type_of_provisional || '') : '',
+          type_of_provisional_other: sanitized.loading_type.includes('Immediate Loading')
+            && sanitized.type_of_provisional === 'Other'
+              ? (sanitized.type_of_provisional_other || '') : '',
           sc_abutment_type: sanitized.sc_abutment_type || '',
+          sc_abutment_type_other: sanitized.sc_abutment_type === 'Other' ? (sanitized.sc_abutment_type_other || '') : '',
           sc_retention_type: sanitized.sc_retention_type || '',
+          sc_retention_type_other: sanitized.sc_retention_type === 'Other' ? (sanitized.sc_retention_type_other || '') : '',
           sc_crown_material: sanitized.sc_crown_material || '',
+          sc_crown_material_other: sanitized.sc_crown_material === 'Other' ? (sanitized.sc_crown_material_other || '') : '',
         } : {}),
-        // iter-Feb-2026-B — Multiple/Full-Arch/Zygoma workflow payload.
+        // iter-Feb-2026-B / -C — Multiple/Full-Arch/Zygoma workflow payload.
+        // Uses the effective workflow so overlap types with num_implants='Multiple Implants'
+        // route to Group A automatically.
         ...(() => {
-          const g = getWorkflowGroup(sanitized.implant_procedure_type);
-          if (!g) return {};
+          const g = getEffectiveWorkflow(sanitized.implant_procedure_type, sanitized.num_implants);
+          if (!g || g === 'SC') return {};
           const provIL = sanitized.loading_type.includes('Immediate Loading');
           const base: Record<string, any> = {
             type_of_provisional: provIL ? (sanitized.type_of_provisional || '') : '',
@@ -1855,18 +1878,19 @@ export default function NewProcedureScreen() {
       }
       if (!formData.prosthetic_plan
           && formData.implant_procedure_type !== 'Single Conventional Implant'
-          && getWorkflowGroup(formData.implant_procedure_type) === null) {
+          && getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) === null) {
         missImplantDetails.push('Prosthetic Plan');
       }
-      // iter-Feb-2026 — new Single-Conventional-Implant plan (3 sub-fields).
-      if (formData.implant_procedure_type === 'Single Conventional Implant') {
+      // iter-Feb-2026 / -C — Single-Conventional-Implant plan (3 sub-fields).
+      // Applies to pure SC + overlap types with num_implants='Single Implant'.
+      if (getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) === 'SC') {
         if (!formData.sc_abutment_type) missImplantDetails.push('Abutment Type');
         if (!formData.sc_retention_type) missImplantDetails.push('Type of Retention');
         if (!formData.sc_crown_material) missImplantDetails.push('Crown Material');
       }
-      // iter-Feb-2026-B — Group A/B/C plan validation for review pill.
+      // iter-Feb-2026-B / -C — Group A/B/C plan validation for review pill.
       {
-        const g = getWorkflowGroup(formData.implant_procedure_type);
+        const g = getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants);
         if (g === 'A') {
           if (!formData.ma_prosthesis_type) missImplantDetails.push('Prosthesis Type');
           if (!formData.ma_abutment_type) missImplantDetails.push('Abutment Type');
@@ -1956,9 +1980,8 @@ export default function NewProcedureScreen() {
       if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('Both CBCT Reports');
       if (!intraoralPhotos[0] || !intraoralPhotos[1]) missMedicalOrChecklist.push('Both Patient Intra-oral Photographs');
       if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
-      // iter-Feb-2026 / -B — Type of Provisional (SC + Group A/B/C when Immediate Loading picked)
-      if ((formData.implant_procedure_type === 'Single Conventional Implant'
-            || getWorkflowGroup(formData.implant_procedure_type) !== null)
+      // iter-Feb-2026 / -B / -C — Type of Provisional (any workflow group)
+      if (getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) !== null
           && (formData.loading_type || []).includes('Immediate Loading')
           && !formData.type_of_provisional) {
         missMedicalOrChecklist.push('Type of Provisional');
@@ -2690,35 +2713,63 @@ export default function NewProcedureScreen() {
             legacy single dropdown is replaced by a 3-part flow (Abutment /
             Retention / Crown Material). All other procedure types keep the
             existing single Prosthetic-Plan dropdown. */}
-      {(formData.implant_procedure_type === 'Single Conventional Implant') ? (
+      {(getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) === 'SC') ? (
+        // iter-Feb-2026 / -C — SC (pure or overlap+Single) → 3-part flow.
         <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
           <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
           <GroupedDescDropdown
             label="1. Abutment Type"
             required
             value={formData.sc_abutment_type}
-            onChange={v => updateForm('sc_abutment_type', v)}
+            onChange={v => { updateForm('sc_abutment_type', v); if (v !== 'Other') updateForm('sc_abutment_type_other', ''); }}
             options={SC_ABUTMENT_TYPE_OPTIONS}
             testID="sc-abutment-type-dropdown"
           />
+          {formData.sc_abutment_type === 'Other' && (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Specify Abutment Type <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <TextInput style={styles.input} value={formData.sc_abutment_type_other}
+                onChangeText={v => updateForm('sc_abutment_type_other', v)}
+                placeholder="Enter custom abutment type" multiline
+                data-testid="sc-abutment-type-other-input" />
+            </View>
+          )}
           <GroupedDescDropdown
             label="2. Type of Retention"
             required
             value={formData.sc_retention_type}
-            onChange={v => updateForm('sc_retention_type', v)}
+            onChange={v => { updateForm('sc_retention_type', v); if (v !== 'Other') updateForm('sc_retention_type_other', ''); }}
             options={SC_RETENTION_TYPE_OPTIONS}
             testID="sc-retention-type-dropdown"
           />
+          {formData.sc_retention_type === 'Other' && (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Specify Type of Retention <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <TextInput style={styles.input} value={formData.sc_retention_type_other}
+                onChangeText={v => updateForm('sc_retention_type_other', v)}
+                placeholder="Enter custom retention" multiline
+                data-testid="sc-retention-type-other-input" />
+            </View>
+          )}
           <GroupedDescDropdown
             label="3. Crown Material"
             required
             value={formData.sc_crown_material}
-            onChange={v => updateForm('sc_crown_material', v)}
+            onChange={v => { updateForm('sc_crown_material', v); if (v !== 'Other') updateForm('sc_crown_material_other', ''); }}
             options={SC_CROWN_MATERIAL_OPTIONS}
             testID="sc-crown-material-dropdown"
           />
+          {formData.sc_crown_material === 'Other' && (
+            <View style={styles.fieldContainer}>
+              <Text style={styles.label}>Specify Crown Material <Text style={{ color: '#DC3545' }}>*</Text></Text>
+              <TextInput style={styles.input} value={formData.sc_crown_material_other}
+                onChangeText={v => updateForm('sc_crown_material_other', v)}
+                placeholder="Enter custom crown material" multiline
+                data-testid="sc-crown-material-other-input" />
+            </View>
+          )}
         </View>
-      ) : getWorkflowGroup(formData.implant_procedure_type) === 'A' ? (
+      ) : getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) === 'A' ? (
         // iter-Feb-2026-B — Group A: Multiple Conv / Pterygoid + Conv → 4-part flow.
         <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
           <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
@@ -2779,7 +2830,7 @@ export default function NewProcedureScreen() {
             </View>
           )}
         </View>
-      ) : getWorkflowGroup(formData.implant_procedure_type) === 'B' ? (
+      ) : getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) === 'B' ? (
         // iter-Feb-2026-B — Group B: All on 4/6/X → single grouped plan.
         <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
           <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
@@ -2798,7 +2849,7 @@ export default function NewProcedureScreen() {
             </View>
           )}
         </View>
-      ) : getWorkflowGroup(formData.implant_procedure_type) === 'C' ? (
+      ) : getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) === 'C' ? (
         // iter-Feb-2026-B — Group C: Quad Zygoma + Zygo variants → 6-option plan.
         <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
           <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
@@ -3479,36 +3530,16 @@ export default function NewProcedureScreen() {
         </View>
       </View>
 
-      {/* iter-Feb-2026 — Type of Provisional
-            Single-Conventional-Implant (immediate loading) uses the original
-            single-tooth catalogue.
-
-            iter-Feb-2026-B — All other Groups (A/B/C) also render a
-            provisional dropdown here when Immediate Loading is picked.
-            Precedence: C > B > A > SC. Each group has its own catalogue. */}
-      {formData.implant_procedure_type === 'Single Conventional Implant'
-        && formData.loading_type.includes('Immediate Loading') && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Type of Provisional <Text style={{ color: '#DC3545' }}>*</Text>
-          </Text>
-          <GroupedDescDropdown
-            value={formData.type_of_provisional}
-            onChange={v => {
-              updateForm('type_of_provisional', v);
-              if (v !== 'Other') updateForm('type_of_provisional_other', '');
-            }}
-            groups={PROVISIONAL_GROUPED_OPTIONS}
-            placeholder="Select a provisional…"
-            testID="type-of-provisional-dropdown"
-          />
-        </View>
-      )}
-      {getWorkflowGroup(formData.implant_procedure_type) !== null
+      {/* iter-Feb-2026 / -B / -C — Type of Provisional
+            Renders for ANY effective workflow when Immediate Loading is
+            picked. Group-specific catalogue. "Other" reveals a free-text
+            input below the dropdown. */}
+      {getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) !== null
         && formData.loading_type.includes('Immediate Loading') && (() => {
-          const g = getWorkflowGroup(formData.implant_procedure_type);
+          const g = getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants);
           const groupsOptions =
-            g === 'A' ? GROUP_A_PROVISIONAL_OPTIONS
+            g === 'SC' ? PROVISIONAL_GROUPED_OPTIONS
+            : g === 'A' ? GROUP_A_PROVISIONAL_OPTIONS
             : g === 'B' ? GROUP_B_PROVISIONAL_OPTIONS
             : GROUP_C_PROVISIONAL_OPTIONS;
           return (

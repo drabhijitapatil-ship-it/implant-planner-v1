@@ -31,7 +31,7 @@ import {
   GROUP_A_PROVISIONAL_OPTIONS,
   GROUP_B_PROVISIONAL_OPTIONS,
   GROUP_C_PROVISIONAL_OPTIONS,
-  getWorkflowGroup,
+  getEffectiveWorkflow,
 } from '../../../constants/prosthesisWorkflows';
 
 export default function Phase2SubmissionScreen() {
@@ -1600,8 +1600,12 @@ export default function Phase2SubmissionScreen() {
                 new grouped Provisional catalogue (matches Phase 1 Type of Provisional).
                 Options depend on Phase 1 procedure_type + teeth count per product spec. */}
             {prostheticComponent === 'Immediate Loading Done' && (() => {
-              // iter-Feb-2026 — Single Conventional Implant override.
-              if (procedureType === 'Single Conventional Implant') {
+              // iter-Feb-2026 / -B / -C — Group-aware provisional dropdown.
+              // Uses `getEffectiveWorkflow` so overlap procedure types
+              // (Immediate Implant / Sinus Lift / PET / GBR / Guided Surgery)
+              // pick SC or Group A based on Phase 1's num_implants answer.
+              const g = getEffectiveWorkflow(procedureType, phase1NumImplants);
+              if (g === 'SC') {
                 return (
                   <View style={s.section}>
                     <Text style={s.torqueTitle}>Prosthesis Type</Text>
@@ -1612,12 +1616,20 @@ export default function Phase2SubmissionScreen() {
                       placeholder="Select a provisional…"
                       testID="phase2-sc-provisional-dropdown"
                     />
+                    {prosthesisType === 'Other' && (
+                      <TextInput
+                        style={[s.textArea, { marginTop: 8 }]}
+                        value={prosthesisTypeOther}
+                        onChangeText={setProsthesisTypeOther}
+                        placeholder="Describe the prosthesis type..."
+                        multiline
+                        data-testid="prosthesis-type-other-input"
+                      />
+                    )}
                   </View>
                 );
               }
-              // iter-Feb-2026-B — Group A/B/C override.
-              const g = getWorkflowGroup(procedureType);
-              if (g) {
+              if (g === 'A' || g === 'B' || g === 'C') {
                 const groups =
                   g === 'A' ? GROUP_A_PROVISIONAL_OPTIONS
                   : g === 'B' ? GROUP_B_PROVISIONAL_OPTIONS
@@ -1630,7 +1642,7 @@ export default function Phase2SubmissionScreen() {
                       onChange={setProsthesisType}
                       groups={groups}
                       placeholder="Select a provisional…"
-                      testID={`phase2-group-${g?.toLowerCase()}-provisional-dropdown`}
+                      testID={`phase2-group-${g.toLowerCase()}-provisional-dropdown`}
                     />
                     {prosthesisType === 'Other' && (
                       <TextInput

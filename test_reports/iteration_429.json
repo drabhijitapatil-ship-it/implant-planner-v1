@@ -1,0 +1,37 @@
+{
+  "summary": "iter-Feb-2026-C backend testing complete. All 45/45 tests pass (SC 6/6 + iter-B 22/22 regressions + new iter-C 17/17). Verified: (a) SC `_other` sibling fields (sc_abutment_type_other, sc_retention_type_other, sc_crown_material_other, sc_final_*_other) persist via POST/GET/PUT and appear in the Phase 4 audit diff; (b) all 5 overlap procedure types ('Immediate Implant', 'Partial Extraction Therapy', 'Implant Placement with Guided Bone Regeneration', 'Guided Surgery', 'Sinus Lift') route to SC when num_implants='Single Implant' and to Group A (ma_*) when num_implants='Multiple Implants'; (c) audit consolidates to ONE entry per Phase 4 submit for the effective workflow with correct field names (sc_final_* or ma_final_*), idempotent on identical re-submits, unchanged fields not audited, no cross-workflow field leaks; (d) PDF export shows SC labels for Single-Implant overlap and Group A labels for Multiple-Implant overlap; (e) overlap types without num_implants still create without any SC/MA fields required and none leak.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_feb2026_c_sc_other_and_overlap.py",
+    "/app/backend/tests/test_iter_feb2026_single_conventional.py",
+    "/app/backend/tests/test_iter_feb2026_b_multi_fullarch_zygoma.py",
+    "/app/test_reports/pytest/iterFeb2026_all.xml",
+    "/app/test_reports/pytest/iterFeb2026C.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 24k+ lines — long-standing size violation; splitting into modular routers/services should remain in the backlog but is out of scope for this iteration.",
+    "PyPDF2 DeprecationWarning surfaced by pypdf fallback in the SC test — cosmetic; migrate to `pypdf` only."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_feb2026_c_sc_other_and_overlap.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (45/45 across the three iter-Feb-2026 suites)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "Each test uses `TEST_`-prefixed patient/registration numbers and cleans up its created procedures via the `created_ids` fixture (delete_many on Mongo). Phase-4 gate is bypassed by directly setting status=stage2_surgical_approved / current_phase=3 in Mongo, matching the pattern used in the existing regression suites.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend iter-Feb-2026-C is green. The new test file (`test_iter_feb2026_c_sc_other_and_overlap.py`) covers SC `_other` fields, overlap routing (Single Implant → SC, Multiple Implants → Group A) for all 5 overlap procedure types, audit trail, PDF labels for effective workflow, and non-overlap regression. Note that 'Sinus Lift' requires extra fields (sinus_lift_type + bone_graft_material_details) and maxillary-posterior teeth (14-17,24-27). The `_overlap_extras()` helper handles this. Overlap Multiple-Implants path uses 2-tooth site (15,16) except Sinus Lift (single posterior tooth 16). For future iterations, use overlap types + num_implants and the same fixtures.",
+  "rca_of_issue": "N/A — no bugs found. All acceptance criteria from the review request are exercised and pass."
+}
