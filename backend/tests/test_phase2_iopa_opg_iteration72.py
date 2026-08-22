@@ -15,7 +15,7 @@ import os
 import io
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://dental-consent-sign.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://prosthetic-preview.preview.emergentagent.com').rstrip('/')
 
 # Test credentials from test_credentials.md
 STUDENT_CREDS = {"identifier": "Gaurav.pandey@student.dental.edu", "password": "Student@123"}

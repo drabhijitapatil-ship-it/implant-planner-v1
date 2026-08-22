@@ -25,6 +25,12 @@ import {
   SINGLE_GROUP,
   MULTIPLE_GROUP,
 } from '../../../constants/checklist';
+import GroupedDescDropdown from '../../../components/GroupedDescDropdown';
+import {
+  SC_ABUTMENT_TYPE_OPTIONS,
+  SC_RETENTION_TYPE_OPTIONS,
+  SC_CROWN_MATERIAL_OPTIONS,
+} from '../../../constants/singleConventional';
 
 export default function Phase4Step1Screen() {
   const { id } = useLocalSearchParams();
@@ -89,6 +95,14 @@ export default function Phase4Step1Screen() {
   // Per-implant prosthetic plan for multiple implants (non-bridge)
   const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
+
+  // iter-Feb-2026 — Single-Conventional-Implant Final Prosthetic Plan.
+  // Three sub-fields override the legacy `finalProsthesis` dropdown when
+  // procedure type is 'Single Conventional Implant'. Values are seeded
+  // from any prior Phase 4 submit; otherwise fall back to Phase 1.
+  const [scFinalAbutmentType, setScFinalAbutmentType] = useState('');
+  const [scFinalRetentionType, setScFinalRetentionType] = useState('');
+  const [scFinalCrownMaterial, setScFinalCrownMaterial] = useState('');
 
   useEffect(() => { loadProcedure(); }, []);
 
@@ -168,6 +182,14 @@ export default function Phase4Step1Screen() {
       setScanBodyTypes(Array.isArray(p4.scan_body_types) ? p4.scan_body_types : []);
       setScanTypes(Array.isArray(p4.scan_types) ? p4.scan_types : []);
       setScanLevels(Array.isArray(p4.scan_levels) ? p4.scan_levels : []);
+
+      // iter-Feb-2026 — Hydrate Single-Conventional-Implant Final Plan.
+      // Prefer any saved Phase 4 override, else copy Phase 1 selection.
+      if (procType === 'Single Conventional Implant') {
+        setScFinalAbutmentType(p4.sc_final_abutment_type || procRes.data?.sc_abutment_type || '');
+        setScFinalRetentionType(p4.sc_final_retention_type || procRes.data?.sc_retention_type || '');
+        setScFinalCrownMaterial(p4.sc_final_crown_material || procRes.data?.sc_crown_material || '');
+      }
     } catch {}
   };
 
@@ -176,6 +198,10 @@ export default function Phase4Step1Screen() {
     if (!procedure) return false;
     return FULL_ARCH_GROUP.has(procedure.implant_procedure_type || '');
   })();
+
+  // iter-Feb-2026 — pure Single Conventional Implant helper. Drives the
+  // new 3-part Final Plan UI + validation + payload branch.
+  const isSCImplant = procedure?.implant_procedure_type === 'Single Conventional Implant';
 
   // Determine if per-implant mode: Multiple implants + no bridge in Phase 1 prosthetic plan
   const isPerImplantMode = (() => {
@@ -211,7 +237,12 @@ export default function Phase4Step1Screen() {
   // iter-194: validate shape required for both Submit and Generate-Lab-Slip paths.
   // Returns null when valid, else a user-facing message.
   const validateForm = (): string | null => {
-    if (isPerImplantMode) {
+    // iter-Feb-2026 — Single-Conventional-Implant validation takes priority.
+    if (isSCImplant) {
+      if (!scFinalAbutmentType) return 'Please select the Abutment Type';
+      if (!scFinalRetentionType) return 'Please select the Type of Retention';
+      if (!scFinalCrownMaterial) return 'Please select the Crown Material';
+    } else if (isPerImplantMode) {
       for (let i = 0; i < perImplantPlans.length; i++) {
         if (!perImplantPlans[i].prosthesis) {
           const _lbl = implantPositions[i] ? `Implant ${implantPositions[i]}` : `Implant ${i + 1}`;
@@ -278,6 +309,18 @@ export default function Phase4Step1Screen() {
         `#${implantPositions[idx] || idx + 1}: ${p.prosthesis}${p.material ? ' - ' + p.material : ''}`
       ).join('; ');
       payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
+    } else if (isSCImplant) {
+      // iter-Feb-2026 — Single-Conventional-Implant 3-part plan.
+      // We also collapse the 3 into a single human-readable string on
+      // `final_prosthetic_plan` so existing renderers/PDFs keep working
+      // without needing the granular fields.
+      payload.sc_final_abutment_type = scFinalAbutmentType;
+      payload.sc_final_retention_type = scFinalRetentionType;
+      payload.sc_final_crown_material = scFinalCrownMaterial;
+      payload.final_prosthetic_plan =
+        `${scFinalRetentionType} — ${scFinalCrownMaterial}` +
+        (scFinalAbutmentType ? ` (Abutment: ${scFinalAbutmentType})` : '');
+      payload.prosthetic_material = scFinalCrownMaterial || null;
     } else {
       payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
       payload.prosthetic_material = prostheticMaterial || null;
@@ -474,18 +517,89 @@ export default function Phase4Step1Screen() {
               </>
             ) : (
               <>
-                {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
-                  prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
+                {isSCImplant ? (
+                  <>
+                    {/* iter-Feb-2026 — Single-Conventional-Implant Final Plan.
+                        3-part flow: Abutment → Retention → Crown Material.
+                        The Phase 1 selection is shown as a read-only banner
+                        so the operator can see what was originally planned
+                        and change it here if needed. Changes are audited on
+                        `prosthetic_plan_change_log` by the backend. */}
+                    {(procedure?.sc_abutment_type
+                      || procedure?.sc_retention_type
+                      || procedure?.sc_crown_material) && (
+                      <View style={{
+                        backgroundColor: '#FFF8E1',
+                        borderRadius: 10,
+                        padding: 12,
+                        marginBottom: 12,
+                        borderWidth: 1,
+                        borderColor: '#FFE082',
+                      }}>
+                        <Text style={{ fontSize: 11, color: '#8D6E63', fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 }}>
+                          PHASE 1 PLAN (REFERENCE)
+                        </Text>
+                        {!!procedure.sc_abutment_type && (
+                          <Text style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
+                            <Text style={{ fontWeight: '700' }}>Abutment: </Text>{procedure.sc_abutment_type}
+                          </Text>
+                        )}
+                        {!!procedure.sc_retention_type && (
+                          <Text style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
+                            <Text style={{ fontWeight: '700' }}>Retention: </Text>{procedure.sc_retention_type}
+                          </Text>
+                        )}
+                        {!!procedure.sc_crown_material && (
+                          <Text style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
+                            <Text style={{ fontWeight: '700' }}>Crown Material: </Text>{procedure.sc_crown_material}
+                          </Text>
+                        )}
+                        <Text style={{ fontSize: 11, color: '#8D6E63', marginTop: 6, fontStyle: 'italic' }}>
+                          You may keep or change the plan below. All changes are audited.
+                        </Text>
+                      </View>
+                    )}
+                    <GroupedDescDropdown
+                      label="1. Abutment Type"
+                      required
+                      value={scFinalAbutmentType}
+                      onChange={setScFinalAbutmentType}
+                      options={SC_ABUTMENT_TYPE_OPTIONS}
+                      testID="sc-final-abutment-type"
+                    />
+                    <GroupedDescDropdown
+                      label="2. Type of Retention"
+                      required
+                      value={scFinalRetentionType}
+                      onChange={setScFinalRetentionType}
+                      options={SC_RETENTION_TYPE_OPTIONS}
+                      testID="sc-final-retention-type"
+                    />
+                    <GroupedDescDropdown
+                      label="3. Crown Material"
+                      required
+                      value={scFinalCrownMaterial}
+                      onChange={setScFinalCrownMaterial}
+                      options={SC_CROWN_MATERIAL_OPTIONS}
+                      testID="sc-final-crown-material"
+                    />
+                  </>
+                ) : (
+                  <>
+                    {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
+                      prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
 
-                {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
-                  materialOpen, setMaterialOpen, setProstheticMaterial)}
+                    {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
+                      materialOpen, setMaterialOpen, setProstheticMaterial)}
 
-                {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
-                  attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
+                    {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
+                      attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
+                  </>
+                )}
               </>
             )}
 
-            {renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
+            {!isSCImplant && renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
               abutmentOpen, setAbutmentOpen, setCustomAbutment, false)}
           </View>
 

@@ -36,7 +36,7 @@ load_dotenv("/app/backend/.env")
 
 BASE_URL = os.environ["EXPO_PUBLIC_BACKEND_URL"].rstrip("/") if os.environ.get(
     "EXPO_PUBLIC_BACKEND_URL"
-) else "https://dental-consent-sign.preview.emergentagent.com"
+) else "https://prosthetic-preview.preview.emergentagent.com"
 
 # Direct mongo access (test-side only) for status mutation.
 _mongo = MongoClient(os.environ["MONGO_URL"])

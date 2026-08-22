@@ -4,7 +4,7 @@ import pytest
 import requests
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://dental-consent-sign.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://prosthetic-preview.preview.emergentagent.com").rstrip("/")
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}
 
 SUPERVISOR_ID = "69b79407a17f36c024eb2d60"

@@ -2336,6 +2336,20 @@ export default function ProcedureDetailScreen() {
             {procedure.prosthetic_plan_other && (
               <InfoRow icon="create" label="Prosthetic Plan (Other)" value={procedure.prosthetic_plan_other} fieldKey="prosthetic_plan_other" />
             )}
+            {/* iter-Feb-2026 — Single-Conventional-Implant new plan fields.
+                Only visible when the case is Single Conventional Implant. */}
+            {procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.type_of_provisional && (
+              <InfoRow icon="medkit" label="Type of Provisional" value={procedure.type_of_provisional} fieldKey="type_of_provisional" />
+            )}
+            {procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_abutment_type && (
+              <InfoRow icon="cube" label="Abutment Type" value={procedure.sc_abutment_type} fieldKey="sc_abutment_type" />
+            )}
+            {procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_retention_type && (
+              <InfoRow icon="link" label="Type of Retention" value={procedure.sc_retention_type} fieldKey="sc_retention_type" />
+            )}
+            {procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_crown_material && (
+              <InfoRow icon="diamond" label="Crown Material" value={procedure.sc_crown_material} fieldKey="sc_crown_material" />
+            )}
           </View>
         )}
 
@@ -2725,6 +2739,33 @@ export default function ProcedureDetailScreen() {
             </View>
             <View style={{ backgroundColor: '#FFF8E1', borderRadius: 8, padding: 12 }}>
               <Text style={{ fontSize: 15, fontWeight: '600', color: '#333' }}>{procedure.final_prosthetic_plan}</Text>
+              {/* iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
+                  When the case is Single Conventional Implant AND Phase 4 Step 1
+                  captured the 3-part breakdown, surface each field so reviewers
+                  see the exact abutment / retention / material chosen. */}
+              {procedure.implant_procedure_type === 'Single Conventional Implant'
+                && procedure.phase4_step1_data
+                && (procedure.phase4_step1_data.sc_final_abutment_type
+                  || procedure.phase4_step1_data.sc_final_retention_type
+                  || procedure.phase4_step1_data.sc_final_crown_material) && (
+                <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#FFE082' }}>
+                  {!!procedure.phase4_step1_data.sc_final_abutment_type && (
+                    <Text style={{ fontSize: 13, color: '#4E342E', marginTop: 4 }}>
+                      <Text style={{ fontWeight: '700' }}>Abutment: </Text>{procedure.phase4_step1_data.sc_final_abutment_type}
+                    </Text>
+                  )}
+                  {!!procedure.phase4_step1_data.sc_final_retention_type && (
+                    <Text style={{ fontSize: 13, color: '#4E342E', marginTop: 4 }}>
+                      <Text style={{ fontWeight: '700' }}>Retention: </Text>{procedure.phase4_step1_data.sc_final_retention_type}
+                    </Text>
+                  )}
+                  {!!procedure.phase4_step1_data.sc_final_crown_material && (
+                    <Text style={{ fontSize: 13, color: '#4E342E', marginTop: 4 }}>
+                      <Text style={{ fontWeight: '700' }}>Crown Material: </Text>{procedure.phase4_step1_data.sc_final_crown_material}
+                    </Text>
+                  )}
+                </View>
+              )}
             </View>
           </View>
         )}

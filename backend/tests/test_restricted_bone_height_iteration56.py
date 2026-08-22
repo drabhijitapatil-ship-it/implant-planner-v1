@@ -12,7 +12,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://dental-consent-sign.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://prosthetic-preview.preview.emergentagent.com')
 
 # P1 system keys (brand|system format)
 P1_SYSTEMS = {

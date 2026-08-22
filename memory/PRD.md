@@ -1,5 +1,54 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration Feb-2026-SC (Feb 2026) — Single Conventional Implant prosthesis workflow
+
+**Scope**: User request — implement a dedicated Single-Conventional-Implant prosthesis workflow with clinical descriptions across Phase 1, Phase 2 Step 2, and Phase 4 Step 1.
+
+### User choices (from ask_human)
+- Q1: Only ONE Provisional option total (single-select across all 4 groups)
+- Q2: Descriptions displayed as smaller sub-text under each option label in the dropdown
+- Q3: Change audit visible to ALL reviewers (reuses `prosthetic_plan_change_log`)
+- Q4: Applies ONLY to pure `Single Conventional Implant` cases (not mixed with Zygoma/Pterygoid)
+- Q5: Fully replace the legacy Phase 1 Prosthetic Plan dropdown for this procedure type
+
+### Delivered
+
+**Backend** (`server.py`)
+- `ProcedureCreate` + `ProcedureUpdate` gain 4 new optional string fields (max 200 chars each): `type_of_provisional`, `sc_abutment_type`, `sc_retention_type`, `sc_crown_material`.
+- `Stage2ProstheticSubmit` gains 3 new optional string fields: `sc_final_abutment_type`, `sc_final_retention_type`, `sc_final_crown_material`.
+- Phase 4 Step 1 endpoint (`submit_stage2_prosthetic`) compares each SC-final field against `phase4_step1_data.sc_final_*` (prior submit) → falls back to `procedure.sc_*` (Phase 1 baseline). If any differs, ONE consolidated audit entry is appended to `procedure.prosthetic_plan_change_log`: `{changes:[{field, from, to}], changed_by, changed_by_name, changed_by_role, changed_in_phase:4, changed_step:1, changed_at}`. Idempotent — no re-audit on unchanged re-submit.
+- PDF text builders + structured PDF renderer emit the new labels: "Type of Provisional", "Abutment Type", "Type of Retention", "Crown Material" (Phase 1) + "Final Abutment Type", "Final Type of Retention", "Final Crown Material" (Phase 4).
+
+**Frontend**
+- New catalog file `/app/frontend/constants/singleConventional.ts` — 4 grouped provisional categories (16 total options), 9 Abutment Types, 3 Retention Types, 11 Crown Materials, each with a short clinical description.
+- New reusable component `/app/frontend/components/GroupedDescDropdown.tsx` — scrollable single-select dropdown with group headers and sub-text descriptions; nested scroll, 320 px cap.
+- Phase 1 `(tabs)/new-procedure.tsx`:
+  - Prosthetic Plan block replaced (for Single Conventional Implant only) by the 3-part flow.
+  - New "Type of Provisional" section rendered after "Type of Loading" when procedure type is SC AND Immediate Loading is picked.
+  - Hard-validation on submit + soft indicators in the review pill.
+- Phase 2 Step 2 `submit-phase2/[id].tsx`:
+  - When Prosthetic Component = "Immediate Loading Done" AND procedure = SC, the "Prosthesis Type" picker swaps to the grouped Provisional dropdown.
+- Phase 4 Step 1 `submit-stage2-prosthetic/[id].tsx`:
+  - Read-only amber banner "Phase 1 Plan (reference)" with the 3 Phase 1 selections.
+  - Replaces the legacy Final Prosthesis / Material / Overdenture / Custom Abutment fields (for SC only) with the 3-part flow. `final_prosthetic_plan` string auto-composed as `"{retention} — {material} (Abutment: {abutment})"`.
+- Case Details `procedures/[id].tsx`: new InfoRows for the 4 Phase 1 SC fields; Final Prosthetic Plan card surfaces the 3 Phase 4 granular fields.
+- PDF `utils/pdfGenerator.ts`: case-report + Phase 4 section + Lab Slip Final Prosthesis Plan block all render the new labels.
+
+### Tests
+- Backend: `/app/backend/tests/test_iter_feb2026_single_conventional.py` — 6/6 pytest passing (iteration_427.json).
+  1. POST /api/procedures persists all 4 Phase 1 SC fields.
+  2. PUT /api/procedures/{id} updates all 4 SC fields.
+  3. Phase 2 Step 2 submit stores catalogue value verbatim.
+  4. Phase 4 Step 1 submit persists sc_final_* + one consolidated audit entry; idempotent.
+  5. PDF export contains all 7 SC labels.
+  6. Non-SC regression — Multiple Conventional Implants case unaffected.
+
+### Environment note
+- The forked container had ~80 corrupted Python packages (null bytes in `.py` files + invalid ELF headers on `pydantic_core.so`, `watchfiles.so`, etc.). Restored via `uv pip install -r requirements.txt` after removing the corrupt dist-info directories. Not related to this iteration's code changes.
+
+---
+
+
 ## Iteration Feb-2026-A (Feb 2026) — Refirm Zygoma & Pterygoid Implants — Foundation + Phase 1 workflow
 
 **Scope**: User request — introduce Zygoma (Z-Series) and Pterygoid (P-Series) implants from Refirm® (IntEssence Solutions, ISO 13485:2016) as distinct implant types with a dedicated advanced-maxillary rehabilitation workflow. Milestone 1 of 3: foundation + Phase 1 data-capture form.

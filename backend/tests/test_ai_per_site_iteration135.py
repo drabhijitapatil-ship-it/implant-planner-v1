@@ -22,7 +22,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 API_URL = os.environ.get(
     "API_URL",
-    "https://dental-consent-sign.preview.emergentagent.com",
+    "https://prosthetic-preview.preview.emergentagent.com",
 ).rstrip("/")
 STUDENT_LOGIN = {"identifier": "Gaurav.pandey", "password": "Student@123"}
 

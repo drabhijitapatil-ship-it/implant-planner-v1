@@ -18,6 +18,7 @@ import PredictiveRiskCard from '../../components/PredictiveRiskCard';
 import ExistingPatientBanner from '../../components/ExistingPatientBanner';
 import PatientNameMatchBanner from '../../components/PatientNameMatchBanner';
 import ZygomaPterygoidPhase1Form, { ZygomaPterygoidPhase1Data } from '../../components/ZygomaPterygoidPhase1Form';
+import GroupedDescDropdown from '../../components/GroupedDescDropdown';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -51,6 +52,12 @@ import {
 } from '../../constants/checklist';
 
 import { BACKEND_URL } from '../../utils/config';
+import {
+  PROVISIONAL_GROUPED_OPTIONS,
+  SC_ABUTMENT_TYPE_OPTIONS,
+  SC_RETENTION_TYPE_OPTIONS,
+  SC_CROWN_MATERIAL_OPTIONS,
+} from '../../constants/singleConventional';
 
 // ─── Multi-Select Dropdown ─────────────────────────────
 function MultiSelectDropdown({ label, values, options, onChange, placeholder, required }: {
@@ -393,6 +400,15 @@ export default function NewProcedureScreen() {
     // "Overdenture with Attachment". "Other" opens the free-text field below.
     attachment_type: '',
     attachment_type_other: '',
+    // iter-Feb-2026: Single-Conventional-Implant workflow fields.
+    // Only used when implant_procedure_type === 'Single Conventional Implant'.
+    // • type_of_provisional — required when Immediate Loading is picked.
+    // • sc_abutment_type / sc_retention_type / sc_crown_material — replace
+    //   the legacy Prosthetic Plan dropdown for this procedure type.
+    type_of_provisional: '',
+    sc_abutment_type: '',
+    sc_retention_type: '',
+    sc_crown_material: '',
     bone_graft_specifications: '',
     // Clinical Examination
     occlusocervical_height: '',
@@ -700,6 +716,11 @@ export default function NewProcedureScreen() {
                 prosthetic_plan_other: proc.prosthetic_plan_other || '',
                 attachment_type: proc.attachment_type || '',
                 attachment_type_other: proc.attachment_type_other || '',
+                // iter-Feb-2026: Single-Conventional-Implant workflow fields
+                type_of_provisional: proc.type_of_provisional || '',
+                sc_abutment_type: proc.sc_abutment_type || '',
+                sc_retention_type: proc.sc_retention_type || '',
+                sc_crown_material: proc.sc_crown_material || '',
                 bone_graft_specifications: proc.bone_graft_specifications || '',
                 // Clinical Examination
                 occlusocervical_height: proc.occlusocervical_height || '',
@@ -864,6 +885,7 @@ export default function NewProcedureScreen() {
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
           implant_procedure_type: '', num_implants: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
           prosthetic_plan: '', prosthetic_plan_other: '', attachment_type: '', attachment_type_other: '', bone_graft_specifications: '',
+          type_of_provisional: '', sc_abutment_type: '', sc_retention_type: '', sc_crown_material: '',
           edentulous_sites: [] as string[], occlusocervical_height: '', mesiodistal_space: '',
           arch_condition: '', ridge_contour: '',
           soft_tissue_thickness: '', keratinized_mucosa: '', periodontal_status: '', occlusal_scheme: '',
@@ -1331,6 +1353,25 @@ export default function NewProcedureScreen() {
       Alert.alert('Missing Field', 'Please upload both mandatory CBCT Reports before continuing.');
       return;
     }
+    // iter-Feb-2026 — Single-Conventional-Implant new workflow validation.
+    if (sanitized.implant_procedure_type === 'Single Conventional Implant') {
+      if (sanitized.loading_type.includes('Immediate Loading') && !sanitized.type_of_provisional) {
+        Alert.alert('Missing Field', 'Please select the Type of Provisional for Immediate Loading.');
+        return;
+      }
+      if (!sanitized.sc_abutment_type) {
+        Alert.alert('Missing Field', 'Please select the Abutment Type.');
+        return;
+      }
+      if (!sanitized.sc_retention_type) {
+        Alert.alert('Missing Field', 'Please select the Type of Retention.');
+        return;
+      }
+      if (!sanitized.sc_crown_material) {
+        Alert.alert('Missing Field', 'Please select the Crown Material.');
+        return;
+      }
+    }
     // iter-137: Type of Attachment is required when Prosthetic Plan is Overdenture-with-Attachment.
     if (sanitized.prosthetic_plan === 'Overdenture with Attachment') {
       if (!sanitized.attachment_type) {
@@ -1424,6 +1465,17 @@ export default function NewProcedureScreen() {
         // iter-Feb-2026 (v3): Conventional implant sites for mixed cases.
         ...(needsConventionalImplantLocation(sanitized.implant_procedure_type) ? {
           conventional_implant_locations: sanitized.conventional_implant_locations || [],
+        } : {}),
+        // iter-Feb-2026 — Single-Conventional-Implant new workflow payload.
+        // Only send these fields for the pure Single Conventional Implant
+        // procedure type. Blank strings ⇒ backend stores null.
+        ...(sanitized.implant_procedure_type === 'Single Conventional Implant' ? {
+          type_of_provisional: sanitized.loading_type.includes('Immediate Loading')
+            ? (sanitized.type_of_provisional || '')
+            : '',
+          sc_abutment_type: sanitized.sc_abutment_type || '',
+          sc_retention_type: sanitized.sc_retention_type || '',
+          sc_crown_material: sanitized.sc_crown_material || '',
         } : {}),
       };
 
@@ -1695,7 +1747,16 @@ export default function NewProcedureScreen() {
       ) {
         missImplantDetails.push('Number of Implants');
       }
-      if (!formData.prosthetic_plan) missImplantDetails.push('Prosthetic Plan');
+      if (!formData.prosthetic_plan
+          && formData.implant_procedure_type !== 'Single Conventional Implant') {
+        missImplantDetails.push('Prosthetic Plan');
+      }
+      // iter-Feb-2026 — new Single-Conventional-Implant plan (3 sub-fields).
+      if (formData.implant_procedure_type === 'Single Conventional Implant') {
+        if (!formData.sc_abutment_type) missImplantDetails.push('Abutment Type');
+        if (!formData.sc_retention_type) missImplantDetails.push('Type of Retention');
+        if (!formData.sc_crown_material) missImplantDetails.push('Crown Material');
+      }
       // iter-387: surgical-approach cascade requirements
       if (!formData.procedure_surgery_type) missImplantDetails.push('Procedure Type');
       else if (isGuidedApproach(formData.procedure_surgery_type)) {
@@ -1774,6 +1835,12 @@ export default function NewProcedureScreen() {
       if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('Both CBCT Reports');
       if (!intraoralPhotos[0] || !intraoralPhotos[1]) missMedicalOrChecklist.push('Both Patient Intra-oral Photographs');
       if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
+      // iter-Feb-2026 — Type of Provisional (Single Conventional + Immediate Loading)
+      if (formData.implant_procedure_type === 'Single Conventional Implant'
+          && (formData.loading_type || []).includes('Immediate Loading')
+          && !formData.type_of_provisional) {
+        missMedicalOrChecklist.push('Type of Provisional');
+      }
       const ma = formData.medical_assessment || {};
       if (!ma.diabetes) missMedicalOrChecklist.push('Diabetes (medical assessment)');
       if (!ma.smoking) missMedicalOrChecklist.push('Smoking status (medical assessment)');
@@ -2495,8 +2562,41 @@ export default function NewProcedureScreen() {
 
       {/* ─── Prosthetic Treatment Plan ─── (moved here per iter-134; now appears
             BEFORE the FDI chart so that an Overdenture-with-Attachment choice
-            can flip the case into a full-arch protocol and skip teeth selection.) */}
-      {prostheticOptions.length > 0 && (
+            can flip the case into a full-arch protocol and skip teeth selection.)
+
+            iter-Feb-2026 — For pure Single Conventional Implant cases the
+            legacy single dropdown is replaced by a 3-part flow (Abutment /
+            Retention / Crown Material). All other procedure types keep the
+            existing single Prosthetic-Plan dropdown. */}
+      {(formData.implant_procedure_type === 'Single Conventional Implant') ? (
+        <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
+          <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
+          <GroupedDescDropdown
+            label="1. Abutment Type"
+            required
+            value={formData.sc_abutment_type}
+            onChange={v => updateForm('sc_abutment_type', v)}
+            options={SC_ABUTMENT_TYPE_OPTIONS}
+            testID="sc-abutment-type-dropdown"
+          />
+          <GroupedDescDropdown
+            label="2. Type of Retention"
+            required
+            value={formData.sc_retention_type}
+            onChange={v => updateForm('sc_retention_type', v)}
+            options={SC_RETENTION_TYPE_OPTIONS}
+            testID="sc-retention-type-dropdown"
+          />
+          <GroupedDescDropdown
+            label="3. Crown Material"
+            required
+            value={formData.sc_crown_material}
+            onChange={v => updateForm('sc_crown_material', v)}
+            options={SC_CROWN_MATERIAL_OPTIONS}
+            testID="sc-crown-material-dropdown"
+          />
+        </View>
+      ) : prostheticOptions.length > 0 && (
         <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
           <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
           <Dropdown label="Prosthetic Plan" value={formData.prosthetic_plan}
@@ -3157,6 +3257,26 @@ export default function NewProcedureScreen() {
           ))}
         </View>
       </View>
+
+      {/* iter-Feb-2026 — Type of Provisional
+            Rendered only for pure Single Conventional Implant + Immediate
+            Loading. Grouped scrollable dropdown, single-select, shows a
+            short clinical description under each option label. */}
+      {formData.implant_procedure_type === 'Single Conventional Implant'
+        && formData.loading_type.includes('Immediate Loading') && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Type of Provisional <Text style={{ color: '#DC3545' }}>*</Text>
+          </Text>
+          <GroupedDescDropdown
+            value={formData.type_of_provisional}
+            onChange={v => updateForm('type_of_provisional', v)}
+            groups={PROVISIONAL_GROUPED_OPTIONS}
+            placeholder="Select a provisional…"
+            testID="type-of-provisional-dropdown"
+          />
+        </View>
+      )}
 
       {/* Prosthetic Treatment Plan was moved up to immediately follow Procedure
           Information (iter-134). Empty placeholder retained intentionally. */}

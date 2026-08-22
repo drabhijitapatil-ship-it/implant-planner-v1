@@ -25,6 +25,8 @@ import {
 import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
 import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
 import PhaseStep2TabbedView from '../../../components/PhaseStep2TabbedView';
+import GroupedDescDropdown from '../../../components/GroupedDescDropdown';
+import { PROVISIONAL_GROUPED_OPTIONS } from '../../../constants/singleConventional';
 
 export default function Phase2SubmissionScreen() {
   const { id } = useLocalSearchParams();
@@ -1588,8 +1590,25 @@ export default function Phase2SubmissionScreen() {
             )}
 
             {/* Prosthesis Type — only when Prosthetic Component === Immediate Loading Done.
+                iter-Feb-2026: For pure Single Conventional Implant cases, use the
+                new grouped Provisional catalogue (matches Phase 1 Type of Provisional).
                 Options depend on Phase 1 procedure_type + teeth count per product spec. */}
             {prostheticComponent === 'Immediate Loading Done' && (() => {
+              // iter-Feb-2026 — Single Conventional Implant override.
+              if (procedureType === 'Single Conventional Implant') {
+                return (
+                  <View style={s.section}>
+                    <Text style={s.torqueTitle}>Prosthesis Type</Text>
+                    <GroupedDescDropdown
+                      value={prosthesisType}
+                      onChange={setProsthesisType}
+                      groups={PROVISIONAL_GROUPED_OPTIONS}
+                      placeholder="Select a provisional…"
+                      testID="phase2-sc-provisional-dropdown"
+                    />
+                  </View>
+                );
+              }
               // Overlapping modifier procedure types — Group A/B decided by teeth count.
               const OVERLAP = new Set(['Immediate Implant','Partial Extraction Therapy','Implant Placement with Guided Bone Regeneration','Guided Surgery']);
               const FULL_ARCH = new Set(['All on 4','All on 6','All on X']);

@@ -21,7 +21,7 @@ import requests
 import os
 import io
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://dental-consent-sign.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://prosthetic-preview.preview.emergentagent.com').rstrip('/')
 
 # Test credentials from test_credentials.md
 STUDENT_EMAIL = "Gaurav.pandey@student.dental.edu"

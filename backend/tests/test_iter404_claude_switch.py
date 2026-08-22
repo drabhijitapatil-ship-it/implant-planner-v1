@@ -8,7 +8,7 @@ import os, re, time, pytest, requests
 from pymongo import MongoClient
 from bson import ObjectId
 
-BASE_URL = "https://dental-consent-sign.preview.emergentagent.com"
+BASE_URL = "https://prosthetic-preview.preview.emergentagent.com"
 LOGIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}
 
 # ── Mongo for seeding / verifying ai_chat_history persistence ────────────
