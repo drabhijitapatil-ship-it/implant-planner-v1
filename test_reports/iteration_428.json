@@ -1,0 +1,36 @@
+{
+  "summary": "iter-Feb-2026-B (backend-only) — Multiple / Full-Arch / Zygoma prosthesis workflows verified end-to-end. All 22 new pytest tests GREEN on the public URL, PLUS full SC regression (test_iter_feb2026_single_conventional.py 6/6 GREEN). Coverage: (1) Group A (Multiple Conventional Implants) with Immediate Loading persists all 4 ma_* fields + type_of_provisional and round-trips via GET. (2) Group B — All on 4/6/X — all three procedure types persist fa_prosthetic_plan + type_of_provisional. (3) Group C — all four Zygoma variants (Quad Zygoma / Zygoma+Pterygoid / Zygoma+Conv / Zygoma,Pterygoid+Conv) persist zp_prosthetic_plan verbatim. (4) 'Pterygoid and Conventional Implants' is Group A per the user override — POST accepts the 4-part ma_* payload. (5) 'Other' free-text handling works for ma_prosthesis_type_other, ma_abutment_type_other, fa_prosthetic_plan_other, zp_prosthetic_plan_other. (6) PUT /api/procedures/{id} updates Group A/B/C fields including _other siblings and switching between concrete value ↔ 'Other'. (7) Phase 4 Step 1 (POST /api/procedures/{id}/stage2/prosthetic) persists *_final_* fields for A/B/C under phase4_step1_data, appends ONE consolidated audit entry to prosthetic_plan_change_log with schema {changes:[{field, from, to}], changed_by, changed_by_name, changed_by_role='student', changed_in_phase:4, changed_step:1, changed_at}. Only truly-changed fields appear in changes[]; unchanged ma_final_abutment_type explicitly excluded. Re-submit with identical values is idempotent — no new audit entry appended. (8) Case report PDF /api/procedures/{id}/case-report contains group-specific labels: Group A → Prosthesis Type / Abutment Type / Type of Retention / Crown/Bridge Material / Type of Provisional + Final variants; Group B & C → Prosthetic Plan / Type of Provisional / Final Prosthetic Plan. (9) Regression: non-group procedure types ('Immediate Implant', 'Guided Surgery') create + update without any ma_*/fa_*/zp_* fields being required or leaked into storage. No backend issues found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_feb2026_b_multi_fullarch_zygoma.py",
+    "/app/test_reports/pytest/iter_feb2026_b_multi_fa_zp.xml",
+    "/app/backend/tests/test_iter_feb2026_single_conventional.py",
+    "/app/test_reports/pytest/iter_feb2026_sc_regression_iterB.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:537-548 ProcedureCreate — all 6 new create fields (ma_*, fa_*, zp_*) and their *_other siblings declared as Optional[str] with sane max_length. Type-of-provisional pair also present at 527/531. No server-side hard-requirement is enforced (client-side gating owns that); consistent with existing SC pattern.",
+    "server.py:632-649 ProcedureUpdate — mirrors the same 14 fields exactly. PUT round-trip persistence verified for all 3 groups incl. switching between concrete values ↔ 'Other'.",
+    "server.py:836-847 Stage2ProstheticSubmit — declares ma_final_* / fa_final_* / zp_final_* (+ _other siblings) as Optional[str] max_length=200/500. Non-required for non-group cases.",
+    "server.py:16600-16650 Phase-4 audit block correctly iterates 3 groups: proc_type in _group_a_set/_group_b_set/_group_c_set selects the correct field list. Baseline lookup uses prev_p4.get(field) or procedure.get(field.replace('_final_', '_')) — so first-time submits compare against Phase 1 values, subsequent submits against the prior Phase 4 snapshot. Truth table verified: Group A submit with 3 changed + 1 unchanged → changes[] has exactly 3 entries; re-submit with identical body → no new entry appended.",
+    "server.py:10942-10947 & 14107-14112 PDF text builders emit Group A/B/C labels (Prosthesis Type / Abutment Type / Type of Retention / Crown/Bridge Material / Prosthetic Plan). server.py:11102-11107 & 14733-14738 emit the Final variants for Phase 4. PDF extraction confirmed labels present for all three groups.",
+    "server.py:16544-16559 phase4_step1_data unconditionally receives all 3 groups' *_final_* keys (null for the other groups). Same pattern as SC — schema noise only, no functional impact."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_feb2026_b_multi_fullarch_zygoma.py (new — 22 tests across 9 asks, ~530 lines)",
+    "/app/test_reports/pytest/iter_feb2026_b_multi_fa_zp.xml (junit)",
+    "/app/test_reports/pytest/iter_feb2026_sc_regression_iterB.xml (junit — SC regression)"
+  ],
+  "success_rate": {"backend": "100% (22/22 new + 6/6 SC regression = 28/28)", "frontend": "N/A (backend-only ask)"},
+  "seed_data_creation": "All cases created via POST /api/procedures as student Gaurav.pandey with prefixed patient names ('TEST_GroupA_*', 'TEST_GroupB_*', 'TEST_GroupC_*', 'TEST_NG_*', etc.) and cleaned up in the per-test created_ids fixture (direct Mongo delete_many by ObjectId). Phase 4 tests advance status via one $set to stage2_surgical_approved. Unique-slot allocator (rotates 6 times/day, steps weekdays forward) avoids 409 collisions. No production data touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Test file /app/backend/tests/test_iter_feb2026_b_multi_fullarch_zygoma.py is idempotent and self-cleaning. For future iter-B changes: (1) audit contract at server.py:16600-16650 — re-run TestPhase4AuditGroupA/B/C which explicitly assert both 'entry appended' and 'idempotent re-submit' paths; (2) PDF label strings at server.py:10942-10947, 11102-11107, 14107-14112, 14733-14738 — re-run TestPdfLabels; (3) Pydantic max_lengths at server.py:527-548 & 632-649 & 836-847 — bump sample values in the test payloads. Valid procedure types are enumerated at server.py:2187-2201 — Existing Implant / Single Implant are NOT valid; the non-group regression uses 'Immediate Implant' & 'Guided Surgery' instead. Multiple Conventional Implants requires >=2 missing_teeth (server.py:1934); tests set missing_teeth=['15','16'].",
+  "rca_of_issue": "N/A — no bugs found. All 22 new tests + 6 SC regression tests passed on first execution after correcting three test-payload issues (add missing_teeth for Multiple Conventional Implants; use valid non-group procedure types)."
+}

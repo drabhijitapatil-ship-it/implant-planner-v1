@@ -31,6 +31,15 @@ import {
   SC_RETENTION_TYPE_OPTIONS,
   SC_CROWN_MATERIAL_OPTIONS,
 } from '../../../constants/singleConventional';
+import {
+  GROUP_A_PROSTHESIS_TYPE_OPTIONS,
+  GROUP_A_ABUTMENT_TYPE_OPTIONS,
+  GROUP_A_RETENTION_OPTIONS,
+  GROUP_A_CROWN_MATERIAL_OPTIONS,
+  GROUP_B_PROSTHETIC_PLAN_OPTIONS,
+  GROUP_C_PROSTHETIC_PLAN_OPTIONS,
+  getWorkflowGroup,
+} from '../../../constants/prosthesisWorkflows';
 
 export default function Phase4Step1Screen() {
   const { id } = useLocalSearchParams();
@@ -97,12 +106,22 @@ export default function Phase4Step1Screen() {
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
 
   // iter-Feb-2026 — Single-Conventional-Implant Final Prosthetic Plan.
-  // Three sub-fields override the legacy `finalProsthesis` dropdown when
-  // procedure type is 'Single Conventional Implant'. Values are seeded
-  // from any prior Phase 4 submit; otherwise fall back to Phase 1.
   const [scFinalAbutmentType, setScFinalAbutmentType] = useState('');
   const [scFinalRetentionType, setScFinalRetentionType] = useState('');
   const [scFinalCrownMaterial, setScFinalCrownMaterial] = useState('');
+  // iter-Feb-2026-B — Multiple/Full-Arch/Zygoma Final Plan.
+  const [maFinalProsthesisType, setMaFinalProsthesisType] = useState('');
+  const [maFinalProsthesisTypeOther, setMaFinalProsthesisTypeOther] = useState('');
+  const [maFinalAbutmentType, setMaFinalAbutmentType] = useState('');
+  const [maFinalAbutmentTypeOther, setMaFinalAbutmentTypeOther] = useState('');
+  const [maFinalRetentionType, setMaFinalRetentionType] = useState('');
+  const [maFinalRetentionTypeOther, setMaFinalRetentionTypeOther] = useState('');
+  const [maFinalCrownMaterial, setMaFinalCrownMaterial] = useState('');
+  const [maFinalCrownMaterialOther, setMaFinalCrownMaterialOther] = useState('');
+  const [faFinalProstheticPlan, setFaFinalProstheticPlan] = useState('');
+  const [faFinalProstheticPlanOther, setFaFinalProstheticPlanOther] = useState('');
+  const [zpFinalProstheticPlan, setZpFinalProstheticPlan] = useState('');
+  const [zpFinalProstheticPlanOther, setZpFinalProstheticPlanOther] = useState('');
 
   useEffect(() => { loadProcedure(); }, []);
 
@@ -184,11 +203,28 @@ export default function Phase4Step1Screen() {
       setScanLevels(Array.isArray(p4.scan_levels) ? p4.scan_levels : []);
 
       // iter-Feb-2026 — Hydrate Single-Conventional-Implant Final Plan.
-      // Prefer any saved Phase 4 override, else copy Phase 1 selection.
       if (procType === 'Single Conventional Implant') {
         setScFinalAbutmentType(p4.sc_final_abutment_type || procRes.data?.sc_abutment_type || '');
         setScFinalRetentionType(p4.sc_final_retention_type || procRes.data?.sc_retention_type || '');
         setScFinalCrownMaterial(p4.sc_final_crown_material || procRes.data?.sc_crown_material || '');
+      }
+      // iter-Feb-2026-B — Hydrate Multiple/Full-Arch/Zygoma Final Plan.
+      const g = getWorkflowGroup(procType);
+      if (g === 'A') {
+        setMaFinalProsthesisType(p4.ma_final_prosthesis_type || procRes.data?.ma_prosthesis_type || '');
+        setMaFinalProsthesisTypeOther(p4.ma_final_prosthesis_type_other || procRes.data?.ma_prosthesis_type_other || '');
+        setMaFinalAbutmentType(p4.ma_final_abutment_type || procRes.data?.ma_abutment_type || '');
+        setMaFinalAbutmentTypeOther(p4.ma_final_abutment_type_other || procRes.data?.ma_abutment_type_other || '');
+        setMaFinalRetentionType(p4.ma_final_retention_type || procRes.data?.ma_retention_type || '');
+        setMaFinalRetentionTypeOther(p4.ma_final_retention_type_other || procRes.data?.ma_retention_type_other || '');
+        setMaFinalCrownMaterial(p4.ma_final_crown_material || procRes.data?.ma_crown_material || '');
+        setMaFinalCrownMaterialOther(p4.ma_final_crown_material_other || procRes.data?.ma_crown_material_other || '');
+      } else if (g === 'B') {
+        setFaFinalProstheticPlan(p4.fa_final_prosthetic_plan || procRes.data?.fa_prosthetic_plan || '');
+        setFaFinalProstheticPlanOther(p4.fa_final_prosthetic_plan_other || procRes.data?.fa_prosthetic_plan_other || '');
+      } else if (g === 'C') {
+        setZpFinalProstheticPlan(p4.zp_final_prosthetic_plan || procRes.data?.zp_prosthetic_plan || '');
+        setZpFinalProstheticPlanOther(p4.zp_final_prosthetic_plan_other || procRes.data?.zp_prosthetic_plan_other || '');
       }
     } catch {}
   };
@@ -199,9 +235,10 @@ export default function Phase4Step1Screen() {
     return FULL_ARCH_GROUP.has(procedure.implant_procedure_type || '');
   })();
 
-  // iter-Feb-2026 — pure Single Conventional Implant helper. Drives the
-  // new 3-part Final Plan UI + validation + payload branch.
+  // iter-Feb-2026 — pure Single Conventional Implant helper.
   const isSCImplant = procedure?.implant_procedure_type === 'Single Conventional Implant';
+  // iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflow group.
+  const workflowGroup = getWorkflowGroup(procedure?.implant_procedure_type);
 
   // Determine if per-implant mode: Multiple implants + no bridge in Phase 1 prosthetic plan
   const isPerImplantMode = (() => {
@@ -237,11 +274,27 @@ export default function Phase4Step1Screen() {
   // iter-194: validate shape required for both Submit and Generate-Lab-Slip paths.
   // Returns null when valid, else a user-facing message.
   const validateForm = (): string | null => {
+    const otherFilled = (v: string, o: string) => v !== 'Other' || (!!o && o.trim().length > 0);
     // iter-Feb-2026 — Single-Conventional-Implant validation takes priority.
     if (isSCImplant) {
       if (!scFinalAbutmentType) return 'Please select the Abutment Type';
       if (!scFinalRetentionType) return 'Please select the Type of Retention';
       if (!scFinalCrownMaterial) return 'Please select the Crown Material';
+    } else if (workflowGroup === 'A') {
+      if (!maFinalProsthesisType) return 'Please select the Prosthesis Type';
+      if (!otherFilled(maFinalProsthesisType, maFinalProsthesisTypeOther)) return 'Please describe the custom Prosthesis Type';
+      if (!maFinalAbutmentType) return 'Please select the Abutment Type';
+      if (!otherFilled(maFinalAbutmentType, maFinalAbutmentTypeOther)) return 'Please describe the custom Abutment Type';
+      if (!maFinalRetentionType) return 'Please select the Type of Retention';
+      if (!otherFilled(maFinalRetentionType, maFinalRetentionTypeOther)) return 'Please describe the custom Retention Type';
+      if (!maFinalCrownMaterial) return 'Please select the Crown/Bridge Material';
+      if (!otherFilled(maFinalCrownMaterial, maFinalCrownMaterialOther)) return 'Please describe the custom Crown/Bridge Material';
+    } else if (workflowGroup === 'B') {
+      if (!faFinalProstheticPlan) return 'Please select the Prosthetic Plan';
+      if (!otherFilled(faFinalProstheticPlan, faFinalProstheticPlanOther)) return 'Please describe the custom Prosthetic Plan';
+    } else if (workflowGroup === 'C') {
+      if (!zpFinalProstheticPlan) return 'Please select the Prosthetic Plan';
+      if (!otherFilled(zpFinalProstheticPlan, zpFinalProstheticPlanOther)) return 'Please describe the custom Prosthetic Plan';
     } else if (isPerImplantMode) {
       for (let i = 0; i < perImplantPlans.length; i++) {
         if (!perImplantPlans[i].prosthesis) {
@@ -310,10 +363,6 @@ export default function Phase4Step1Screen() {
       ).join('; ');
       payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
     } else if (isSCImplant) {
-      // iter-Feb-2026 — Single-Conventional-Implant 3-part plan.
-      // We also collapse the 3 into a single human-readable string on
-      // `final_prosthetic_plan` so existing renderers/PDFs keep working
-      // without needing the granular fields.
       payload.sc_final_abutment_type = scFinalAbutmentType;
       payload.sc_final_retention_type = scFinalRetentionType;
       payload.sc_final_crown_material = scFinalCrownMaterial;
@@ -321,6 +370,34 @@ export default function Phase4Step1Screen() {
         `${scFinalRetentionType} — ${scFinalCrownMaterial}` +
         (scFinalAbutmentType ? ` (Abutment: ${scFinalAbutmentType})` : '');
       payload.prosthetic_material = scFinalCrownMaterial || null;
+    } else if (workflowGroup === 'A') {
+      // iter-Feb-2026-B — Group A: Multiple Conv / Pterygoid+Conv 4-part.
+      payload.ma_final_prosthesis_type = maFinalProsthesisType;
+      payload.ma_final_prosthesis_type_other = maFinalProsthesisType === 'Other' ? maFinalProsthesisTypeOther : '';
+      payload.ma_final_abutment_type = maFinalAbutmentType;
+      payload.ma_final_abutment_type_other = maFinalAbutmentType === 'Other' ? maFinalAbutmentTypeOther : '';
+      payload.ma_final_retention_type = maFinalRetentionType;
+      payload.ma_final_retention_type_other = maFinalRetentionType === 'Other' ? maFinalRetentionTypeOther : '';
+      payload.ma_final_crown_material = maFinalCrownMaterial;
+      payload.ma_final_crown_material_other = maFinalCrownMaterial === 'Other' ? maFinalCrownMaterialOther : '';
+      const ptx = maFinalProsthesisType === 'Other' ? maFinalProsthesisTypeOther : maFinalProsthesisType;
+      const abtx = maFinalAbutmentType === 'Other' ? maFinalAbutmentTypeOther : maFinalAbutmentType;
+      const retx = maFinalRetentionType === 'Other' ? maFinalRetentionTypeOther : maFinalRetentionType;
+      const mtx = maFinalCrownMaterial === 'Other' ? maFinalCrownMaterialOther : maFinalCrownMaterial;
+      payload.final_prosthetic_plan = `${ptx} — ${retx} — ${mtx}` + (abtx ? ` (Abutment: ${abtx})` : '');
+      payload.prosthetic_material = mtx || null;
+    } else if (workflowGroup === 'B') {
+      // iter-Feb-2026-B — Group B: All-on-X single plan.
+      payload.fa_final_prosthetic_plan = faFinalProstheticPlan;
+      payload.fa_final_prosthetic_plan_other = faFinalProstheticPlan === 'Other' ? faFinalProstheticPlanOther : '';
+      payload.final_prosthetic_plan = faFinalProstheticPlan === 'Other' ? faFinalProstheticPlanOther : faFinalProstheticPlan;
+      payload.prosthetic_material = null;
+    } else if (workflowGroup === 'C') {
+      // iter-Feb-2026-B — Group C: Zygoma-specific single plan.
+      payload.zp_final_prosthetic_plan = zpFinalProstheticPlan;
+      payload.zp_final_prosthetic_plan_other = zpFinalProstheticPlan === 'Other' ? zpFinalProstheticPlanOther : '';
+      payload.final_prosthetic_plan = zpFinalProstheticPlan === 'Other' ? zpFinalProstheticPlanOther : zpFinalProstheticPlan;
+      payload.prosthetic_material = null;
     } else {
       payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
       payload.prosthetic_material = prostheticMaterial || null;
@@ -519,70 +596,100 @@ export default function Phase4Step1Screen() {
               <>
                 {isSCImplant ? (
                   <>
-                    {/* iter-Feb-2026 — Single-Conventional-Implant Final Plan.
-                        3-part flow: Abutment → Retention → Crown Material.
-                        The Phase 1 selection is shown as a read-only banner
-                        so the operator can see what was originally planned
-                        and change it here if needed. Changes are audited on
-                        `prosthetic_plan_change_log` by the backend. */}
+                    {/* iter-Feb-2026 — Single-Conventional-Implant Final Plan. */}
                     {(procedure?.sc_abutment_type
                       || procedure?.sc_retention_type
                       || procedure?.sc_crown_material) && (
-                      <View style={{
-                        backgroundColor: '#FFF8E1',
-                        borderRadius: 10,
-                        padding: 12,
-                        marginBottom: 12,
-                        borderWidth: 1,
-                        borderColor: '#FFE082',
-                      }}>
-                        <Text style={{ fontSize: 11, color: '#8D6E63', fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 }}>
-                          PHASE 1 PLAN (REFERENCE)
-                        </Text>
-                        {!!procedure.sc_abutment_type && (
-                          <Text style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
-                            <Text style={{ fontWeight: '700' }}>Abutment: </Text>{procedure.sc_abutment_type}
-                          </Text>
-                        )}
-                        {!!procedure.sc_retention_type && (
-                          <Text style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
-                            <Text style={{ fontWeight: '700' }}>Retention: </Text>{procedure.sc_retention_type}
-                          </Text>
-                        )}
-                        {!!procedure.sc_crown_material && (
-                          <Text style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
-                            <Text style={{ fontWeight: '700' }}>Crown Material: </Text>{procedure.sc_crown_material}
-                          </Text>
-                        )}
-                        <Text style={{ fontSize: 11, color: '#8D6E63', marginTop: 6, fontStyle: 'italic' }}>
-                          You may keep or change the plan below. All changes are audited.
-                        </Text>
-                      </View>
+                      <Phase1PlanReferenceBanner
+                        rows={[
+                          ['Abutment', procedure?.sc_abutment_type],
+                          ['Retention', procedure?.sc_retention_type],
+                          ['Crown Material', procedure?.sc_crown_material],
+                        ]}
+                      />
                     )}
-                    <GroupedDescDropdown
-                      label="1. Abutment Type"
-                      required
-                      value={scFinalAbutmentType}
-                      onChange={setScFinalAbutmentType}
-                      options={SC_ABUTMENT_TYPE_OPTIONS}
-                      testID="sc-final-abutment-type"
-                    />
-                    <GroupedDescDropdown
-                      label="2. Type of Retention"
-                      required
-                      value={scFinalRetentionType}
-                      onChange={setScFinalRetentionType}
-                      options={SC_RETENTION_TYPE_OPTIONS}
-                      testID="sc-final-retention-type"
-                    />
-                    <GroupedDescDropdown
-                      label="3. Crown Material"
-                      required
-                      value={scFinalCrownMaterial}
-                      onChange={setScFinalCrownMaterial}
-                      options={SC_CROWN_MATERIAL_OPTIONS}
-                      testID="sc-final-crown-material"
-                    />
+                    <GroupedDescDropdown label="1. Abutment Type" required
+                      value={scFinalAbutmentType} onChange={setScFinalAbutmentType}
+                      options={SC_ABUTMENT_TYPE_OPTIONS} testID="sc-final-abutment-type" />
+                    <GroupedDescDropdown label="2. Type of Retention" required
+                      value={scFinalRetentionType} onChange={setScFinalRetentionType}
+                      options={SC_RETENTION_TYPE_OPTIONS} testID="sc-final-retention-type" />
+                    <GroupedDescDropdown label="3. Crown Material" required
+                      value={scFinalCrownMaterial} onChange={setScFinalCrownMaterial}
+                      options={SC_CROWN_MATERIAL_OPTIONS} testID="sc-final-crown-material" />
+                  </>
+                ) : workflowGroup === 'A' ? (
+                  <>
+                    {/* iter-Feb-2026-B — Group A: Multiple Conv / Pterygoid+Conv 4-part flow. */}
+                    {(procedure?.ma_prosthesis_type
+                      || procedure?.ma_abutment_type
+                      || procedure?.ma_retention_type
+                      || procedure?.ma_crown_material) && (
+                      <Phase1PlanReferenceBanner
+                        rows={[
+                          ['Prosthesis Type', procedure?.ma_prosthesis_type_other || procedure?.ma_prosthesis_type],
+                          ['Abutment Type', procedure?.ma_abutment_type_other || procedure?.ma_abutment_type],
+                          ['Retention', procedure?.ma_retention_type_other || procedure?.ma_retention_type],
+                          ['Crown/Bridge Material', procedure?.ma_crown_material_other || procedure?.ma_crown_material],
+                        ]}
+                      />
+                    )}
+                    <SCPickerRow label="1. Prosthesis Type" value={maFinalProsthesisType}
+                      other={maFinalProsthesisTypeOther} setV={setMaFinalProsthesisType}
+                      setO={setMaFinalProsthesisTypeOther} options={GROUP_A_PROSTHESIS_TYPE_OPTIONS}
+                      testID="ma-final-prosthesis-type" />
+                    <SCPickerRow label="2. Abutment Type" value={maFinalAbutmentType}
+                      other={maFinalAbutmentTypeOther} setV={setMaFinalAbutmentType}
+                      setO={setMaFinalAbutmentTypeOther} options={GROUP_A_ABUTMENT_TYPE_OPTIONS}
+                      testID="ma-final-abutment-type" />
+                    <SCPickerRow label="3. Type of Retention" value={maFinalRetentionType}
+                      other={maFinalRetentionTypeOther} setV={setMaFinalRetentionType}
+                      setO={setMaFinalRetentionTypeOther} options={GROUP_A_RETENTION_OPTIONS}
+                      testID="ma-final-retention-type" />
+                    <SCPickerRow label="4. Crown/Bridge Material" value={maFinalCrownMaterial}
+                      other={maFinalCrownMaterialOther} setV={setMaFinalCrownMaterial}
+                      setO={setMaFinalCrownMaterialOther} options={GROUP_A_CROWN_MATERIAL_OPTIONS}
+                      testID="ma-final-crown-material" />
+                  </>
+                ) : workflowGroup === 'B' ? (
+                  <>
+                    {/* iter-Feb-2026-B — Group B: All-on-X single grouped plan. */}
+                    {procedure?.fa_prosthetic_plan && (
+                      <Phase1PlanReferenceBanner
+                        rows={[['Prosthetic Plan', procedure.fa_prosthetic_plan_other || procedure.fa_prosthetic_plan]]}
+                      />
+                    )}
+                    <GroupedDescDropdown label="Prosthetic Plan" required
+                      value={faFinalProstheticPlan}
+                      onChange={v => { setFaFinalProstheticPlan(v); if (v !== 'Other') setFaFinalProstheticPlanOther(''); }}
+                      groups={GROUP_B_PROSTHETIC_PLAN_OPTIONS}
+                      testID="fa-final-prosthetic-plan" />
+                    {faFinalProstheticPlan === 'Other' && (
+                      <TextInput style={s.textArea} value={faFinalProstheticPlanOther}
+                        onChangeText={setFaFinalProstheticPlanOther}
+                        placeholder="Describe the prosthetic plan…" multiline
+                        data-testid="fa-final-prosthetic-plan-other-input" />
+                    )}
+                  </>
+                ) : workflowGroup === 'C' ? (
+                  <>
+                    {/* iter-Feb-2026-B — Group C: Zygoma-specific single plan. */}
+                    {procedure?.zp_prosthetic_plan && (
+                      <Phase1PlanReferenceBanner
+                        rows={[['Prosthetic Plan', procedure.zp_prosthetic_plan_other || procedure.zp_prosthetic_plan]]}
+                      />
+                    )}
+                    <GroupedDescDropdown label="Prosthetic Plan" required
+                      value={zpFinalProstheticPlan}
+                      onChange={v => { setZpFinalProstheticPlan(v); if (v !== 'Other') setZpFinalProstheticPlanOther(''); }}
+                      options={GROUP_C_PROSTHETIC_PLAN_OPTIONS}
+                      testID="zp-final-prosthetic-plan" />
+                    {zpFinalProstheticPlan === 'Other' && (
+                      <TextInput style={s.textArea} value={zpFinalProstheticPlanOther}
+                        onChangeText={setZpFinalProstheticPlanOther}
+                        placeholder="Describe the prosthetic plan…" multiline
+                        data-testid="zp-final-prosthetic-plan-other-input" />
+                    )}
                   </>
                 ) : (
                   <>
@@ -599,7 +706,7 @@ export default function Phase4Step1Screen() {
               </>
             )}
 
-            {!isSCImplant && renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
+            {!isSCImplant && !workflowGroup && renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
               abutmentOpen, setAbutmentOpen, setCustomAbutment, false)}
           </View>
 
@@ -1238,3 +1345,86 @@ const s = StyleSheet.create({
     flex: 1,
   },
 });
+
+// iter-Feb-2026-B — Reusable Phase-4 helpers.
+//
+// Phase1PlanReferenceBanner
+//   Amber "reference" card summarising the Phase 1 plan so the operator
+//   can see what was originally planned and change it here if needed.
+//   Rows: [label, value][] — falsy values are skipped so callers can
+//   pass the raw doc without pre-filtering.
+function Phase1PlanReferenceBanner({ rows }: { rows: [string, string | undefined | null][] }) {
+  const visible = rows.filter(r => !!r[1]);
+  if (visible.length === 0) return null;
+  return (
+    <View style={{
+      backgroundColor: '#FFF8E1',
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: '#FFE082',
+    }}>
+      <Text style={{ fontSize: 11, color: '#8D6E63', fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 }}>
+        PHASE 1 PLAN (REFERENCE)
+      </Text>
+      {visible.map(([label, val]) => (
+        <Text key={label} style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
+          <Text style={{ fontWeight: '700' }}>{label}: </Text>{val}
+        </Text>
+      ))}
+      <Text style={{ fontSize: 11, color: '#8D6E63', marginTop: 6, fontStyle: 'italic' }}>
+        You may keep or change the plan below. All changes are audited.
+      </Text>
+    </View>
+  );
+}
+
+// SCPickerRow — a GroupedDescDropdown paired with an "Other" free-text
+// input that only appears when the user picks "Other" from the dropdown.
+// Extracted to keep the Group A 4-part flow readable.
+function SCPickerRow({
+  label, value, other, setV, setO, options, testID,
+}: {
+  label: string;
+  value: string;
+  other: string;
+  setV: (v: string) => void;
+  setO: (v: string) => void;
+  options: import('../../../constants/singleConventional').OptionDesc[];
+  testID: string;
+}) {
+  return (
+    <>
+      <GroupedDescDropdown
+        label={label}
+        required
+        value={value}
+        onChange={v => { setV(v); if (v !== 'Other') setO(''); }}
+        options={options}
+        testID={testID}
+      />
+      {value === 'Other' && (
+        <TextInput
+          style={{
+            borderWidth: 1,
+            borderColor: '#CFD8DC',
+            borderRadius: 10,
+            padding: 12,
+            fontSize: 14,
+            minHeight: 68,
+            textAlignVertical: 'top',
+            backgroundColor: '#FFF',
+            marginBottom: 12,
+          }}
+          value={other}
+          onChangeText={setO}
+          placeholder={`Describe the ${label.replace(/^\d+\.\s*/, '').toLowerCase()}…`}
+          multiline
+          data-testid={`${testID}-other-input`}
+        />
+      )}
+    </>
+  );
+}
+
