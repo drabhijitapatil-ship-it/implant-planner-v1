@@ -516,6 +516,18 @@ class ProcedureCreate(BaseModel):
     # comment, at}. Blocks Phase 2 / Phase 3 Day-0 submit until both signers
     # have countersigned. Only enforced for Zygoma/Pterygoid procedure types.
     zygoma_pterygoid_cosigns: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    # iter-Feb-2026 — Single-Conventional-Implant new workflow.
+    # Applies only when implant_procedure_type == 'Single Conventional Implant'.
+    # • type_of_provisional: label of the picked provisional option (grouped
+    #   catalogue in frontend/constants/singleConventional.ts). Required when
+    #   Immediate Loading is included in loading_type; blank otherwise.
+    # • sc_abutment_type / sc_retention_type / sc_crown_material: the new
+    #   3-part Prosthetic Plan (replaces the legacy prosthetic_plan dropdown
+    #   for this procedure type). All three required at Phase 1.
+    type_of_provisional: Optional[str] = Field(None, max_length=200)
+    sc_abutment_type: Optional[str] = Field(None, max_length=200)
+    sc_retention_type: Optional[str] = Field(None, max_length=200)
+    sc_crown_material: Optional[str] = Field(None, max_length=200)
 
     @field_validator('patient_name')
     @classmethod
@@ -597,6 +609,12 @@ class ProcedureUpdate(BaseModel):
     zygoma_pterygoid_configuration: Optional[str] = Field(None, max_length=100)
     # iter-Feb-2026 (v3): Conventional implant sites for mixed advanced+conventional cases.
     conventional_implant_locations: Optional[List[str]] = None
+    # iter-Feb-2026 — Single-Conventional-Implant workflow (ProcedureUpdate).
+    # Applies only when implant_procedure_type == 'Single Conventional Implant'.
+    type_of_provisional: Optional[str] = Field(None, max_length=200)
+    sc_abutment_type: Optional[str] = Field(None, max_length=200)
+    sc_retention_type: Optional[str] = Field(None, max_length=200)
+    sc_crown_material: Optional[str] = Field(None, max_length=200)
 
     @field_validator('patient_name')
     @classmethod
@@ -773,6 +791,13 @@ class Stage2ProstheticSubmit(BaseModel):
     # revise angulation / cuff height after soft-tissue remodelling.
     # Each row: {"tooth": "...", "angulation": "...", "cuff_height": "..."}.
     multi_unit_abutment_details: Optional[List[Dict[str, Any]]] = None
+    # iter-Feb-2026 — Single-Conventional-Implant *Final* Prosthetic Plan.
+    # Populated *only* for Single Conventional Implant cases. Overrides the
+    # Phase-1 plan; any change is captured as an audit entry appended to
+    # `prosthetic_plan_change_log` on the parent procedure document.
+    sc_final_abutment_type: Optional[str] = Field(None, max_length=200)
+    sc_final_retention_type: Optional[str] = Field(None, max_length=200)
+    sc_final_crown_material: Optional[str] = Field(None, max_length=200)
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     # Legacy
@@ -10848,6 +10873,16 @@ def _build_case_context(proc: dict) -> str:
         parts.append(f"Mesiodistal Space: {proc.get('mesiodistal_space')} mm")
     if proc.get('prosthetic_plan'):
         parts.append(f"Prosthetic Plan: {proc.get('prosthetic_plan')}")
+    # iter-Feb-2026 — Single-Conventional-Implant granular Phase 1 plan.
+    if proc.get('implant_procedure_type') == 'Single Conventional Implant':
+        if proc.get('type_of_provisional'):
+            parts.append(f"Type of Provisional: {proc.get('type_of_provisional')}")
+        if proc.get('sc_abutment_type'):
+            parts.append(f"Abutment Type: {proc.get('sc_abutment_type')}")
+        if proc.get('sc_retention_type'):
+            parts.append(f"Type of Retention: {proc.get('sc_retention_type')}")
+        if proc.get('sc_crown_material'):
+            parts.append(f"Crown Material: {proc.get('sc_crown_material')}")
     if proc.get('loading_type'):
         lt = proc['loading_type']
         parts.append(f"Loading Type: {', '.join(lt) if isinstance(lt, list) else lt}")
@@ -10987,6 +11022,13 @@ def _build_case_context(proc: dict) -> str:
         parts.append("\n--- Phase 4: Prosthetic Rehabilitation ---")
         if p4.get('final_prosthetic_plan'):
             parts.append(f"Final Prosthetic Plan: {p4.get('final_prosthetic_plan')}")
+        # iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
+        if p4.get('sc_final_abutment_type'):
+            parts.append(f"Final Abutment Type: {p4.get('sc_final_abutment_type')}")
+        if p4.get('sc_final_retention_type'):
+            parts.append(f"Final Type of Retention: {p4.get('sc_final_retention_type')}")
+        if p4.get('sc_final_crown_material'):
+            parts.append(f"Final Crown Material: {p4.get('sc_final_crown_material')}")
         if p4.get('prosthetic_material'):
             parts.append(f"Prosthetic Material: {p4.get('prosthetic_material')}")
         if p4.get('impression_type'):
@@ -13962,6 +14004,16 @@ async def generate_case_report(
         add_field("Bone Graft Material Details", procedure.get("bone_graft_material_details"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
+    # iter-Feb-2026 — Single-Conventional-Implant Phase 1 granular fields.
+    if procedure.get("implant_procedure_type") == "Single Conventional Implant":
+        if procedure.get("type_of_provisional"):
+            add_field("Type of Provisional", procedure.get("type_of_provisional"))
+        if procedure.get("sc_abutment_type"):
+            add_field("Abutment Type", procedure.get("sc_abutment_type"))
+        if procedure.get("sc_retention_type"):
+            add_field("Type of Retention", procedure.get("sc_retention_type"))
+        if procedure.get("sc_crown_material"):
+            add_field("Crown Material", procedure.get("sc_crown_material"))
     add_field("Bone Graft Specifications", procedure.get("bone_graft_specifications"))
     add_field("Implant Site", procedure.get("implant_site"))
     pdf.ln(4)
@@ -14567,6 +14619,13 @@ async def generate_case_report(
         pdf.cell(0, 8, safe("Step 1 — Prosthetic Plan & Impressions"), ln=True)
         if p4s1.get("final_prosthetic_plan"):
             add_field("Final Prosthetic Plan", p4s1["final_prosthetic_plan"])
+        # iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
+        if p4s1.get("sc_final_abutment_type"):
+            add_field("Final Abutment Type", p4s1["sc_final_abutment_type"])
+        if p4s1.get("sc_final_retention_type"):
+            add_field("Final Type of Retention", p4s1["sc_final_retention_type"])
+        if p4s1.get("sc_final_crown_material"):
+            add_field("Final Crown Material", p4s1["sc_final_crown_material"])
         if p4s1.get("prosthetic_material"):
             add_field("Prosthetic Material", p4s1["prosthetic_material"])
         if p4s1.get("custom_abutment"):
@@ -16362,6 +16421,13 @@ async def submit_stage2_prosthetic(
         # Slip falls back to phase2_data.
         **({} if data.multi_unit_abutment_details is None
             else {"multi_unit_abutment_details": data.multi_unit_abutment_details}),
+        # iter-Feb-2026 — Single-Conventional-Implant final plan overrides.
+        # Persisted verbatim on phase4_step1_data. The audit trail is
+        # appended below to `prosthetic_plan_change_log` when the operator
+        # changes the plan relative to Phase 1 (or a prior Phase 4 submit).
+        "sc_final_abutment_type": data.sc_final_abutment_type,
+        "sc_final_retention_type": data.sc_final_retention_type,
+        "sc_final_crown_material": data.sc_final_crown_material,
     }
     
     existing_checklist = procedure.get("checklist") or {}
@@ -16397,6 +16463,41 @@ async def submit_stage2_prosthetic(
     update_data["phase4_step1_done_date"] = _validate_done_date(
         data.done_date, prev_date=_prev, label="Phase 4 Step 1 Done Date",
     )
+
+    # iter-Feb-2026 — Single-Conventional-Implant Final Plan audit trail.
+    # Compare each of the 3 fields against (prior Phase 4 override → Phase 1 value).
+    # Append one consolidated audit entry per submit call when any field changed.
+    if procedure.get("implant_procedure_type") == "Single Conventional Implant":
+        prev_p4 = procedure.get("phase4_step1_data") or {}
+        prev_ab = prev_p4.get("sc_final_abutment_type") or procedure.get("sc_abutment_type") or ""
+        prev_ret = prev_p4.get("sc_final_retention_type") or procedure.get("sc_retention_type") or ""
+        prev_mat = prev_p4.get("sc_final_crown_material") or procedure.get("sc_crown_material") or ""
+        new_ab = (data.sc_final_abutment_type or "").strip()
+        new_ret = (data.sc_final_retention_type or "").strip()
+        new_mat = (data.sc_final_crown_material or "").strip()
+        changed_fields = []
+        if new_ab and new_ab != prev_ab:
+            changed_fields.append({"field": "sc_final_abutment_type", "from": prev_ab, "to": new_ab})
+        if new_ret and new_ret != prev_ret:
+            changed_fields.append({"field": "sc_final_retention_type", "from": prev_ret, "to": new_ret})
+        if new_mat and new_mat != prev_mat:
+            changed_fields.append({"field": "sc_final_crown_material", "from": prev_mat, "to": new_mat})
+        if changed_fields:
+            now_utc = datetime.utcnow()
+            audit_entry = {
+                "changes": changed_fields,
+                "changed_by": str(current_user.get("_id") or current_user.get("id") or ""),
+                "changed_by_name": current_user.get("name")
+                    or (f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip())
+                    or current_user.get("username", ""),
+                "changed_by_role": current_user.get("role", ""),
+                "changed_in_phase": 4,
+                "changed_step": 1,
+                "changed_at": now_utc.isoformat(),
+            }
+            change_log = list(procedure.get("prosthetic_plan_change_log") or [])
+            change_log.append(audit_entry)
+            update_data["prosthetic_plan_change_log"] = change_log
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 

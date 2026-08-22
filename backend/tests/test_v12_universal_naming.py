@@ -24,7 +24,7 @@ from bson import ObjectId
 
 BASE_URL = os.environ.get(
     "EXPO_PUBLIC_BACKEND_URL",
-    "https://dental-consent-sign.preview.emergentagent.com",
+    "https://prosthetic-preview.preview.emergentagent.com",
 ).rstrip("/")
 ADMIN_IDENT = "Abhijit.patil"
 ADMIN_PASS = "Admin@123"

@@ -15,7 +15,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = "https://dental-consent-sign.preview.emergentagent.com"
+BASE_URL = "https://prosthetic-preview.preview.emergentagent.com"
 CASE_ID = "699fc5c1248100e8a0d87261"
 STUDENT = {"identifier": "Gaurav.pandey", "password": "Student@123"}
 

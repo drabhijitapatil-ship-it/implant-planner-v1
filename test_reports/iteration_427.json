@@ -1,0 +1,34 @@
+{
+  "summary": "iter-Feb-2026 (backend-only) — Single Conventional Implant workflow verified end-to-end. 6/6 pytest asks GREEN on public URL (https://prosthetic-preview.preview.emergentagent.com). Ask 1 (POST /api/procedures persists type_of_provisional + sc_abutment_type + sc_retention_type + sc_crown_material) PASS. Ask 2 (PUT /api/procedures/{id} updates all 4 SC Phase-1 fields) PASS. Ask 3 (POST /api/procedures/{id}/submit-phase2 stores prosthesis_type='Screw-retained provisional' verbatim under phase2_data.prosthesis_type when prosthetic_component='Immediate Loading Done') PASS. Ask 4 (POST /api/procedures/{id}/stage2/prosthetic persists sc_final_abutment_type / sc_final_retention_type / sc_final_crown_material under phase4_step1_data, appends ONE consolidated audit entry to prosthetic_plan_change_log with correct fields {changes:[...], changed_by, changed_by_name, changed_by_role='student', changed_in_phase:4, changed_step:1, changed_at}; only the 2 truly-changed fields appear in changes[], unchanged sc_final_retention_type is excluded; re-submitting identical values does NOT append a new audit entry — idempotent) PASS. Ask 5 (POST /api/procedures/{id}/case-report PDF contains all 7 labels: 'Type of Provisional', 'Abutment Type', 'Type of Retention', 'Crown Material', 'Final Abutment Type', 'Final Type of Retention', 'Final Crown Material' — verified via pypdf text extraction + raw-byte fallback; GET response also carries all 7 values at correct paths) PASS. Ask 6 (regression — Multiple Conventional Implants create + PUT succeed without any SC field; response carries no leaked SC keys) PASS. No package-version side-effects observed from the env-only reinstall (openai 3.3.1, pymongo 4.17.0, motor 3.7.1) — /api/health = 200 and all auth/CRUD/PDF endpoints returned as expected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_feb2026_single_conventional.py",
+    "/app/test_reports/pytest/iter_feb2026_sc_workflow.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:520-530 — ProcedureCreate correctly declares 4 SC Phase-1 fields as Optional[str] with max_length=200; nullable when procedure_type != 'Single Conventional Implant'. No server-side hard-requirement enforced for SC+Immediate Loading, so the client-side gating in /app/frontend/app/(tabs)/new-procedure.tsx is the sole guard — worth double-checking on the frontend suite, but consistent with existing conditional-required patterns (e.g. sinus_lift_type).",
+    "server.py:613-617 — ProcedureUpdate mirrors the same 4 SC fields; PUT test confirmed round-trip persistence.",
+    "server.py:798-800 — Stage2ProstheticSubmit declares sc_final_abutment_type / sc_final_retention_type / sc_final_crown_material as Optional[str] max_length=200. Correctly non-required for non-SC cases.",
+    "server.py:16428-16430 — Phase 4 Step 1 handler unconditionally writes the 3 sc_final_* keys into phase4_step1_data regardless of procedure_type. For non-SC cases these will be null. Consider guarding to keep the document schema clean for non-SC cases (nit only, doesn't affect the audit logic which is gated on line 16470).",
+    "server.py:16470-16500 — Audit trail logic verified with truth table: (prev=Phase1 baseline, new=submit body) — new_ab≠prev_ab, new_ret==prev_ret, new_mat≠prev_mat → changes[] contains exactly 2 entries {sc_final_abutment_type, sc_final_crown_material}. Re-submit with identical values → changes[]=[] → no audit append. changed_by_role, changed_by_name, changed_in_phase=4, changed_step=1, changed_at all populated correctly.",
+    "server.py:14008-14016 (case-report PDF Phase-1 block) + 14622-14628 (Phase-4 block) — Both emit the SC labels only when implant_procedure_type=='Single Conventional Implant' and the corresponding values are non-empty. PDF text extraction confirmed all 7 labels present in the generated document.",
+    "prosthesis_type field (server.py:704) has max_length=200 — safely accommodates the longest PROVISIONAL_GROUPED_OPTIONS label used in Ask 3."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_feb2026_single_conventional.py (new — 6 pytest asks, ~450 lines)",
+    "/app/test_reports/pytest/iter_feb2026_sc_workflow.xml (junit output)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "N/A (backend-only ask)"},
+  "seed_data_creation": "All test cases are created via POST /api/procedures (as student Gaurav.pandey) and cleaned up in the per-test 'created_ids' fixture (direct Mongo delete_many). For Ask 3/4/5 the case status is advanced via a single Mongo $set (phase1_approved / stage2_surgical_approved) to bypass the Phase-1/2/3 approval gates — no cross-test state leaks. No production data touched; all patients prefixed 'TEST_SC_' or 'TEST_NonSC_'. No new users created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Test file /app/backend/tests/test_iter_feb2026_single_conventional.py is idempotent — cleans up its own created procedures. If future SC changes touch: (1) the audit contract at server.py:16470-16500 — re-run TestAsk4; (2) the PDF label strings at server.py:14008-14016 or 14622-14628 — re-run TestAsk5; (3) the Pydantic model max_lengths — bump the sample values in _sc_phase1_payload. The Phase 2 submit path in TestAsk3 tolerates 400/422 responses provided the rejection is NOT tied to prosthesis_type/provisional (fails only on silent enum enforcement). Public URL is https://prosthetic-preview.preview.emergentagent.com; MONGO_URL + DB_NAME loaded from /app/backend/.env via python-dotenv.",
+  "rca_of_issue": "N/A — no bugs found. All 6 review asks verified end-to-end against the deployed public backend."
+}

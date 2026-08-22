@@ -161,6 +161,10 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
               ${procedure.loading_type?.length ? `<tr><td class="info-label">Loading Type:</td><td class="info-value">${procedure.loading_type.join(', ')}</td></tr>` : ''}
               ${procedure.prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.prosthetic_plan}</td></tr>` : ''}
               ${procedure.prosthetic_plan_other ? `<tr><td class="info-label">Prosthetic Plan (Other):</td><td class="info-value">${procedure.prosthetic_plan_other}</td></tr>` : ''}
+              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.type_of_provisional) ? `<tr><td class="info-label">Type of Provisional:</td><td class="info-value">${procedure.type_of_provisional}</td></tr>` : ''}
+              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_abutment_type) ? `<tr><td class="info-label">Abutment Type:</td><td class="info-value">${procedure.sc_abutment_type}</td></tr>` : ''}
+              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_retention_type) ? `<tr><td class="info-label">Type of Retention:</td><td class="info-value">${procedure.sc_retention_type}</td></tr>` : ''}
+              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_crown_material) ? `<tr><td class="info-label">Crown Material:</td><td class="info-value">${procedure.sc_crown_material}</td></tr>` : ''}
             </table>
           </div>` : ''}
 
@@ -397,6 +401,9 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
             <div class="section-title">Step 1 — Prosthetic Plan & Impressions</div>
             <table>
               ${procedure.phase4_step1_data.final_prosthetic_plan ? `<tr><td class="info-label">Final Prosthetic Plan:</td><td class="info-value" style="font-weight:bold;">${procedure.phase4_step1_data.final_prosthetic_plan}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.sc_final_abutment_type ? `<tr><td class="info-label">Final Abutment Type:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_abutment_type}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.sc_final_retention_type ? `<tr><td class="info-label">Final Type of Retention:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_retention_type}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.sc_final_crown_material ? `<tr><td class="info-label">Final Crown Material:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_crown_material}</td></tr>` : ''}
               ${procedure.phase4_step1_data.prosthetic_material ? `<tr><td class="info-label">Prosthetic Material:</td><td class="info-value">${procedure.phase4_step1_data.prosthetic_material}</td></tr>` : ''}
               ${procedure.phase4_step1_data.custom_abutment ? `<tr><td class="info-label">Custom Abutment:</td><td class="info-value">${procedure.phase4_step1_data.custom_abutment}</td></tr>` : ''}
               ${procedure.phase4_step1_data.overdenture_attachment ? `<tr><td class="info-label">Overdenture Attachment:</td><td class="info-value">${procedure.phase4_step1_data.overdenture_attachment}</td></tr>` : ''}
@@ -817,6 +824,9 @@ export const buildLabSlipHtml = (procedure: any): string => {
         <h2>Final Prosthesis Plan</h2>
         <table class="grid">
           <tr><td class="lbl">Final Prosthetic Plan</td><td><span class="badge">${p4.final_prosthetic_plan || '—'}</span></td></tr>
+          ${p4.sc_final_abutment_type ? `<tr><td class="lbl">Abutment Type</td><td>${p4.sc_final_abutment_type}</td></tr>` : ''}
+          ${p4.sc_final_retention_type ? `<tr><td class="lbl">Type of Retention</td><td>${p4.sc_final_retention_type}</td></tr>` : ''}
+          ${p4.sc_final_crown_material ? `<tr><td class="lbl">Crown Material</td><td>${p4.sc_final_crown_material}</td></tr>` : ''}
           <tr><td class="lbl">Prosthetic Material</td><td>${p4.prosthetic_material || '—'}</td></tr>
           ${p4.custom_abutment ? `<tr><td class="lbl">Custom Abutment</td><td>${p4.custom_abutment}</td></tr>` : ''}
           ${p4.overdenture_attachment ? `<tr><td class="lbl">Overdenture Attachment</td><td>${p4.overdenture_attachment}</td></tr>` : ''}

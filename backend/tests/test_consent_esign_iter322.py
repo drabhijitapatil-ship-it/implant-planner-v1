@@ -5,7 +5,7 @@ import random
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://dental-consent-sign.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://prosthetic-preview.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 STUDENT = {"identifier": "Gaurav.pandey", "password": "Student@123"}
