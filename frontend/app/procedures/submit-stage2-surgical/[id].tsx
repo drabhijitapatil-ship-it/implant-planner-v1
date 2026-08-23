@@ -45,6 +45,13 @@ export default function Stage2SurgicalSubmissionScreen() {
   // the plan (not just the Fixed/Removable classifier) at Phase 3.
   const [prostheticPlan, setProstheticPlan] = useState<string>('');
   const [prostheticPlanOther, setProstheticPlanOther] = useState<string>('');
+  // iter-Feb-2026-D — Phase-1 Prosthetic Plan composition for the
+  // Phase 3 "Immediate Prosthesis Done" banner. In the new SC/A/B/C
+  // workflows the legacy `prosthetic_plan` string is empty; the plan
+  // lives on structured fields (sc_*, ma_*, fa_*, zp_*) instead. We
+  // hydrate all of them and let `composedPhase1Plan` collapse them
+  // into a single readable string.
+  const [phase1PlanSummary, setPhase1PlanSummary] = useState<string>('');
   const [phase2ProsthesisOther, setPhase2ProsthesisOther] = useState<string>('');
   const [phase2HealingCuffs, setPhase2HealingCuffs] = useState<string[]>([]);
   const [createdById, setCreatedById] = useState<string | null>(null);
@@ -157,6 +164,49 @@ export default function Stage2SurgicalSubmissionScreen() {
       // possibly overridden in Phase 2 via iter-419) surfaced in Phase 3.
       setProstheticPlan(d.prosthetic_plan || '');
       setProstheticPlanOther(d.prosthetic_plan_other || '');
+      // iter-Feb-2026-D — Compose the Phase 1 plan for the Phase 3 banner
+      // across SC / Group A / Group B / Group C workflows (also handles
+      // the 5 overlap types via num_implants). Falls back to the legacy
+      // `prosthetic_plan` when none of the new fields are populated.
+      const pType = d.implant_procedure_type || '';
+      const numImpl = d.num_implants || '';
+      const OVERLAP = new Set([
+        'Immediate Implant', 'Partial Extraction Therapy',
+        'Implant Placement with Guided Bone Regeneration', 'Guided Surgery', 'Sinus Lift',
+      ]);
+      const isSCEff = pType === 'Single Conventional Implant'
+        || (OVERLAP.has(pType) && numImpl === 'Single Implant');
+      const GROUP_C = new Set([
+        'Quad Zygoma Implants', 'Zygoma and Pterygoid Implants',
+        'Zygoma and Conventional Implants', 'Zygoma, Pterygoid and Conventional Implants',
+      ]);
+      const GROUP_B = new Set(['All on 4', 'All on 6', 'All on X']);
+      const GROUP_A = new Set(['Multiple Conventional Implants', 'Pterygoid and Conventional Implants']);
+      const _resolve = (v: string, o: string) => (v === 'Other' && o) ? `Other — ${o}` : v;
+      let summary = '';
+      if (isSCEff) {
+        const bits: string[] = [];
+        if (d.sc_abutment_type) bits.push(`Abutment: ${_resolve(d.sc_abutment_type, d.sc_abutment_type_other || '')}`);
+        if (d.sc_retention_type) bits.push(`Retention: ${_resolve(d.sc_retention_type, d.sc_retention_type_other || '')}`);
+        if (d.sc_crown_material) bits.push(`Crown: ${_resolve(d.sc_crown_material, d.sc_crown_material_other || '')}`);
+        summary = bits.join(' · ');
+      } else if (GROUP_A.has(pType) || (OVERLAP.has(pType) && numImpl === 'Multiple Implants')) {
+        const bits: string[] = [];
+        if (d.ma_prosthesis_type) bits.push(`Prosthesis: ${_resolve(d.ma_prosthesis_type, d.ma_prosthesis_type_other || '')}`);
+        if (d.ma_abutment_type) bits.push(`Abutment: ${_resolve(d.ma_abutment_type, d.ma_abutment_type_other || '')}`);
+        if (d.ma_retention_type) bits.push(`Retention: ${_resolve(d.ma_retention_type, d.ma_retention_type_other || '')}`);
+        if (d.ma_crown_material) bits.push(`Material: ${_resolve(d.ma_crown_material, d.ma_crown_material_other || '')}`);
+        summary = bits.join(' · ');
+      } else if (GROUP_B.has(pType) && d.fa_prosthetic_plan) {
+        summary = _resolve(d.fa_prosthetic_plan, d.fa_prosthetic_plan_other || '');
+      } else if (GROUP_C.has(pType) && d.zp_prosthetic_plan) {
+        summary = _resolve(d.zp_prosthetic_plan, d.zp_prosthetic_plan_other || '');
+      }
+      // Fallback for legacy cases (Existing Implant, Single Implant classic, etc.)
+      if (!summary) {
+        summary = _resolve(d.prosthetic_plan || '', d.prosthetic_plan_other || '');
+      }
+      setPhase1PlanSummary(summary);
       setCreatedById(d.created_by_id || null);
       setCreatedByRole(d.created_by_role || null);
       if (Array.isArray(p2.healing_abutment_cuff_height)) setPhase2HealingCuffs(p2.healing_abutment_cuff_height);
@@ -413,19 +463,23 @@ export default function Stage2SurgicalSubmissionScreen() {
           {phase2Component === 'Immediate Loading Done' && (
             <View style={[s.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32', backgroundColor: '#F1F8E9' }]} testID="phase3-immediate-prosthesis-banner">
               <Text style={{ fontSize: 15, fontWeight: '800', color: '#1B5E20' }}>Immediate Prosthesis Done</Text>
-              {/* iter-Jun-2026 (v13, Chunk E, Ask 2): "Prosthesis Type" and
-                  "Prosthetic Plan" share the same value = prosthetic_plan. */}
-              <Text style={{ marginTop: 6, fontSize: 13, color: '#33691E' }}>
+              {/* iter-Feb-2026-D — Phase 3 banner rows.
+                    Prosthesis Type  ← the immediate provisional picked at
+                                        surgery in Phase 2 Step 2.
+                    Prosthetic Plan  ← what was planned in Phase 1 Step 1
+                                        (composed from SC/A/B/C fields, or
+                                        the legacy prosthetic_plan). */}
+              <Text style={{ marginTop: 6, fontSize: 13, color: '#33691E' }} testID="phase3-banner-prosthesis-type">
                 <Text style={{ fontWeight: '700' }}>Prosthesis Type:</Text>{' '}
-                {prostheticPlan
-                  ? (prostheticPlan === 'Other' ? (prostheticPlanOther || 'Other') : prostheticPlan)
+                {phase2ProsthesisType
+                  ? (phase2ProsthesisType === 'Other'
+                      ? (phase2ProsthesisOther ? `Other — ${phase2ProsthesisOther}` : 'Other')
+                      : phase2ProsthesisType)
                   : '—'}
               </Text>
               <Text style={{ marginTop: 4, fontSize: 13, color: '#33691E' }} testID="phase3-banner-prosthetic-plan">
                 <Text style={{ fontWeight: '700' }}>Prosthetic Plan:</Text>{' '}
-                {prostheticPlan
-                  ? (prostheticPlan === 'Other' ? (prostheticPlanOther || 'Other') : prostheticPlan)
-                  : '—'}
+                {phase1PlanSummary || '—'}
               </Text>
               {isOwner && !pendingEditRequest && (
                 <TouchableOpacity style={s.requestEditBtn} onPress={openEditRequestModal} data-testid="phase3-request-edit-btn">
