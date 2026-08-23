@@ -119,6 +119,12 @@ export default function Phase2SubmissionScreen() {
   // audit-logged PATCH so downstream views stay in sync.
   const [phase1ProstheticPlan, setPhase1ProstheticPlan] = useState<string>('');
   const [phase1ProstheticPlanOther, setPhase1ProstheticPlanOther] = useState<string>('');
+  // iter-Feb-2026-D — Phase 1 Type of Provisional shown as a read-only
+  // reference above the Phase 2 Step 2 Prosthesis Type dropdown, so
+  // the surgeon can see what was planned before choosing the actual
+  // immediate provisional at surgery.
+  const [phase1TypeOfProvisional, setPhase1TypeOfProvisional] = useState<string>('');
+  const [phase1TypeOfProvisionalOther, setPhase1TypeOfProvisionalOther] = useState<string>('');
   const [phase1NumImplants, setPhase1NumImplants] = useState<string>('');
   const [prosthPlanPickerOpen, setProsthPlanPickerOpen] = useState<boolean>(false);
   const [prosthPlanSaving, setProsthPlanSaving] = useState<boolean>(false);
@@ -237,6 +243,9 @@ export default function Phase2SubmissionScreen() {
       // iter-Jun-2026 (v13, Chunk C): Phase-1 Prosthetic Plan hydration.
       setPhase1ProstheticPlan(procRes.data.prosthetic_plan || '');
       setPhase1ProstheticPlanOther(procRes.data.prosthetic_plan_other || '');
+      // iter-Feb-2026-D — Phase 1 Type of Provisional for Step 2 reference.
+      setPhase1TypeOfProvisional(procRes.data.type_of_provisional || '');
+      setPhase1TypeOfProvisionalOther(procRes.data.type_of_provisional_other || '');
       setPhase1NumImplants(procRes.data.num_implants || '');
       // teeth_present drives the Group A (single) vs Group B (multiple) split
       // for Prosthesis Type options when one of the 4 overlapping procedure
@@ -1605,9 +1614,39 @@ export default function Phase2SubmissionScreen() {
               // (Immediate Implant / Sinus Lift / PET / GBR / Guided Surgery)
               // pick SC or Group A based on Phase 1's num_implants answer.
               const g = getEffectiveWorkflow(procedureType, phase1NumImplants);
+              // iter-Feb-2026-D — Amber reference banner showing what was
+              // planned as Type of Provisional in Phase 1. Rendered above
+              // the actual "Prosthesis Type" dropdown so the surgeon can
+              // easily compare intent vs what is actually delivered.
+              const phase1ProvisionalRef = phase1TypeOfProvisional
+                ? (phase1TypeOfProvisional === 'Other' && phase1TypeOfProvisionalOther
+                    ? `Other — ${phase1TypeOfProvisionalOther}`
+                    : phase1TypeOfProvisional)
+                : '';
+              const referenceBanner = phase1ProvisionalRef ? (
+                <View
+                  testID="phase2-phase1-provisional-ref"
+                  style={{
+                    backgroundColor: '#FFF8E1',
+                    borderRadius: 10,
+                    padding: 12,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: '#FFE082',
+                  }}>
+                  <Text style={{ fontSize: 11, color: '#8D6E63', fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 }}>
+                    PHASE 1 TYPE OF PROVISIONAL (REFERENCE)
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#3E2723' }}>{phase1ProvisionalRef}</Text>
+                  <Text style={{ fontSize: 11, color: '#8D6E63', marginTop: 6, fontStyle: 'italic' }}>
+                    Pick the actual provisional delivered at surgery below.
+                  </Text>
+                </View>
+              ) : null;
               if (g === 'SC') {
                 return (
                   <View style={s.section}>
+                    {referenceBanner}
                     <Text style={s.torqueTitle}>Prosthesis Type</Text>
                     <GroupedDescDropdown
                       value={prosthesisType}
@@ -1636,6 +1675,7 @@ export default function Phase2SubmissionScreen() {
                   : GROUP_C_PROVISIONAL_OPTIONS;
                 return (
                   <View style={s.section}>
+                    {referenceBanner}
                     <Text style={s.torqueTitle}>Prosthesis Type</Text>
                     <GroupedDescDropdown
                       value={prosthesisType}
@@ -1679,6 +1719,7 @@ export default function Phase2SubmissionScreen() {
               }
               return (
                 <View style={s.section}>
+                  {referenceBanner}
                   <Text style={s.torqueTitle}>Prosthesis Type</Text>
                   {renderDropdown('Select prosthesis type', prosthesisType, options,
                     prosthesisTypeOpen, setProsthesisTypeOpen, setProsthesisType)}

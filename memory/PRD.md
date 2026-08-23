@@ -1,5 +1,37 @@
 # Prosthodontics Dental Implant Mobile App — PRD
 
+## Iteration Feb-2026-D (Feb 2026) — Phase 3 banner fix + Phase 2 Step 2 reference banner
+
+**Bug fixes (both reported by user)**:
+
+### Bug 1 — Phase 2 Step 2 was missing a Phase 1 provisional reference
+When Prosthetic Component = 'Immediate Loading Done', the surgeon couldn't see what they'd planned as Type of Provisional in Phase 1 while picking the actual immediate provisional at surgery. Added an amber "PHASE 1 TYPE OF PROVISIONAL (REFERENCE)" banner above the Prosthesis Type dropdown, populated from Phase 1 `type_of_provisional` with `_other` override rendered as `Other — <text>`. Applies across SC, Group A/B/C, overlap types and legacy PMMA fallback (all 4 return branches inside `submit-phase2/[id].tsx`).
+
+### Bug 2 — Phase 3 "Immediate Prosthesis Done" banner rows were blank
+Both rows were bound to the legacy `prosthetic_plan` field which is empty in the new SC/A/B/C workflows.
+- `Prosthesis Type` row now reads Phase 2 Step 2 `prosthesis_type` (with `_other`) — the actual immediate provisional delivered at surgery.
+- `Prosthetic Plan` row now shows a composed Phase 1 summary via `phase1PlanSummary`, built in the hydration path (`loadImplantPlan()`):
+  - SC (pure or overlap+Single Implant) → `Abutment: X · Retention: Y · Crown: Z`
+  - Group A (pure or overlap+Multiple Implants) → `Prosthesis: … · Abutment: … · Retention: … · Material: …`
+  - Group B → `fa_prosthetic_plan` (with `_other`)
+  - Group C → `zp_prosthetic_plan` (with `_other`)
+  - Legacy fallback → `prosthetic_plan` (with `_other`)
+
+Every branch handles the `_other` override with `Other — <text>`.
+
+### Tests
+- Backend regression: 45/45 pass — SC 6/6 + B 22/22 + C 17/17. Reports at `/app/test_reports/pytest/iter_feb2026_D_regression.xml`.
+- Frontend code review: both new testIDs present and correctly wired.
+- Frontend smoke test: app loads cleanly, no red-screen or console errors.
+- Report: `/app/test_reports/iteration_430.json`.
+
+### Deferred (non-blocking)
+- Extracting `composePhase1Plan(procData)` into a shared util to eliminate 40+ inline lines in `loadImplantPlan()`.
+- `submit-stage2-surgical/[id].tsx` now 1030 lines — approaching a natural split point.
+
+---
+
+
 ## Iteration Feb-2026-C (Feb 2026) — SC "Other" + Overlap-type routing by Number of Implants
 
 **Scope**: Two extensions to the previously-shipped prosthesis workflows.

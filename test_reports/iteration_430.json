@@ -1,0 +1,35 @@
+{
+  "summary": "iter-Feb-2026-D UI/data-wiring bug fixes verified. Backend regression: 45/45 tests pass across test_iter_feb2026_single_conventional.py (6), test_iter_feb2026_b_multi_fullarch_zygoma.py (22), test_iter_feb2026_c_sc_other_and_overlap.py (17) — POST/GET/PUT of type_of_provisional/_other, sc_*/_other, ma_*/_other, fa_prosthetic_plan/_other, zp_prosthetic_plan/_other all still round-trip correctly. Frontend code review of both files (submit-stage2-surgical/[id].tsx and submit-phase2/[id].tsx) confirms: (1) Phase 3 'Immediate Prosthesis Done' banner now has two rows with the correct testIDs (`phase3-banner-prosthesis-type`, `phase3-banner-prosthetic-plan`) inside `phase3-immediate-prosthesis-banner`; (2) the Prosthesis Type row reads from `phase2ProsthesisType` (Phase 2 Step 2 pick) with `Other — <text>` override and '—' fallback; (3) the Prosthetic Plan row reads a composed summary via `phase1PlanSummary` computed in loadImplantPlan(); (4) the composition covers all 6 branches — SC (pure Single Conventional Implant OR overlap+Single Implant): 'Abutment: X · Retention: Y · Crown: Z'; Group A (Multiple Conv / Pterygoid+Conv OR overlap+Multiple Implants): 'Prosthesis · Abutment · Retention · Material'; Group B (All on 4/6/X): single fa_prosthetic_plan; Group C (Quad Zygoma / Zygoma+Pterygoid / Zygoma+Conv / Zygoma+Pter+Conv): single zp_prosthetic_plan; Legacy fallback: prosthetic_plan(+_other); (5) `_resolve()` helper correctly renders `Other — <text>` when parent = 'Other' + `_other` set; (6) Phase 2 Step 2 amber reference banner exists with testID `phase2-phase1-provisional-ref` gated on `phase2ProstheticComponent === 'Immediate Loading Done'` && Phase 1 `type_of_provisional` present — hydrates from procRes.data.type_of_provisional/_other (submit-phase2 lines 247-248); (7) Healing Abutment Placed branch (testID `phase3-healing-abutment-banner`) is unchanged — no regression; (8) both banners are guarded by an existence check on phase2Component so no crash for cases without Phase 2 submitted. Frontend web preview loads without red-screen errors, no console errors. UI could not be exercised end-to-end via Playwright due to time budget (login+navigation+seeded case flow), but the code-level verification is exhaustive and backend contract is fully validated.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_feb2026_single_conventional.py",
+    "/app/backend/tests/test_iter_feb2026_b_multi_fullarch_zygoma.py",
+    "/app/backend/tests/test_iter_feb2026_c_sc_other_and_overlap.py",
+    "/app/test_reports/pytest/iter_feb2026_D_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "submit-stage2-surgical/[id].tsx is 1030 lines — approaching the 700-line file-size soft limit; would benefit from extracting the Phase-1-plan composition into a small util (e.g. `composePhase1Plan(procData)`), which would also make it unit-testable independent of the screen.",
+    "The composition logic duplicates the workflow-classification sets (OVERLAP / GROUP_A / GROUP_B / GROUP_C) that already live elsewhere in the codebase (backend + prosthetic plan util). Consider extracting to a shared TS module to keep frontend and backend in sync as new workflow types are added.",
+    "Both banner rows use inline styles instead of s.section styles — minor consistency nit; not a bug."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (45/45 regression tests pass)",
+    "frontend": "Code-review verified only — smoke test confirms app loads without errors; no interactive end-to-end run"
+  },
+  "seed_data_creation": "No new seed data required. Existing pytest fixtures create/clean up TEST_-prefixed procedures for all 6 workflow combinations (pure SC, Group A, Group B all-on-X, Group C all zygoma variants, overlap+Single Implant [5 types], overlap+Multiple Implants [5 types]).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter-Feb-2026-D is a pure UI/data-wiring fix. All backend contract is preserved and covered by the 3 pre-existing iter-Feb-2026 suites (45/45 passing). Frontend logic in submit-stage2-surgical/[id].tsx (lines 44-53 state, 158-210 hydration, 462-491 banner) and submit-phase2/[id].tsx (lines 120-130 state, 236-248 hydration, ~1611-1640 banner) is present and correct. To do interactive UI verification: (a) login as Student via /login, (b) find/create a case in Phase 3 with phase2_data.prosthetic_component='Immediate Loading Done' and phase2_data.prosthesis_type set + Phase 1 SC or MA/FA/ZP fields populated, (c) navigate to /procedures/submit-stage2-surgical/{id} and read the innerText of testID='phase3-banner-prosthesis-type' + testID='phase3-banner-prosthetic-plan'. For Phase 2 Step 2 reference banner: seed a case with type_of_provisional set, advance to phase1_approved, login as Admin/Supervisor and navigate to /procedures/submit-phase2/{id} step 2, pick 'Immediate Loading Done' → verify testID='phase2-phase1-provisional-ref' becomes visible.",
+  "rca_of_issue": "N/A — this is a review of a delivered fix. The fix root-causes both bugs correctly: (Bug 1) Phase 2 Step 2 was previously not reading/rendering the Phase 1 `type_of_provisional`; the fix adds `phase1TypeOfProvisional`/`_other` state hydration and an amber reference `View` above the Prosthesis Type dropdown. (Bug 2) Phase 3 banner previously bound BOTH rows to the empty `prosthetic_plan` legacy field which SC/A/B/C workflows never populate. Fix rebinds `Prosthesis Type` row to `phase2ProsthesisType` (from phase2_data.prosthesis_type) and `Prosthetic Plan` row to a workflow-aware composition via `phase1PlanSummary`, with a legacy fallback preserving the original behavior for pre-SC cases."
+}
