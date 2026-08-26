@@ -497,7 +497,7 @@ def _render_drill_steps(rows, implant_diameter, implant_length, system_name):
             "diameter": drill_d,
             "depth": depth_value,
             "cortical_only": bool(cortex_only),
-            "rpm": "800-1500 (catalog does not specify)",
+            "rpm": "800-1500",
             "irrigation": True,
             "note": " ".join(note_parts),
         })
