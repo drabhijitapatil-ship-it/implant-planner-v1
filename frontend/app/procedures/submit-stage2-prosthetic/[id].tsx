@@ -13,7 +13,14 @@ import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import SaveDraftButton from '../../../components/SaveDraftButton';
-import { draftStorageKey, loadDraft, clearDraft, useDraftAutosave, useUnsavedChangesGuard } from '../../../utils/draftAutosave';
+import {
+  draftStorageKey,
+  loadDraft,
+  clearDraft,
+  useDraftAutosave,
+  useUnsavedChangesGuard,
+} from '../../../utils/draftAutosave';
+// iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 4 Step 1.
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -26,6 +33,21 @@ import {
   SINGLE_GROUP,
   MULTIPLE_GROUP,
 } from '../../../constants/checklist';
+import GroupedDescDropdown from '../../../components/GroupedDescDropdown';
+import {
+  SC_ABUTMENT_TYPE_OPTIONS,
+  SC_RETENTION_TYPE_OPTIONS,
+  SC_CROWN_MATERIAL_OPTIONS,
+} from '../../../constants/singleConventional';
+import {
+  GROUP_A_PROSTHESIS_TYPE_OPTIONS,
+  GROUP_A_ABUTMENT_TYPE_OPTIONS,
+  GROUP_A_RETENTION_OPTIONS,
+  GROUP_A_CROWN_MATERIAL_OPTIONS,
+  GROUP_B_PROSTHETIC_PLAN_OPTIONS,
+  GROUP_C_PROSTHETIC_PLAN_OPTIONS,
+  getEffectiveWorkflow,
+} from '../../../constants/prosthesisWorkflows';
 
 export default function Phase4Step1Screen() {
   const { id } = useLocalSearchParams();
@@ -73,16 +95,44 @@ export default function Phase4Step1Screen() {
   // remodelling, lab feedback). State seeded on mount from
   // phase4_step1_data.multi_unit_abutment_details when present (the live
   // override) and falls back to phase2_data on Copy.
-  type MuaRow = { tooth: string; angulation: string; cuff_height: string };
+  // iter-Jun-2026 (v13, Chunk G, Ask 1): each row now carries a
+  // `confirmed` flag — Student must tick each row before Lab Slip PDF
+  // export becomes available. Rows are always editable (cuff height +
+  // angulation) so the prosthodontist can correct values first.
+  type MuaRow = { tooth: string; angulation: string; cuff_height: string; confirmed?: boolean };
   const [muaRows, setMuaRows] = useState<MuaRow[]>([]);
-  // Tracks whether the user has interacted with MUA in Phase 4. Without this
-  // flag we cannot tell "no MUA" from "haven't touched it yet" when deciding
-  // whether to fall back to Phase 2 in the Lab Slip.
   const [muaTouched, setMuaTouched] = useState(false);
+
+  // iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-Oral Scan sub-fields —
+  // multi-select. Exported to Lab Slip PDF as bulleted lists.
+  const [scanBodyTypes, setScanBodyTypes] = useState<string[]>([]);
+  const [scanTypes, setScanTypes] = useState<string[]>([]);
+  const [scanLevels, setScanLevels] = useState<string[]>([]);
 
   // Per-implant prosthetic plan for multiple implants (non-bridge)
   const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
   const [implantPositions, setImplantPositions] = useState<string[]>([]);
+
+  // iter-Feb-2026 / -C — Single-Conventional-Implant Final Prosthetic Plan.
+  const [scFinalAbutmentType, setScFinalAbutmentType] = useState('');
+  const [scFinalAbutmentTypeOther, setScFinalAbutmentTypeOther] = useState('');
+  const [scFinalRetentionType, setScFinalRetentionType] = useState('');
+  const [scFinalRetentionTypeOther, setScFinalRetentionTypeOther] = useState('');
+  const [scFinalCrownMaterial, setScFinalCrownMaterial] = useState('');
+  const [scFinalCrownMaterialOther, setScFinalCrownMaterialOther] = useState('');
+  // iter-Feb-2026-B — Multiple/Full-Arch/Zygoma Final Plan.
+  const [maFinalProsthesisType, setMaFinalProsthesisType] = useState('');
+  const [maFinalProsthesisTypeOther, setMaFinalProsthesisTypeOther] = useState('');
+  const [maFinalAbutmentType, setMaFinalAbutmentType] = useState('');
+  const [maFinalAbutmentTypeOther, setMaFinalAbutmentTypeOther] = useState('');
+  const [maFinalRetentionType, setMaFinalRetentionType] = useState('');
+  const [maFinalRetentionTypeOther, setMaFinalRetentionTypeOther] = useState('');
+  const [maFinalCrownMaterial, setMaFinalCrownMaterial] = useState('');
+  const [maFinalCrownMaterialOther, setMaFinalCrownMaterialOther] = useState('');
+  const [faFinalProstheticPlan, setFaFinalProstheticPlan] = useState('');
+  const [faFinalProstheticPlanOther, setFaFinalProstheticPlanOther] = useState('');
+  const [zpFinalProstheticPlan, setZpFinalProstheticPlan] = useState('');
+  const [zpFinalProstheticPlanOther, setZpFinalProstheticPlanOther] = useState('');
 
   // ── Local draft autosave (survives backgrounding / navigating away before
   // final Submit) — see utils/draftAutosave.ts. Only user-edited fields are
@@ -91,9 +141,44 @@ export default function Phase4Step1Screen() {
   const [screenLoaded, setScreenLoaded] = useState(false);
   const draftKey = draftStorageKey('phase4step1', String(id), user?.id);
   const getDraftSnapshot = () => ({
-    doneDate, finalProsthesis, prostheticMaterial, customAbutment, overdentureAttachment,
-    paymentComplete, componentsAvailable, impressionType, conventionalTrayType, impressionMaterial,
-    shadeValues, shadeNotes, labSlipNote, studentNotes, muaRows, muaTouched, perImplantPlans,
+    doneDate,
+    finalProsthesis,
+    prostheticMaterial,
+    customAbutment,
+    overdentureAttachment,
+    paymentComplete,
+    componentsAvailable,
+    impressionType,
+    conventionalTrayType,
+    impressionMaterial,
+    scanBodyTypes,
+    scanTypes,
+    scanLevels,
+    shadeValues,
+    shadeNotes,
+    labSlipNote,
+    studentNotes,
+    muaRows,
+    muaTouched,
+    perImplantPlans,
+    scFinalAbutmentType,
+    scFinalAbutmentTypeOther,
+    scFinalRetentionType,
+    scFinalRetentionTypeOther,
+    scFinalCrownMaterial,
+    scFinalCrownMaterialOther,
+    maFinalProsthesisType,
+    maFinalProsthesisTypeOther,
+    maFinalAbutmentType,
+    maFinalAbutmentTypeOther,
+    maFinalRetentionType,
+    maFinalRetentionTypeOther,
+    maFinalCrownMaterial,
+    maFinalCrownMaterialOther,
+    faFinalProstheticPlan,
+    faFinalProstheticPlanOther,
+    zpFinalProstheticPlan,
+    zpFinalProstheticPlanOther,
   });
   const applyDraftSnapshot = (d: Record<string, any>) => {
     if (d.doneDate !== undefined) setDoneDate(d.doneDate);
@@ -106,6 +191,9 @@ export default function Phase4Step1Screen() {
     if (d.impressionType !== undefined) setImpressionType(d.impressionType);
     if (d.conventionalTrayType !== undefined) setConventionalTrayType(d.conventionalTrayType);
     if (d.impressionMaterial !== undefined) setImpressionMaterial(d.impressionMaterial);
+    if (d.scanBodyTypes !== undefined) setScanBodyTypes(d.scanBodyTypes);
+    if (d.scanTypes !== undefined) setScanTypes(d.scanTypes);
+    if (d.scanLevels !== undefined) setScanLevels(d.scanLevels);
     if (d.shadeValues !== undefined) setShadeValues(d.shadeValues);
     if (d.shadeNotes !== undefined) setShadeNotes(d.shadeNotes);
     if (d.labSlipNote !== undefined) setLabSlipNote(d.labSlipNote);
@@ -113,6 +201,24 @@ export default function Phase4Step1Screen() {
     if (d.muaRows !== undefined) setMuaRows(d.muaRows);
     if (d.muaTouched !== undefined) setMuaTouched(d.muaTouched);
     if (d.perImplantPlans !== undefined) setPerImplantPlans(d.perImplantPlans);
+    if (d.scFinalAbutmentType !== undefined) setScFinalAbutmentType(d.scFinalAbutmentType);
+    if (d.scFinalAbutmentTypeOther !== undefined) setScFinalAbutmentTypeOther(d.scFinalAbutmentTypeOther);
+    if (d.scFinalRetentionType !== undefined) setScFinalRetentionType(d.scFinalRetentionType);
+    if (d.scFinalRetentionTypeOther !== undefined) setScFinalRetentionTypeOther(d.scFinalRetentionTypeOther);
+    if (d.scFinalCrownMaterial !== undefined) setScFinalCrownMaterial(d.scFinalCrownMaterial);
+    if (d.scFinalCrownMaterialOther !== undefined) setScFinalCrownMaterialOther(d.scFinalCrownMaterialOther);
+    if (d.maFinalProsthesisType !== undefined) setMaFinalProsthesisType(d.maFinalProsthesisType);
+    if (d.maFinalProsthesisTypeOther !== undefined) setMaFinalProsthesisTypeOther(d.maFinalProsthesisTypeOther);
+    if (d.maFinalAbutmentType !== undefined) setMaFinalAbutmentType(d.maFinalAbutmentType);
+    if (d.maFinalAbutmentTypeOther !== undefined) setMaFinalAbutmentTypeOther(d.maFinalAbutmentTypeOther);
+    if (d.maFinalRetentionType !== undefined) setMaFinalRetentionType(d.maFinalRetentionType);
+    if (d.maFinalRetentionTypeOther !== undefined) setMaFinalRetentionTypeOther(d.maFinalRetentionTypeOther);
+    if (d.maFinalCrownMaterial !== undefined) setMaFinalCrownMaterial(d.maFinalCrownMaterial);
+    if (d.maFinalCrownMaterialOther !== undefined) setMaFinalCrownMaterialOther(d.maFinalCrownMaterialOther);
+    if (d.faFinalProstheticPlan !== undefined) setFaFinalProstheticPlan(d.faFinalProstheticPlan);
+    if (d.faFinalProstheticPlanOther !== undefined) setFaFinalProstheticPlanOther(d.faFinalProstheticPlanOther);
+    if (d.zpFinalProstheticPlan !== undefined) setZpFinalProstheticPlan(d.zpFinalProstheticPlan);
+    if (d.zpFinalProstheticPlanOther !== undefined) setZpFinalProstheticPlanOther(d.zpFinalProstheticPlanOther);
   };
   const { saveNow } = useDraftAutosave({
     enabled: screenLoaded,
@@ -171,14 +277,66 @@ export default function Phase4Step1Screen() {
       // iter-210: hydrate MUA override from any saved phase4_step1_data.
       // This makes the form sticky across reloads and lets the user keep
       // editing instead of re-typing everything.
+      // iter-Jun-2026 (v13, Chunk G, Ask 1): Auto-seed MUA rows from Phase 2
+      // when Phase 4 has not been saved yet. Each row also carries a
+      // `confirmed` flag — Student must tick each row before Lab Slip PDF
+      // export becomes enabled. Cuff height / angulation stay editable.
       const savedMua: any[] | undefined = procRes.data?.phase4_step1_data?.multi_unit_abutment_details;
       if (Array.isArray(savedMua) && savedMua.length > 0) {
         setMuaRows(savedMua.map((r: any) => ({
           tooth: String(r?.tooth ?? ''),
           angulation: String(r?.angulation ?? ''),
           cuff_height: String(r?.cuff_height ?? ''),
+          confirmed: !!r?.confirmed,
         })));
         setMuaTouched(true);
+      } else {
+        const phase2Mua = procRes.data?.phase2_data?.multi_unit_abutment_placed;
+        const phase2Details: any[] = procRes.data?.phase2_data?.multi_unit_abutment_details || [];
+        if (phase2Mua === 'yes' && phase2Details.length > 0) {
+          setMuaRows(phase2Details.map((r: any) => ({
+            tooth: String(r?.tooth ?? ''),
+            angulation: String(r?.angulation ?? ''),
+            cuff_height: String(r?.cuff_height ?? ''),
+            confirmed: false,
+          })));
+          setMuaTouched(true);
+        }
+      }
+
+      // iter-Jun-2026 (v13, Chunk G, Ask 3): hydrate Intra-Oral Scan sub-fields.
+      const p4 = procRes.data?.phase4_step1_data || {};
+      setScanBodyTypes(Array.isArray(p4.scan_body_types) ? p4.scan_body_types : []);
+      setScanTypes(Array.isArray(p4.scan_types) ? p4.scan_types : []);
+      setScanLevels(Array.isArray(p4.scan_levels) ? p4.scan_levels : []);
+
+      // iter-Feb-2026 / -C — Hydrate Single-Conventional-Implant Final Plan.
+      // Applies for pure SC AND overlap types with num_implants='Single Implant'.
+      const effP4 = getEffectiveWorkflow(procType, procRes.data?.num_implants);
+      if (effP4 === 'SC') {
+        setScFinalAbutmentType(p4.sc_final_abutment_type || procRes.data?.sc_abutment_type || '');
+        setScFinalAbutmentTypeOther(p4.sc_final_abutment_type_other || procRes.data?.sc_abutment_type_other || '');
+        setScFinalRetentionType(p4.sc_final_retention_type || procRes.data?.sc_retention_type || '');
+        setScFinalRetentionTypeOther(p4.sc_final_retention_type_other || procRes.data?.sc_retention_type_other || '');
+        setScFinalCrownMaterial(p4.sc_final_crown_material || procRes.data?.sc_crown_material || '');
+        setScFinalCrownMaterialOther(p4.sc_final_crown_material_other || procRes.data?.sc_crown_material_other || '');
+      }
+      // iter-Feb-2026-B / -C — Hydrate Multiple/Full-Arch/Zygoma Final Plan.
+      if (effP4 === 'A') {
+        setMaFinalProsthesisType(p4.ma_final_prosthesis_type || procRes.data?.ma_prosthesis_type || '');
+        setMaFinalProsthesisTypeOther(p4.ma_final_prosthesis_type_other || procRes.data?.ma_prosthesis_type_other || '');
+        setMaFinalAbutmentType(p4.ma_final_abutment_type || procRes.data?.ma_abutment_type || '');
+        setMaFinalAbutmentTypeOther(p4.ma_final_abutment_type_other || procRes.data?.ma_abutment_type_other || '');
+        setMaFinalRetentionType(p4.ma_final_retention_type || procRes.data?.ma_retention_type || '');
+        setMaFinalRetentionTypeOther(p4.ma_final_retention_type_other || procRes.data?.ma_retention_type_other || '');
+        setMaFinalCrownMaterial(p4.ma_final_crown_material || procRes.data?.ma_crown_material || '');
+        setMaFinalCrownMaterialOther(p4.ma_final_crown_material_other || procRes.data?.ma_crown_material_other || '');
+      } else if (effP4 === 'B') {
+        setFaFinalProstheticPlan(p4.fa_final_prosthetic_plan || procRes.data?.fa_prosthetic_plan || '');
+        setFaFinalProstheticPlanOther(p4.fa_final_prosthetic_plan_other || procRes.data?.fa_prosthetic_plan_other || '');
+      } else if (effP4 === 'C') {
+        setZpFinalProstheticPlan(p4.zp_final_prosthetic_plan || procRes.data?.zp_prosthetic_plan || '');
+        setZpFinalProstheticPlanOther(p4.zp_final_prosthetic_plan_other || procRes.data?.zp_prosthetic_plan_other || '');
       }
     } catch {}
 
@@ -193,6 +351,19 @@ export default function Phase4Step1Screen() {
     if (!procedure) return false;
     return FULL_ARCH_GROUP.has(procedure.implant_procedure_type || '');
   })();
+
+  // iter-Feb-2026 / -C — Effective workflow. Accounts for pure SC, pure
+  // Group A/B/C AND the 5 overlap procedure types where num_implants
+  // decides SC vs A. Drives every Phase 4 Step 1 branch below.
+  const effectiveWorkflow = getEffectiveWorkflow(
+    procedure?.implant_procedure_type,
+    procedure?.num_implants,
+  );
+  const isSCImplant = effectiveWorkflow === 'SC';
+  const workflowGroup: 'A' | 'B' | 'C' | null =
+    effectiveWorkflow === 'A' ? 'A'
+    : effectiveWorkflow === 'B' ? 'B'
+    : effectiveWorkflow === 'C' ? 'C' : null;
 
   // Determine if per-implant mode: Multiple implants + no bridge in Phase 1 prosthetic plan
   const isPerImplantMode = (() => {
@@ -228,15 +399,39 @@ export default function Phase4Step1Screen() {
   // iter-194: validate shape required for both Submit and Generate-Lab-Slip paths.
   // Returns null when valid, else a user-facing message.
   const validateForm = (): string | null => {
-    if (isPerImplantMode) {
+    const otherFilled = (v: string, o: string) => v !== 'Other' || (!!o && o.trim().length > 0);
+    // iter-Feb-2026 / -C — Single-Conventional-Implant validation takes priority.
+    if (isSCImplant) {
+      if (!scFinalAbutmentType) return 'Please select the Abutment Type';
+      if (!otherFilled(scFinalAbutmentType, scFinalAbutmentTypeOther)) return 'Please describe the custom Abutment Type';
+      if (!scFinalRetentionType) return 'Please select the Type of Retention';
+      if (!otherFilled(scFinalRetentionType, scFinalRetentionTypeOther)) return 'Please describe the custom Type of Retention';
+      if (!scFinalCrownMaterial) return 'Please select the Crown Material';
+      if (!otherFilled(scFinalCrownMaterial, scFinalCrownMaterialOther)) return 'Please describe the custom Crown Material';
+    } else if (workflowGroup === 'A') {
+      if (!maFinalProsthesisType) return 'Please select the Prosthesis Type';
+      if (!otherFilled(maFinalProsthesisType, maFinalProsthesisTypeOther)) return 'Please describe the custom Prosthesis Type';
+      if (!maFinalAbutmentType) return 'Please select the Abutment Type';
+      if (!otherFilled(maFinalAbutmentType, maFinalAbutmentTypeOther)) return 'Please describe the custom Abutment Type';
+      if (!maFinalRetentionType) return 'Please select the Type of Retention';
+      if (!otherFilled(maFinalRetentionType, maFinalRetentionTypeOther)) return 'Please describe the custom Retention Type';
+      if (!maFinalCrownMaterial) return 'Please select the Crown/Bridge Material';
+      if (!otherFilled(maFinalCrownMaterial, maFinalCrownMaterialOther)) return 'Please describe the custom Crown/Bridge Material';
+    } else if (workflowGroup === 'B') {
+      if (!faFinalProstheticPlan) return 'Please select the Prosthetic Plan';
+      if (!otherFilled(faFinalProstheticPlan, faFinalProstheticPlanOther)) return 'Please describe the custom Prosthetic Plan';
+    } else if (workflowGroup === 'C') {
+      if (!zpFinalProstheticPlan) return 'Please select the Prosthetic Plan';
+      if (!otherFilled(zpFinalProstheticPlan, zpFinalProstheticPlanOther)) return 'Please describe the custom Prosthetic Plan';
+    } else if (isPerImplantMode) {
       for (let i = 0; i < perImplantPlans.length; i++) {
         if (!perImplantPlans[i].prosthesis) {
-          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          const _lbl = implantPositions[i] ? `Implant ${implantPositions[i]}` : `Implant ${i + 1}`;
           return `Please select prosthesis for ${_lbl}`;
         }
         const showMat = perImplantPlans[i].prosthesis.includes('FP1') || perImplantPlans[i].prosthesis.includes('FP2') || perImplantPlans[i].prosthesis.includes('FP3');
         if (showMat && !perImplantPlans[i].material) {
-          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          const _lbl = implantPositions[i] ? `Implant ${implantPositions[i]}` : `Implant ${i + 1}`;
           return `Please select material for ${_lbl}`;
         }
       }
@@ -254,7 +449,7 @@ export default function Phase4Step1Screen() {
       const slots = Math.max(1, implantPositions.length || 1);
       for (let i = 0; i < slots; i++) {
         if (!shadeValues[i]?.trim()) {
-          const _lbl = implantPositions[i] ? `Tooth #${implantPositions[i]}` : `Implant ${i + 1}`;
+          const _lbl = implantPositions[i] ? `Implant ${implantPositions[i]}` : `Implant ${i + 1}`;
           return `Please enter the shade for ${_lbl}`;
         }
       }
@@ -274,6 +469,11 @@ export default function Phase4Step1Screen() {
       impression_type: impressionType,
       conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
       impression_material: impressionType === 'conventional' ? impressionMaterial : null,
+      // iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields persisted only
+      // when intra-oral scan is picked.
+      scan_body_types: impressionType === 'intraoral_scans' ? scanBodyTypes : null,
+      scan_types: impressionType === 'intraoral_scans' ? scanTypes : null,
+      scan_levels: impressionType === 'intraoral_scans' ? scanLevels : null,
       // iter-194: shade
       shade_values: (isFullArch ? shadeValues.slice(0, 2) : shadeValues.slice(0, Math.max(1, implantPositions.length || 1))).map(v => (v || '').trim()),
       shade_notes: shadeNotes ? shadeNotes.trim() : null,
@@ -290,6 +490,48 @@ export default function Phase4Step1Screen() {
         `#${implantPositions[idx] || idx + 1}: ${p.prosthesis}${p.material ? ' - ' + p.material : ''}`
       ).join('; ');
       payload.prosthetic_material = perImplantPlans.map(p => p.material).filter(Boolean).join(', ') || null;
+    } else if (isSCImplant) {
+      payload.sc_final_abutment_type = scFinalAbutmentType;
+      payload.sc_final_abutment_type_other = scFinalAbutmentType === 'Other' ? scFinalAbutmentTypeOther : '';
+      payload.sc_final_retention_type = scFinalRetentionType;
+      payload.sc_final_retention_type_other = scFinalRetentionType === 'Other' ? scFinalRetentionTypeOther : '';
+      payload.sc_final_crown_material = scFinalCrownMaterial;
+      payload.sc_final_crown_material_other = scFinalCrownMaterial === 'Other' ? scFinalCrownMaterialOther : '';
+      const abtx = scFinalAbutmentType === 'Other' ? scFinalAbutmentTypeOther : scFinalAbutmentType;
+      const retx = scFinalRetentionType === 'Other' ? scFinalRetentionTypeOther : scFinalRetentionType;
+      const mtx = scFinalCrownMaterial === 'Other' ? scFinalCrownMaterialOther : scFinalCrownMaterial;
+      payload.final_prosthetic_plan =
+        `${retx} — ${mtx}` +
+        (abtx ? ` (Abutment: ${abtx})` : '');
+      payload.prosthetic_material = mtx || null;
+    } else if (workflowGroup === 'A') {
+      // iter-Feb-2026-B — Group A: Multiple Conv / Pterygoid+Conv 4-part.
+      payload.ma_final_prosthesis_type = maFinalProsthesisType;
+      payload.ma_final_prosthesis_type_other = maFinalProsthesisType === 'Other' ? maFinalProsthesisTypeOther : '';
+      payload.ma_final_abutment_type = maFinalAbutmentType;
+      payload.ma_final_abutment_type_other = maFinalAbutmentType === 'Other' ? maFinalAbutmentTypeOther : '';
+      payload.ma_final_retention_type = maFinalRetentionType;
+      payload.ma_final_retention_type_other = maFinalRetentionType === 'Other' ? maFinalRetentionTypeOther : '';
+      payload.ma_final_crown_material = maFinalCrownMaterial;
+      payload.ma_final_crown_material_other = maFinalCrownMaterial === 'Other' ? maFinalCrownMaterialOther : '';
+      const ptx = maFinalProsthesisType === 'Other' ? maFinalProsthesisTypeOther : maFinalProsthesisType;
+      const abtx = maFinalAbutmentType === 'Other' ? maFinalAbutmentTypeOther : maFinalAbutmentType;
+      const retx = maFinalRetentionType === 'Other' ? maFinalRetentionTypeOther : maFinalRetentionType;
+      const mtx = maFinalCrownMaterial === 'Other' ? maFinalCrownMaterialOther : maFinalCrownMaterial;
+      payload.final_prosthetic_plan = `${ptx} — ${retx} — ${mtx}` + (abtx ? ` (Abutment: ${abtx})` : '');
+      payload.prosthetic_material = mtx || null;
+    } else if (workflowGroup === 'B') {
+      // iter-Feb-2026-B — Group B: All-on-X single plan.
+      payload.fa_final_prosthetic_plan = faFinalProstheticPlan;
+      payload.fa_final_prosthetic_plan_other = faFinalProstheticPlan === 'Other' ? faFinalProstheticPlanOther : '';
+      payload.final_prosthetic_plan = faFinalProstheticPlan === 'Other' ? faFinalProstheticPlanOther : faFinalProstheticPlan;
+      payload.prosthetic_material = null;
+    } else if (workflowGroup === 'C') {
+      // iter-Feb-2026-B — Group C: Zygoma-specific single plan.
+      payload.zp_final_prosthetic_plan = zpFinalProstheticPlan;
+      payload.zp_final_prosthetic_plan_other = zpFinalProstheticPlan === 'Other' ? zpFinalProstheticPlanOther : '';
+      payload.final_prosthetic_plan = zpFinalProstheticPlan === 'Other' ? zpFinalProstheticPlanOther : zpFinalProstheticPlan;
+      payload.prosthetic_material = null;
     } else {
       payload.final_prosthetic_plan = finalProsthesis + (prostheticMaterial ? ` - ${prostheticMaterial}` : '');
       payload.prosthetic_material = prostheticMaterial || null;
@@ -304,6 +546,9 @@ export default function Phase4Step1Screen() {
           tooth: (r.tooth ?? '').trim(),
           angulation: (r.angulation ?? '').trim(),
           cuff_height: (r.cuff_height ?? '').trim(),
+          // iter-Jun-2026 (v13, Chunk G, Ask 1): confirmed flag persisted so
+          // the Lab Slip button can guard on it and re-hydration remembers.
+          confirmed: !!r.confirmed,
         }))
         .filter(r => r.tooth || r.angulation || r.cuff_height);
       payload.multi_unit_abutment_details = cleaned.length > 0 ? cleaned : null;
@@ -340,6 +585,18 @@ export default function Phase4Step1Screen() {
   const handleGenerateLabSlip = async () => {
     const err = validateForm();
     if (err) { Alert.alert('Missing', err); return; }
+    // iter-Jun-2026 (v13, Chunk G, Ask 1): block Lab Slip export until every
+    // MUA row has been confirmed (cuff height / angulation reviewed).
+    if (muaRows.length > 0) {
+      const unconfirmed = muaRows.filter(r => !r.confirmed).length;
+      if (unconfirmed > 0) {
+        Alert.alert(
+          'Confirm MUA details',
+          `Please confirm all Multi-Unit Abutment rows before generating the Lab Slip. ${unconfirmed} row${unconfirmed > 1 ? 's are' : ' is'} still awaiting confirmation.`,
+        );
+        return;
+      }
+    }
     setLabSlipLoading(true);
     try {
       const payload = buildPayload();
@@ -381,14 +638,15 @@ export default function Phase4Step1Screen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <SaveDraftButton onSave={saveNow} />
       <PhaseHeader
         title="Phase 4 - Prosthetic Rehabilitation"
         subtitle="Step 1 of 2: Prosthetic Planning"
         testID="phase4-step1-submit-header"
       />
-      <SaveDraftButton onSave={saveNow} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+          {/* iter-Jun-2026 (v13, Chunk D, Ask 1): 3-tab sub-view removed. */}
           {/* ── Final Prosthesis Selection ── */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
@@ -416,7 +674,7 @@ export default function Phase4Step1Screen() {
                   return (
                     <View key={idx} style={{ backgroundColor: '#F8F9FE', borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E0E7EE' }}>
                       <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>
-                        {implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : `Implant ${idx + 1}`}
+                        {implantPositions[idx] ? `Implant ${implantPositions[idx]}` : `Implant ${idx + 1}`}
                       </Text>
 
                       {/* Prosthesis Type */}
@@ -472,18 +730,122 @@ export default function Phase4Step1Screen() {
               </>
             ) : (
               <>
-                {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
-                  prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
+                {isSCImplant ? (
+                  <>
+                    {/* iter-Feb-2026 / -C — Single-Conventional-Implant Final Plan. */}
+                    {(procedure?.sc_abutment_type
+                      || procedure?.sc_retention_type
+                      || procedure?.sc_crown_material) && (
+                      <Phase1PlanReferenceBanner
+                        rows={[
+                          ['Abutment', procedure?.sc_abutment_type_other || procedure?.sc_abutment_type],
+                          ['Retention', procedure?.sc_retention_type_other || procedure?.sc_retention_type],
+                          ['Crown Material', procedure?.sc_crown_material_other || procedure?.sc_crown_material],
+                        ]}
+                      />
+                    )}
+                    <SCPickerRow label="1. Abutment Type" value={scFinalAbutmentType}
+                      other={scFinalAbutmentTypeOther} setV={setScFinalAbutmentType}
+                      setO={setScFinalAbutmentTypeOther} options={SC_ABUTMENT_TYPE_OPTIONS}
+                      testID="sc-final-abutment-type" />
+                    <SCPickerRow label="2. Type of Retention" value={scFinalRetentionType}
+                      other={scFinalRetentionTypeOther} setV={setScFinalRetentionType}
+                      setO={setScFinalRetentionTypeOther} options={SC_RETENTION_TYPE_OPTIONS}
+                      testID="sc-final-retention-type" />
+                    <SCPickerRow label="3. Crown Material" value={scFinalCrownMaterial}
+                      other={scFinalCrownMaterialOther} setV={setScFinalCrownMaterial}
+                      setO={setScFinalCrownMaterialOther} options={SC_CROWN_MATERIAL_OPTIONS}
+                      testID="sc-final-crown-material" />
+                  </>
+                ) : workflowGroup === 'A' ? (
+                  <>
+                    {/* iter-Feb-2026-B — Group A: Multiple Conv / Pterygoid+Conv 4-part flow. */}
+                    {(procedure?.ma_prosthesis_type
+                      || procedure?.ma_abutment_type
+                      || procedure?.ma_retention_type
+                      || procedure?.ma_crown_material) && (
+                      <Phase1PlanReferenceBanner
+                        rows={[
+                          ['Prosthesis Type', procedure?.ma_prosthesis_type_other || procedure?.ma_prosthesis_type],
+                          ['Abutment Type', procedure?.ma_abutment_type_other || procedure?.ma_abutment_type],
+                          ['Retention', procedure?.ma_retention_type_other || procedure?.ma_retention_type],
+                          ['Crown/Bridge Material', procedure?.ma_crown_material_other || procedure?.ma_crown_material],
+                        ]}
+                      />
+                    )}
+                    <SCPickerRow label="1. Prosthesis Type" value={maFinalProsthesisType}
+                      other={maFinalProsthesisTypeOther} setV={setMaFinalProsthesisType}
+                      setO={setMaFinalProsthesisTypeOther} options={GROUP_A_PROSTHESIS_TYPE_OPTIONS}
+                      testID="ma-final-prosthesis-type" />
+                    <SCPickerRow label="2. Abutment Type" value={maFinalAbutmentType}
+                      other={maFinalAbutmentTypeOther} setV={setMaFinalAbutmentType}
+                      setO={setMaFinalAbutmentTypeOther} options={GROUP_A_ABUTMENT_TYPE_OPTIONS}
+                      testID="ma-final-abutment-type" />
+                    <SCPickerRow label="3. Type of Retention" value={maFinalRetentionType}
+                      other={maFinalRetentionTypeOther} setV={setMaFinalRetentionType}
+                      setO={setMaFinalRetentionTypeOther} options={GROUP_A_RETENTION_OPTIONS}
+                      testID="ma-final-retention-type" />
+                    <SCPickerRow label="4. Crown/Bridge Material" value={maFinalCrownMaterial}
+                      other={maFinalCrownMaterialOther} setV={setMaFinalCrownMaterial}
+                      setO={setMaFinalCrownMaterialOther} options={GROUP_A_CROWN_MATERIAL_OPTIONS}
+                      testID="ma-final-crown-material" />
+                  </>
+                ) : workflowGroup === 'B' ? (
+                  <>
+                    {/* iter-Feb-2026-B — Group B: All-on-X single grouped plan. */}
+                    {procedure?.fa_prosthetic_plan && (
+                      <Phase1PlanReferenceBanner
+                        rows={[['Prosthetic Plan', procedure.fa_prosthetic_plan_other || procedure.fa_prosthetic_plan]]}
+                      />
+                    )}
+                    <GroupedDescDropdown label="Prosthetic Plan" required
+                      value={faFinalProstheticPlan}
+                      onChange={v => { setFaFinalProstheticPlan(v); if (v !== 'Other') setFaFinalProstheticPlanOther(''); }}
+                      groups={GROUP_B_PROSTHETIC_PLAN_OPTIONS}
+                      testID="fa-final-prosthetic-plan" />
+                    {faFinalProstheticPlan === 'Other' && (
+                      <TextInput style={s.textArea} value={faFinalProstheticPlanOther}
+                        onChangeText={setFaFinalProstheticPlanOther}
+                        placeholder="Describe the prosthetic plan…" multiline
+                        data-testid="fa-final-prosthetic-plan-other-input" />
+                    )}
+                  </>
+                ) : workflowGroup === 'C' ? (
+                  <>
+                    {/* iter-Feb-2026-B — Group C: Zygoma-specific single plan. */}
+                    {procedure?.zp_prosthetic_plan && (
+                      <Phase1PlanReferenceBanner
+                        rows={[['Prosthetic Plan', procedure.zp_prosthetic_plan_other || procedure.zp_prosthetic_plan]]}
+                      />
+                    )}
+                    <GroupedDescDropdown label="Prosthetic Plan" required
+                      value={zpFinalProstheticPlan}
+                      onChange={v => { setZpFinalProstheticPlan(v); if (v !== 'Other') setZpFinalProstheticPlanOther(''); }}
+                      options={GROUP_C_PROSTHETIC_PLAN_OPTIONS}
+                      testID="zp-final-prosthetic-plan" />
+                    {zpFinalProstheticPlan === 'Other' && (
+                      <TextInput style={s.textArea} value={zpFinalProstheticPlanOther}
+                        onChangeText={setZpFinalProstheticPlanOther}
+                        placeholder="Describe the prosthetic plan…" multiline
+                        data-testid="zp-final-prosthetic-plan-other-input" />
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {renderDropdown('Final Prosthesis Type', finalProsthesis, getOptions(),
+                      prosthesisOpen, setProsthesisOpen, (v) => { setFinalProsthesis(v); setProstheticMaterial(''); setOverdentureAttachment(''); })}
 
-                {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
-                  materialOpen, setMaterialOpen, setProstheticMaterial)}
+                    {showMaterial && renderDropdown('Prosthetic Material', prostheticMaterial, FP_MATERIAL_OPTIONS,
+                      materialOpen, setMaterialOpen, setProstheticMaterial)}
 
-                {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
-                  attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
+                    {showOverdenture && renderDropdown('Overdenture Attachment', overdentureAttachment, OVERDENTURE_ATTACHMENT_OPTIONS,
+                      attachmentOpen, setAttachmentOpen, setOverdentureAttachment)}
+                  </>
+                )}
               </>
             )}
 
-            {renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
+            {!isSCImplant && !workflowGroup && renderDropdown('Custom Abutment (optional)', customAbutment, CUSTOM_ABUTMENT_OPTIONS,
               abutmentOpen, setAbutmentOpen, setCustomAbutment, false)}
           </View>
 
@@ -619,6 +981,53 @@ export default function Phase4Step1Screen() {
                   )}
                 </View>
               )}
+
+              {/* iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-Oral Scan sub-fields.
+                  When "Intra-Oral Scans Made" is picked, capture the scan
+                  body type, scan technique and scan level as multi-select
+                  chip rows. All 3 lists are exported to the Lab Slip PDF
+                  as bulleted lists per implant order. */}
+              {impressionType === 'intraoral_scans' && (
+                <View style={{ marginTop: 4, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#4CAF50' }} testID="intraoral-scan-options">
+                  {([
+                    { field: 'scan_body_types', label: 'Type of Scan Body', state: scanBodyTypes, setState: setScanBodyTypes, options: ['PEEK', 'Metal', 'Hybrid'] },
+                    { field: 'scan_types', label: 'Scan Type', state: scanTypes, setState: setScanTypes, options: ['Vertical Scan Body', 'Horizontal Scan Bodies (Flags)', 'Photogrammetry'] },
+                    { field: 'scan_levels', label: 'Scan Level', state: scanLevels, setState: setScanLevels, options: ['Abutment/Multiunit Level', 'Implant Level'] },
+                  ] as const).map(group => (
+                    <View key={group.field} style={{ marginTop: 12 }} testID={`intraoral-${group.field}`}>
+                      <Text style={[s.label, { marginTop: 0 }]}>
+                        {group.label} <Text style={{ fontSize: 11, color: '#78909C', fontWeight: '500' }}>(choose one or more)</Text>
+                      </Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                        {group.options.map(opt => {
+                          const active = group.state.includes(opt);
+                          return (
+                            <TouchableOpacity
+                              key={opt}
+                              onPress={() => {
+                                group.setState(prev => active ? prev.filter(x => x !== opt) : [...prev, opt]);
+                              }}
+                              style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 6,
+                                paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+                                borderWidth: 1.5,
+                                borderColor: active ? '#2E7D32' : '#CFD8DC',
+                                backgroundColor: active ? '#E8F5E9' : '#FFF',
+                              }}
+                              testID={`intraoral-${group.field}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
+                            >
+                              <Ionicons name={active ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={active ? '#2E7D32' : '#78909C'} />
+                              <Text style={{ fontSize: 13, color: active ? '#1B5E20' : '#37474F', fontWeight: active ? '700' : '500' }}>
+                                {opt}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
 
@@ -635,7 +1044,7 @@ export default function Phase4Step1Screen() {
                 ? 'Full-arch case — record one shade for the anterior segment and one for the posterior segment.'
                 : 'Record one shade per implant. Use the natural standard (Vita Classic / Vita 3D-Master / chairside reference).'}
             </Text>
-            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => p ? `Tooth #${p}` : `Implant ${i + 1}`))
+            {(isFullArch ? ['Anterior', 'Posterior'] : implantPositions.map((p, i) => p ? `Implant ${p}` : `Implant ${i + 1}`))
               .map((label, idx) => (
                 <View key={idx} style={s.field}>
                   <Text style={[s.label, { color: '#5D4037' }]}>
@@ -739,9 +1148,9 @@ export default function Phase4Step1Screen() {
                   </View>
                 ) : (
                   muaRows.map((row, idx) => (
-                    <View key={idx} style={s.muaRow} testID={`mua-row-${idx}`}>
+                    <View key={idx} style={[s.muaRow, row.confirmed && { borderColor: '#2E7D32', borderWidth: 2 }]} testID={`mua-row-${idx}`}>
                       <View style={s.muaRowHeader}>
-                        <Text style={s.muaRowTitle}>{row.tooth ? `Tooth #${row.tooth}` : `Implant ${idx + 1}`}</Text>
+                        <Text style={s.muaRowTitle}>{row.tooth ? `Implant ${row.tooth}` : `Implant ${idx + 1}`}</Text>
                         <TouchableOpacity
                           onPress={() => removeRow(idx)}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -787,6 +1196,30 @@ export default function Phase4Step1Screen() {
                           />
                         </View>
                       </View>
+                      {/* iter-Jun-2026 (v13, Chunk G, Ask 1): per-row Confirm
+                          checkbox. Lab Slip PDF export is blocked until every
+                          MUA row is ticked, ensuring the Cuff Height /
+                          Angulation values have been reviewed by the
+                          prosthodontist. */}
+                      <TouchableOpacity
+                        style={s.muaConfirmRow}
+                        onPress={() => {
+                          setMuaTouched(true);
+                          setMuaRows(prev => prev.map((r, i) => i === idx ? { ...r, confirmed: !r.confirmed } : r));
+                        }}
+                        testID={`mua-confirm-${idx}`}
+                      >
+                        <Ionicons
+                          name={row.confirmed ? 'checkbox' : 'square-outline'}
+                          size={20}
+                          color={row.confirmed ? '#2E7D32' : '#78909C'}
+                        />
+                        <Text style={[s.muaConfirmText, row.confirmed && { color: '#2E7D32', fontWeight: '700' }]}>
+                          {row.confirmed
+                            ? 'Confirmed — values reviewed for lab'
+                            : 'Confirm cuff height & angulation for this implant'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   ))
                 )}
@@ -1034,4 +1467,103 @@ const s = StyleSheet.create({
     color: '#0277BD',
     letterSpacing: 0.2,
   },
+  // iter-Jun-2026 (v13, Chunk G, Ask 1): per-row Confirm checkbox.
+  muaConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#ECEFF1',
+  },
+  muaConfirmText: {
+    fontSize: 12,
+    color: '#546E7A',
+    fontWeight: '600',
+    flex: 1,
+  },
 });
+
+// iter-Feb-2026-B — Reusable Phase-4 helpers.
+//
+// Phase1PlanReferenceBanner
+//   Amber "reference" card summarising the Phase 1 plan so the operator
+//   can see what was originally planned and change it here if needed.
+//   Rows: [label, value][] — falsy values are skipped so callers can
+//   pass the raw doc without pre-filtering.
+function Phase1PlanReferenceBanner({ rows }: { rows: [string, string | undefined | null][] }) {
+  const visible = rows.filter(r => !!r[1]);
+  if (visible.length === 0) return null;
+  return (
+    <View style={{
+      backgroundColor: '#FFF8E1',
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: '#FFE082',
+    }}>
+      <Text style={{ fontSize: 11, color: '#8D6E63', fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 }}>
+        PHASE 1 PLAN (REFERENCE)
+      </Text>
+      {visible.map(([label, val]) => (
+        <Text key={label} style={{ fontSize: 13, color: '#3E2723', marginTop: 2 }}>
+          <Text style={{ fontWeight: '700' }}>{label}: </Text>{val}
+        </Text>
+      ))}
+      <Text style={{ fontSize: 11, color: '#8D6E63', marginTop: 6, fontStyle: 'italic' }}>
+        You may keep or change the plan below. All changes are audited.
+      </Text>
+    </View>
+  );
+}
+
+// SCPickerRow — a GroupedDescDropdown paired with an "Other" free-text
+// input that only appears when the user picks "Other" from the dropdown.
+// Extracted to keep the Group A 4-part flow readable.
+function SCPickerRow({
+  label, value, other, setV, setO, options, testID,
+}: {
+  label: string;
+  value: string;
+  other: string;
+  setV: (v: string) => void;
+  setO: (v: string) => void;
+  options: import('../../../constants/singleConventional').OptionDesc[];
+  testID: string;
+}) {
+  return (
+    <>
+      <GroupedDescDropdown
+        label={label}
+        required
+        value={value}
+        onChange={v => { setV(v); if (v !== 'Other') setO(''); }}
+        options={options}
+        testID={testID}
+      />
+      {value === 'Other' && (
+        <TextInput
+          style={{
+            borderWidth: 1,
+            borderColor: '#CFD8DC',
+            borderRadius: 10,
+            padding: 12,
+            fontSize: 14,
+            minHeight: 68,
+            textAlignVertical: 'top',
+            backgroundColor: '#FFF',
+            marginBottom: 12,
+          }}
+          value={other}
+          onChangeText={setO}
+          placeholder={`Describe the ${label.replace(/^\d+\.\s*/, '').toLowerCase()}…`}
+          multiline
+          data-testid={`${testID}-other-input`}
+        />
+      )}
+    </>
+  );
+}
+

@@ -122,7 +122,7 @@ export async function getFreshAuthFileUrl(filename: string): Promise<string> {
       });
       if (data?.access_token) {
         token = data.access_token;
-        await setToken('access_token', token);
+        await setToken('access_token', data.access_token);
       }
     }
   } catch {

@@ -603,6 +603,38 @@ function DefaultProceduresScreen() {
 
         <View style={styles.divider} />
 
+        {/* iter-Jun-2026 (v8): Zygoma / Pterygoid / Config pills — highlights
+            advanced procedure types at-a-glance on the My Cases list. */}
+        {(() => {
+          const pt = String(item.implant_procedure_type || '');
+          const hasZyg = /zygoma/i.test(pt);
+          const hasPter = /pterygoid/i.test(pt);
+          const cfg = String(item.zygoma_pterygoid_configuration || '').trim();
+          if (!hasZyg && !hasPter) return null;
+          return (
+            <View style={styles.zygPillRow} data-testid={`zyg-pills-${item.id}`}>
+              {hasZyg && (
+                <View style={[styles.zygPill, { backgroundColor: '#FFF3E0', borderColor: '#FB8C00' }]} data-testid={`zyg-pill-zygoma-${item.id}`}>
+                  <Ionicons name="body-outline" size={11} color="#E65100" />
+                  <Text style={[styles.zygPillTxt, { color: '#E65100' }]}>Zygoma</Text>
+                </View>
+              )}
+              {hasPter && (
+                <View style={[styles.zygPill, { backgroundColor: '#E3F2FD', borderColor: '#1E88E5' }]} data-testid={`zyg-pill-pterygoid-${item.id}`}>
+                  <Ionicons name="triangle-outline" size={11} color="#1565C0" />
+                  <Text style={[styles.zygPillTxt, { color: '#1565C0' }]}>Pterygoid</Text>
+                </View>
+              )}
+              {!!cfg && (
+                <View style={[styles.zygPill, { backgroundColor: '#EDE7F6', borderColor: '#5E35B1' }]} data-testid={`zyg-pill-config-${item.id}`}>
+                  <Ionicons name="options-outline" size={11} color="#4527A0" />
+                  <Text style={[styles.zygPillTxt, { color: '#4527A0' }]} numberOfLines={1}>{cfg}</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
+
         {/* Details Alignment (2-column layout) */}
         <View style={styles.detailsContainer}>
           {/* Left Column */}
@@ -1116,6 +1148,8 @@ function DefaultProceduresScreen() {
                   return (
                     <TouchableOpacity
                       key={btn.key}
+                      testID={`filter-tab-${btn.key}`}
+                      {...({ 'data-testid': `filter-tab-${btn.key}` } as any)}
                       style={[
                         styles.modalChip,
                         isActive && styles.modalChipActive,
@@ -1654,6 +1688,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#F44336",
     flex: 1,
+  },
+  // iter-Jun-2026 (v8): Zygoma / Pterygoid procedure-type pills.
+  zygPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  zygPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    maxWidth: 240,
+  },
+  zygPillTxt: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   menuContainer: {
     position: "relative",

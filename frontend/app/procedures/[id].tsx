@@ -79,9 +79,13 @@ import {
   generateLabSlipPDF,
   generateTerminationSummaryPDF,
   printTerminationSummaryPDF,
+  generatePhase3HandoffPDF,
+  printPhase3HandoffPDF,
 } from "../../utils/pdfGenerator";
 import { downloadPreopBriefing } from "../../utils/preopBriefingPdf";
 import CaseImplantPlanning from "../../components/CaseImplantPlanning"; // iter-209: removed CaseCompletionBadge — its facts merged into the green
+import ZygomaPterygoidPhase1Review from "../../components/ZygomaPterygoidPhase1Review";
+import AdvancedClinicalCard from "../../components/AdvancedClinicalCard";
 import TransferApprovalCard from "../../components/TransferApprovalCard";
 import ContributionTimelineCard from "../../components/ContributionTimelineCard";
 import FollowUpSection from "../../components/FollowUpSection";
@@ -364,7 +368,7 @@ async function openDocument(url: string, filename: string) {
 }
 
 export default function ProcedureDetailScreen() {
-  const { id, edit } = useLocalSearchParams();
+  const { id, edit, anchor } = useLocalSearchParams();
   const { user } = useAuth();
   const router = useRouter();
 
@@ -415,6 +419,7 @@ export default function ProcedureDetailScreen() {
   // y-positions of each phase section (recorded via onLayout). Indexed by
   // the same keys returned by getProgressPair().current.
   const phaseAnchors = useRef<Record<string, number>>({});
+  const transferAnchorY = useRef<number>(0);
 
   // Edit mode state
   const isEditMode =
@@ -591,6 +596,29 @@ export default function ProcedureDetailScreen() {
   useEffect(() => {
     loadProcedure();
   }, [id]);
+
+  // iter-379: When the case is opened via a transfer notification deep-link
+  // (?anchor=transfer|handoff), auto-scroll to the TransferApprovalCard once
+  // both the procedure has loaded and the anchor's layout has been measured.
+  useEffect(() => {
+    if (!anchor || !procedure) return;
+    const wants = String(anchor).toLowerCase();
+    if (wants !== "transfer" && wants !== "handoff") return;
+    const timer = setTimeout(() => {
+      const y = transferAnchorY.current;
+      if (y > 0 && mainScrollRef.current) {
+        try {
+          mainScrollRef.current.scrollTo({
+            y: Math.max(0, y - 80),
+            animated: true,
+          });
+        } catch {
+          /* no-op */
+        }
+      }
+    }, 450); // wait for the ScrollView layout pass to settle
+    return () => clearTimeout(timer);
+  }, [anchor, procedure]);
 
   // ── One-time pulse hint on the case-detail progress pill ──
   // The first time a user lands on a case where a phase is in flight (pill is
@@ -1173,6 +1201,8 @@ export default function ProcedureDetailScreen() {
             borderColor: "#D7E3F5",
             padding: 12,
           }}
+          data-testid="approval-comment-box"
+          testID="approval-comment-box"
         >
           <Text
             style={{
@@ -1314,7 +1344,7 @@ export default function ProcedureDetailScreen() {
       <View key={sectionKey} style={styles.section}>
         <Text style={styles.sectionTitle}>{sectionTitle}</Text>
         {sectionData.items.map((item: any) => {
-          const itemDef = checklistDef?.items.find(
+          const itemDef = (checklistDef as any)?.items?.find(
             (i: any) => i.id === item.id,
           );
           return (
@@ -2467,7 +2497,7 @@ export default function ProcedureDetailScreen() {
                               fontSize: 12,
                             }}
                           >
-                            Tooth #{row.tooth || "—"}
+                            Implant {row.tooth || "—"}
                           </Text>
                         </View>
                         {row.system_unknown ? (
@@ -2614,7 +2644,7 @@ export default function ProcedureDetailScreen() {
                           <RadiographThumb
                             filename={String(perImplant)}
                             testID={`existing-impl-iopa-${idx}`}
-                            label={`IOPA · Tooth ${row.tooth || "—"}`}
+                            label={`IOPA · Implant ${row.tooth || "—"}`}
                           />
                         );
                       })()}
@@ -2968,7 +2998,55 @@ export default function ProcedureDetailScreen() {
               testID="treatment-timeline"
               data-testid="treatment-timeline"
             >
-              <Text style={styles.timelineTitle}>Treatment Progress</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 12,
+                }}
+              >
+                <Text style={styles.timelineTitle}>Treatment Progress</Text>
+                {(() => {
+                  // Total treatment duration: earliest known phase date to latest.
+                  const candidates = [
+                    procedure.procedure_date,
+                    procedure.phase2_actual_done_date,
+                    procedure.phase3_done_date,
+                    procedure.phase4_step1_done_date,
+                    procedure.phase4_step2_done_date,
+                  ].filter(Boolean) as string[];
+                  if (candidates.length < 2) return null;
+                  const dates = candidates
+                    .map((d) => new Date(d))
+                    .filter((d) => !isNaN(d.getTime()));
+                  if (dates.length < 2) return null;
+                  const min = new Date(Math.min(...dates.map((d) => d.getTime())));
+                  const max = new Date(Math.max(...dates.map((d) => d.getTime())));
+                  const days = Math.max(
+                    0,
+                    Math.round(
+                      (max.getTime() - min.getTime()) / (1000 * 60 * 60 * 24),
+                    ),
+                  );
+                  const label =
+                    days < 7
+                      ? `${days} day${days === 1 ? "" : "s"}`
+                      : days < 60
+                        ? `${Math.round(days / 7)} week${Math.round(days / 7) === 1 ? "" : "s"}`
+                        : `${Math.round(days / 30)} month${Math.round(days / 30) === 1 ? "" : "s"} (${days} days)`;
+                  return (
+                    <View
+                      style={styles.durationPill}
+                      testID="treatment-duration-pill"
+                      data-testid="treatment-duration-pill"
+                    >
+                      <Ionicons name="time-outline" size={12} color="#1565C0" />
+                      <Text style={styles.durationPillText}>Total: {label}</Text>
+                    </View>
+                  );
+                })()}
+              </View>
               <View style={styles.timelineSteps}>
                 {(() => {
                   // iter-225: drop the Phase 2 step for existing-implant cases —
@@ -4111,6 +4189,18 @@ export default function ProcedureDetailScreen() {
             </View>
             <PatientHistoryStrip procedure={procedure} />
 
+        {/* iter-Jun-2026 (v9, Chunk 2): Zygoma / Pterygoid Phase 1 read-only
+            review — visible to all roles (student / supervisor / in-charge /
+            admin) so everyone reviews the same clinical data. Renders nothing
+            when procedure_type is not a Zygoma/Pterygoid variant. */}
+        <ZygomaPterygoidPhase1Review procedure={procedure} />
+
+        {/* iter-Jun-2026 (v13, Chunk B, Ask 3): Advanced Clinical (Zygoma) is
+            now a standalone card on the Case Details page. It is NOT gated by
+            Phase 2 submission — students can fill it independently, and it
+            carries its own "Send for Approval" workflow (30-day follow-up). */}
+        <AdvancedClinicalCard procedure={procedure} onChanged={loadProcedure} currentUserRole={user?.role} />
+
         <AddImplantSection procedure={procedure} onChanged={loadProcedure} />
 
             <ClinicalEvaluationBanner procedureId={String(id)} />
@@ -4405,6 +4495,11 @@ export default function ProcedureDetailScreen() {
               ) : null}
             </View>
 
+            {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid Extended Workflow
+                CTA has been retired. All cases (including advanced) now use the
+                standard Phase 2-5 screens with the new tabbed per-implant UI
+                (PhaseStep2TabbedView) — see /procedures/submit-phase2/[id]. */}
+
             {/* Procedure Type & Plan */}
             {procedure.implant_procedure_type && (
               <View style={styles.section} data-testid="procedure-type-section">
@@ -4560,6 +4655,181 @@ export default function ProcedureDetailScreen() {
                     fieldKey="prosthetic_plan_other"
                   />
                 )}
+                {/* iter-Feb-2026 / -C — SC (pure or overlap-Single) plan fields. */}
+                {(() => {
+                  const _num = procedure?.num_implants || "";
+                  const _overlap = [
+                    "Immediate Implant",
+                    "Partial Extraction Therapy",
+                    "Implant Placement with Guided Bone Regeneration",
+                    "Guided Surgery",
+                    "Sinus Lift",
+                  ].includes(procedure?.implant_procedure_type);
+                  const isSCEff =
+                    procedure?.implant_procedure_type === "Single Conventional Implant" ||
+                    (_overlap && _num === "Single Implant");
+                  if (!isSCEff) return null;
+                  const rowVal = (val: string, other: string) =>
+                    val === "Other" && other ? `Other — ${other}` : val;
+                  return (
+                    <>
+                      {procedure.type_of_provisional && (
+                        <InfoRow
+                          icon="medkit"
+                          label="Type of Provisional"
+                          value={rowVal(
+                            procedure.type_of_provisional,
+                            procedure.type_of_provisional_other,
+                          )}
+                          fieldKey="type_of_provisional"
+                        />
+                      )}
+                      {procedure.sc_abutment_type && (
+                        <InfoRow
+                          icon="cube"
+                          label="Abutment Type"
+                          value={rowVal(
+                            procedure.sc_abutment_type,
+                            procedure.sc_abutment_type_other,
+                          )}
+                          fieldKey="sc_abutment_type"
+                        />
+                      )}
+                      {procedure.sc_retention_type && (
+                        <InfoRow
+                          icon="link"
+                          label="Type of Retention"
+                          value={rowVal(
+                            procedure.sc_retention_type,
+                            procedure.sc_retention_type_other,
+                          )}
+                          fieldKey="sc_retention_type"
+                        />
+                      )}
+                      {procedure.sc_crown_material && (
+                        <InfoRow
+                          icon="diamond"
+                          label="Crown Material"
+                          value={rowVal(
+                            procedure.sc_crown_material,
+                            procedure.sc_crown_material_other,
+                          )}
+                          fieldKey="sc_crown_material"
+                        />
+                      )}
+                    </>
+                  );
+                })()}
+                {/* iter-Feb-2026-B / -C — Multiple / Full-Arch / Zygoma workflow fields. */}
+                {(() => {
+                  const _num = procedure?.num_implants || "";
+                  const _overlap = [
+                    "Immediate Implant",
+                    "Partial Extraction Therapy",
+                    "Implant Placement with Guided Bone Regeneration",
+                    "Guided Surgery",
+                    "Sinus Lift",
+                  ].includes(procedure?.implant_procedure_type);
+                  const isSCEff =
+                    procedure?.implant_procedure_type === "Single Conventional Implant" ||
+                    (_overlap && _num === "Single Implant");
+                  if (isSCEff) return null;
+                  return (
+                    <>
+                      {procedure.type_of_provisional && (
+                        <InfoRow
+                          icon="medkit"
+                          label="Type of Provisional"
+                          value={
+                            procedure.type_of_provisional === "Other" &&
+                            procedure.type_of_provisional_other
+                              ? `Other — ${procedure.type_of_provisional_other}`
+                              : procedure.type_of_provisional
+                          }
+                          fieldKey="type_of_provisional"
+                        />
+                      )}
+                      {procedure.ma_prosthesis_type && (
+                        <InfoRow
+                          icon="cube"
+                          label="Prosthesis Type"
+                          value={
+                            procedure.ma_prosthesis_type === "Other" &&
+                            procedure.ma_prosthesis_type_other
+                              ? `Other — ${procedure.ma_prosthesis_type_other}`
+                              : procedure.ma_prosthesis_type
+                          }
+                          fieldKey="ma_prosthesis_type"
+                        />
+                      )}
+                      {procedure.ma_abutment_type && (
+                        <InfoRow
+                          icon="cube"
+                          label="Abutment Type"
+                          value={
+                            procedure.ma_abutment_type === "Other" &&
+                            procedure.ma_abutment_type_other
+                              ? `Other — ${procedure.ma_abutment_type_other}`
+                              : procedure.ma_abutment_type
+                          }
+                          fieldKey="ma_abutment_type"
+                        />
+                      )}
+                      {procedure.ma_retention_type && (
+                        <InfoRow
+                          icon="link"
+                          label="Type of Retention"
+                          value={
+                            procedure.ma_retention_type === "Other" &&
+                            procedure.ma_retention_type_other
+                              ? `Other — ${procedure.ma_retention_type_other}`
+                              : procedure.ma_retention_type
+                          }
+                          fieldKey="ma_retention_type"
+                        />
+                      )}
+                      {procedure.ma_crown_material && (
+                        <InfoRow
+                          icon="diamond"
+                          label="Crown/Bridge Material"
+                          value={
+                            procedure.ma_crown_material === "Other" &&
+                            procedure.ma_crown_material_other
+                              ? `Other — ${procedure.ma_crown_material_other}`
+                              : procedure.ma_crown_material
+                          }
+                          fieldKey="ma_crown_material"
+                        />
+                      )}
+                      {procedure.fa_prosthetic_plan && (
+                        <InfoRow
+                          icon="build"
+                          label="Prosthetic Plan"
+                          value={
+                            procedure.fa_prosthetic_plan === "Other" &&
+                            procedure.fa_prosthetic_plan_other
+                              ? `Other — ${procedure.fa_prosthetic_plan_other}`
+                              : procedure.fa_prosthetic_plan
+                          }
+                          fieldKey="fa_prosthetic_plan"
+                        />
+                      )}
+                      {procedure.zp_prosthetic_plan && (
+                        <InfoRow
+                          icon="build"
+                          label="Prosthetic Plan"
+                          value={
+                            procedure.zp_prosthetic_plan === "Other" &&
+                            procedure.zp_prosthetic_plan_other
+                              ? `Other — ${procedure.zp_prosthetic_plan_other}`
+                              : procedure.zp_prosthetic_plan
+                          }
+                          fieldKey="zp_prosthetic_plan"
+                        />
+                      )}
+                    </>
+                  );
+                })()}
               </View>
             )}
 
@@ -5700,6 +5970,165 @@ export default function ProcedureDetailScreen() {
                   >
                     {procedure.final_prosthetic_plan}
                   </Text>
+                  {/* iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
+                      When the case is Single Conventional Implant AND Phase 4 Step 1
+                      captured the 3-part breakdown, surface each field so reviewers
+                      see the exact abutment / retention / material chosen. */}
+                  {(() => {
+                    const _num = procedure?.num_implants || "";
+                    const _overlap = [
+                      "Immediate Implant",
+                      "Partial Extraction Therapy",
+                      "Implant Placement with Guided Bone Regeneration",
+                      "Guided Surgery",
+                      "Sinus Lift",
+                    ].includes(procedure?.implant_procedure_type);
+                    const isSCEff =
+                      procedure?.implant_procedure_type === "Single Conventional Implant" ||
+                      (_overlap && _num === "Single Implant");
+                    const p4 = procedure.phase4_step1_data || {};
+                    if (!isSCEff) return null;
+                    if (
+                      !p4.sc_final_abutment_type &&
+                      !p4.sc_final_retention_type &&
+                      !p4.sc_final_crown_material
+                    )
+                      return null;
+                    const rowVal = (v: string, o: string) =>
+                      v === "Other" && o ? `Other — ${o}` : v;
+                    return (
+                      <View
+                        style={{
+                          marginTop: 10,
+                          paddingTop: 10,
+                          borderTopWidth: StyleSheet.hairlineWidth,
+                          borderTopColor: "#FFE082",
+                        }}
+                      >
+                        {!!p4.sc_final_abutment_type && (
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              color: "#4E342E",
+                              marginTop: 4,
+                            }}
+                          >
+                            <Text style={{ fontWeight: "700" }}>Abutment: </Text>
+                            {rowVal(
+                              p4.sc_final_abutment_type,
+                              p4.sc_final_abutment_type_other,
+                            )}
+                          </Text>
+                        )}
+                        {!!p4.sc_final_retention_type && (
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              color: "#4E342E",
+                              marginTop: 4,
+                            }}
+                          >
+                            <Text style={{ fontWeight: "700" }}>Retention: </Text>
+                            {rowVal(
+                              p4.sc_final_retention_type,
+                              p4.sc_final_retention_type_other,
+                            )}
+                          </Text>
+                        )}
+                        {!!p4.sc_final_crown_material && (
+                          <Text
+                            style={{
+                              fontSize: 13,
+                              color: "#4E342E",
+                              marginTop: 4,
+                            }}
+                          >
+                            <Text style={{ fontWeight: "700" }}>Crown Material: </Text>
+                            {rowVal(
+                              p4.sc_final_crown_material,
+                              p4.sc_final_crown_material_other,
+                            )}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })()}
+                  {/* iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan breakdown. */}
+                  {procedure.phase4_step1_data &&
+                    (procedure.phase4_step1_data.ma_final_prosthesis_type ||
+                      procedure.phase4_step1_data.ma_final_abutment_type ||
+                      procedure.phase4_step1_data.ma_final_retention_type ||
+                      procedure.phase4_step1_data.ma_final_crown_material ||
+                      procedure.phase4_step1_data.fa_final_prosthetic_plan ||
+                      procedure.phase4_step1_data.zp_final_prosthetic_plan) && (
+                      <View
+                        style={{
+                          marginTop: 10,
+                          paddingTop: 10,
+                          borderTopWidth: StyleSheet.hairlineWidth,
+                          borderTopColor: "#FFE082",
+                        }}
+                      >
+                        {[
+                          [
+                            "Prosthesis Type",
+                            procedure.phase4_step1_data
+                              .ma_final_prosthesis_type_other ||
+                              procedure.phase4_step1_data
+                                .ma_final_prosthesis_type,
+                          ],
+                          [
+                            "Abutment Type",
+                            procedure.phase4_step1_data
+                              .ma_final_abutment_type_other ||
+                              procedure.phase4_step1_data
+                                .ma_final_abutment_type,
+                          ],
+                          [
+                            "Type of Retention",
+                            procedure.phase4_step1_data
+                              .ma_final_retention_type_other ||
+                              procedure.phase4_step1_data
+                                .ma_final_retention_type,
+                          ],
+                          [
+                            "Crown/Bridge Material",
+                            procedure.phase4_step1_data
+                              .ma_final_crown_material_other ||
+                              procedure.phase4_step1_data
+                                .ma_final_crown_material,
+                          ],
+                          [
+                            "Prosthetic Plan",
+                            procedure.phase4_step1_data
+                              .fa_final_prosthetic_plan_other ||
+                              procedure.phase4_step1_data
+                                .fa_final_prosthetic_plan,
+                          ],
+                          [
+                            "Prosthetic Plan",
+                            procedure.phase4_step1_data
+                              .zp_final_prosthetic_plan_other ||
+                              procedure.phase4_step1_data
+                                .zp_final_prosthetic_plan,
+                          ],
+                        ]
+                          .filter(([, v]) => !!v)
+                          .map(([lbl, v]) => (
+                            <Text
+                              key={String(lbl) + String(v)}
+                              style={{
+                                fontSize: 13,
+                                color: "#4E342E",
+                                marginTop: 4,
+                              }}
+                            >
+                              <Text style={{ fontWeight: "700" }}>{lbl}: </Text>
+                              {v}
+                            </Text>
+                          ))}
+                      </View>
+                    )}
                 </View>
               </View>
             )}
@@ -5727,7 +6156,7 @@ export default function ProcedureDetailScreen() {
                 </View>
                 {procedure.torque_values.map((tv: number, idx: number) => {
                   const toothLabel = procedure.implant_plans?.[idx]?.position
-                    ? `Tooth ${procedure.implant_plans[idx].position}`
+                    ? `Implant ${procedure.implant_plans[idx].position}`
                     : `Implant ${idx + 1}`;
                   return (
                     <View
@@ -6601,15 +7030,37 @@ export default function ProcedureDetailScreen() {
                         procedure.phase2_data.healing_abutment_cuff_height;
                       const singleComponent =
                         procedure.phase2_data.prosthetic_component;
+                      // iter-Jun-2026 (v13, Chunk E, Ask 2): "Prosthesis Type" and
+                      // "Prosthetic Plan" are conceptually the same. Source BOTH
+                      // labels from procedure.prosthetic_plan so they always show
+                      // the same detailed value across Phase 2 + Phase 3 views.
+                      const _plan = procedure.prosthetic_plan;
+                      const _planOther = procedure.prosthetic_plan_other;
                       const prosthesisType =
-                        procedure.phase2_data.prosthesis_type;
+                        _plan || procedure.phase2_data.prosthesis_type;
+                      const prosthesisTypeOther = _planOther;
                       const plans =
                         procedure.implant_plans || procedure.implants || [];
                       const _fdi = (i: number) => {
                         const p = plans[i] || {};
                         const t = p.tooth_number || p.tooth || p.position;
-                        return t ? `Tooth #${t}` : "Tooth #—";
+                        return t ? `Implant ${t}` : "Implant —";
                       };
+                      // iter-Jun-2026 (v13, Chunk D, Ask 2): color outline per
+                      // implant type — Orange = Zygoma, Blue = Pterygoid,
+                      // Yellow = Conventional. Only the border color changes;
+                      // header text + status chip stay neutral.
+                      const _outlineFor = (i: number) => {
+                        const p = plans[i] || {};
+                        const t = String(p.implant_type || "").toLowerCase();
+                        if (t === "zygoma") return { border: "#F57C00", width: 2 };
+                        if (t === "pterygoid") return { border: "#1565C0", width: 2 };
+                        if (t === "conventional") return { border: "#F9A825", width: 2 };
+                        return { border: "#E0E0E0", width: 1 };
+                      };
+                      const _hasAnyImmediateLoading = Array.isArray(perImplant)
+                        ? perImplant.includes("Immediate Loading Done")
+                        : singleComponent === "Immediate Loading Done";
                       if (Array.isArray(perImplant) && perImplant.length > 0) {
                         return (
                           <View
@@ -6627,6 +7078,53 @@ export default function ProcedureDetailScreen() {
                             >
                               Prosthetic Component (per implant)
                             </Text>
+                            {/* iter-Jun-2026 (v13, Chunk D, Ask 3): Global Prosthesis
+                                Type summary row — surfaced at the top of the review
+                                when any implant had Immediate Loading Done, so the
+                                value the operator picked in Phase 2 Step 2 is
+                                visible at a glance (previously only appeared inline
+                                on each implant chip). */}
+                            {_hasAnyImmediateLoading && (
+                              <View
+                                style={{
+                                  borderWidth: 1,
+                                  borderColor: "#FFCC80",
+                                  backgroundColor: "#FFF8E1",
+                                  borderRadius: 8,
+                                  padding: 10,
+                                  marginBottom: 8,
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                }}
+                                data-testid="phase2-prosthesis-type-summary"
+                              >
+                                <Ionicons name="cube-outline" size={16} color="#E65100" />
+                                <Text
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#6D4C41",
+                                    fontWeight: "700",
+                                  }}
+                                >
+                                  Prosthesis Type:
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 12.5,
+                                    color: "#37474F",
+                                    fontWeight: "700",
+                                    flex: 1,
+                                  }}
+                                >
+                                  {prosthesisType
+                                    ? prosthesisType === "Other"
+                                      ? prosthesisTypeOther || "Other"
+                                      : prosthesisType
+                                    : "— (not recorded)"}
+                                </Text>
+                              </View>
+                            )}
                             {perImplant.map((pc: string, idx: number) => {
                               const cuff = Array.isArray(cuffs)
                                 ? cuffs[idx]
@@ -6647,12 +7145,13 @@ export default function ProcedureDetailScreen() {
                                     : pc === "Immediate Loading Done"
                                       ? "#FFF3E0"
                                       : "#ECEFF1";
+                              const outline = _outlineFor(idx);
                               return (
                                 <View
                                   key={idx}
                                   style={{
-                                    borderWidth: 1,
-                                    borderColor: "#E0E0E0",
+                                    borderWidth: outline.width,
+                                    borderColor: outline.border,
                                     borderRadius: 8,
                                     backgroundColor: "#FAFAFA",
                                     padding: 10,
@@ -6738,7 +7237,9 @@ export default function ProcedureDetailScreen() {
                                             color: "#E65100",
                                           }}
                                         >
-                                          {prosthesisType}
+                                          {prosthesisType === "Other"
+                                            ? prosthesisTypeOther || "Other"
+                                            : prosthesisType}
                                         </Text>
                                       </Text>
                                     )}
@@ -6757,6 +7258,19 @@ export default function ProcedureDetailScreen() {
                               label="Prosthetic Component"
                               value={singleComponent}
                               fieldKey="phase2_data.prosthetic_component"
+                            />
+                          )}
+                          {/* Global Prosthesis Type summary for the legacy flow. */}
+                          {singleComponent === "Immediate Loading Done" && prosthesisType && (
+                            <InfoRow
+                              icon="cube-outline"
+                              label="Prosthesis Type"
+                              value={
+                                prosthesisType === "Other"
+                                  ? prosthesisTypeOther || "Other"
+                                  : prosthesisType
+                              }
+                              fieldKey="phase2_data.prosthesis_type"
                             />
                           )}
                           {cuffs &&
@@ -6795,8 +7309,15 @@ export default function ProcedureDetailScreen() {
                   Multi-implant Cuff Heights are handled by Phase2EditModal
                   (richer per-implant inputs); we only fast-path the
                   single-implant case here. */}
-                    {procedure.phase2_data.prosthetic_component ===
-                      "Healing Abutment Placed" &&
+                    {/* iter-Jun-2026 (v13, Chunk D, Ask 3): The per-implant
+                    (multi) flow renders its own inline chips + a summary
+                    banner just above — do NOT surface the single-implant
+                    "Tap to add" placeholders in that case, otherwise the
+                    review shows a stray "Prosthesis Type: Tap to add" row
+                    under the per-implant list. */}
+                    {!Array.isArray(procedure.phase2_data.prosthetic_components) &&
+                      procedure.phase2_data.prosthetic_component ===
+                        "Healing Abutment Placed" &&
                       !procedure.phase2_data.healing_abutment_cuff_height &&
                       (procedure.implant_plans?.length || 0) <= 1 && (
                         <InfoRow
@@ -6806,8 +7327,9 @@ export default function ProcedureDetailScreen() {
                           fieldKey="phase2_data.healing_abutment_cuff_height"
                         />
                       )}
-                    {procedure.phase2_data.prosthetic_component ===
-                      "Immediate Loading Done" &&
+                    {!Array.isArray(procedure.phase2_data.prosthetic_components) &&
+                      procedure.phase2_data.prosthetic_component ===
+                        "Immediate Loading Done" &&
                       !procedure.phase2_data.prosthesis_type && (
                         <InfoRow
                           icon="cube"
@@ -6893,7 +7415,7 @@ export default function ProcedureDetailScreen() {
                                           color: "#01579B",
                                         }}
                                       >
-                                        Tooth #{row?.tooth ?? "—"}
+                                        Implant {row?.tooth ?? "—"}
                                       </Text>
                                     </View>
                                     <View
@@ -7044,7 +7566,11 @@ export default function ProcedureDetailScreen() {
                                         color: "#333",
                                       }}
                                     >
-                                      {f.tooth_label || `Implant ${idx + 1}`}
+                                      {f.tooth_label
+                                        ? f.tooth_label.startsWith("Implant")
+                                          ? f.tooth_label
+                                          : `Implant ${f.tooth_label}`
+                                        : `Implant ${idx + 1}`}
                                     </Text>
                                     <Text
                                       style={{ fontSize: 11, color: "#888" }}
@@ -7654,18 +8180,149 @@ export default function ProcedureDetailScreen() {
                       alignItems: "center",
                       gap: 8,
                       marginBottom: 12,
+                      flexWrap: "wrap",
                     }}
                   >
                     <Ionicons name="git-branch" size={22} color="#2E7D32" />
                     <Text
                       style={[
                         styles.sectionTitle,
-                        { marginBottom: 0, color: "#2E7D32", fontSize: 17 },
+                        { marginBottom: 0, color: "#2E7D32", fontSize: 17, flex: 1 },
                       ]}
                     >
                       Phase 3 — Healing and Second Stage Surgery
                     </Text>
+                    {/* iter-358: One-tap prosthodontist hand-off report — reads the
+                        per-implant Phase-3 HA config + Phase-2 implant specs +
+                        ISQs + IOPAs and generates a printable A4 summary. */}
+                    {procedure.phase3_data && (
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        <TouchableOpacity
+                          onPress={async () => {
+                            try {
+                              await generatePhase3HandoffPDF(procedure);
+                            } catch {
+                              /* error already surfaced by helper */
+                            }
+                          }}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            backgroundColor: "#00695C",
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 6,
+                          }}
+                          testID="phase3-handoff-download"
+                          data-testid="phase3-handoff-download"
+                        >
+                          <Ionicons name="download" size={13} color="#FFF" />
+                          <Text
+                            style={{
+                              color: "#FFF",
+                              fontSize: 11,
+                              fontWeight: "700",
+                              letterSpacing: 0.3,
+                            }}
+                          >
+                            Hand-off PDF
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={async () => {
+                            try {
+                              await printPhase3HandoffPDF(procedure);
+                            } catch {
+                              /* helper already logs */
+                            }
+                          }}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            backgroundColor: "#FFF",
+                            borderColor: "#00695C",
+                            borderWidth: 1,
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 6,
+                          }}
+                          testID="phase3-handoff-print"
+                          data-testid="phase3-handoff-print"
+                        >
+                          <Ionicons name="print" size={13} color="#00695C" />
+                          <Text
+                            style={{
+                              color: "#00695C",
+                              fontSize: 11,
+                              fontWeight: "700",
+                              letterSpacing: 0.3,
+                            }}
+                          >
+                            Print
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
+
+                  {/* iter-Jun-2026 (v13, Chunk D, Ask 4): Immediate Prosthesis Done
+                      summary — when Phase 2 recorded Immediate Loading for any implant,
+                      surface both the Prosthesis Type (Fixed/Removable) AND the
+                      Prosthetic Plan carried over from Phase 1 / Phase 2. */}
+                  {(() => {
+                    const p2 = procedure.phase2_data || {};
+                    const p2Components: string[] = Array.isArray(p2.prosthetic_components)
+                      ? p2.prosthetic_components
+                      : [];
+                    const anyImmediate =
+                      p2Components.includes("Immediate Loading Done") ||
+                      p2.prosthetic_component === "Immediate Loading Done";
+                    if (!anyImmediate) return null;
+                    // iter-Jun-2026 (v13, Chunk E, Ask 2): Prosthesis Type and
+                    // Prosthetic Plan share procedure.prosthetic_plan as their
+                    // single source of truth.
+                    const plan = procedure.prosthetic_plan;
+                    const planOther = procedure.prosthetic_plan_other;
+                    const _display = plan
+                      ? plan === "Other"
+                        ? planOther || "Other"
+                        : plan
+                      : "— (not recorded)";
+                    return (
+                      <View
+                        style={{
+                          marginBottom: 14,
+                          padding: 10,
+                          borderRadius: 8,
+                          backgroundColor: "#F1F8E9",
+                          borderLeftWidth: 3,
+                          borderLeftColor: "#2E7D32",
+                        }}
+                        data-testid="phase3-immediate-prosthesis-summary"
+                      >
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            fontWeight: "800",
+                            color: "#1B5E20",
+                            marginBottom: 4,
+                          }}
+                        >
+                          Immediate Prosthesis Done
+                        </Text>
+                        <Text style={{ fontSize: 12.5, color: "#33691E" }}>
+                          <Text style={{ fontWeight: "700" }}>Prosthesis Type:</Text>{" "}
+                          {_display}
+                        </Text>
+                        <Text style={{ marginTop: 2, fontSize: 12.5, color: "#33691E" }}>
+                          <Text style={{ fontWeight: "700" }}>Prosthetic Plan:</Text>{" "}
+                          {_display}
+                        </Text>
+                      </View>
+                    );
+                  })()}
 
                   {/* Phase 3 Checklist Items */}
                   {procedure.phase3_data?.checklist_items &&
@@ -7726,7 +8383,14 @@ export default function ProcedureDetailScreen() {
                     const isqRaw = procedure.phase3_data?.isq_value;
                     const haRaw =
                       procedure.phase3_data?.healing_abutment_height;
-                    if (!isqRaw && !haRaw) return null;
+                    const haCfg =
+                      procedure.phase3_data?.phase3_healing_abutment_config;
+                    if (
+                      !isqRaw &&
+                      !haRaw &&
+                      !(Array.isArray(haCfg) && haCfg.length > 0)
+                    )
+                      return null;
 
                     const nonEmpty = (v: any) =>
                       v !== undefined && v !== null && String(v).trim() !== "";
@@ -7745,7 +8409,17 @@ export default function ProcedureDetailScreen() {
                     const isArrISQ = Array.isArray(isqRaw);
                     const isArrHA = Array.isArray(haRaw);
 
-                    const hasAnything = isqArr.length > 0 || haArr.length > 0;
+                    const usePerImplantHa =
+                      Array.isArray(haCfg) && haCfg.length > 0;
+                    const hasAnything =
+                      isqArr.length > 0 || haArr.length > 0 || usePerImplantHa;
+                    const plans =
+                      procedure.implant_plans || procedure.implants || [];
+                    const _fdi = (i: number) => {
+                      const p = plans[i] || {};
+                      const t = p.tooth_number || p.tooth || p.position;
+                      return t ? `Implant ${t}` : "Implant —";
+                    };
 
                     return (
                       <View
@@ -7802,16 +8476,9 @@ export default function ProcedureDetailScreen() {
                               >
                                 ISQ Values
                               </Text>
-                              {/* preserve the original implant index so the tooth
-                            label still maps to the correct implant_plans row */}
                               {(isqRaw as any[]).map(
                                 (val: any, idx: number) => {
                                   if (!nonEmpty(val)) return null;
-                                  const toothLabel = procedure.implant_plans?.[
-                                    idx
-                                  ]?.position
-                                    ? `Tooth #${procedure.implant_plans[idx].position}`
-                                    : `Implant ${idx + 1}`;
                                   return (
                                     <View
                                       key={idx}
@@ -7830,7 +8497,7 @@ export default function ProcedureDetailScreen() {
                                           flex: 1,
                                         }}
                                       >
-                                        {toothLabel}
+                                        {_fdi(idx)}
                                       </Text>
                                       <Text
                                         style={{
@@ -7854,7 +8521,182 @@ export default function ProcedureDetailScreen() {
                             />
                           ))}
 
-                        {haArr.length > 0 &&
+                        {/* iter-361: Per-implant Phase 3 Healing Abutment Configuration.
+                            Reads `phase3_healing_abutment_config[]` when present (the
+                            new iter-357 per-implant flow) so a Customised description
+                            also appears here — not only the mm cuff height. */}
+                        {usePerImplantHa ? (
+                          <View
+                            style={{ marginBottom: 4 }}
+                            data-testid="phase3-per-implant-ha"
+                          >
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                fontWeight: "700",
+                                color: "#37474F",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Healing Abutment Configuration (per implant)
+                            </Text>
+                            {haCfg.map((cfg: any, idx: number) => {
+                              // iter-Jun-2026 (v13, Chunk D, Ask 5): skip Immediate-
+                              // Loaded implants — Healing Abutment n/a.
+                              if (
+                                cfg?.phase2_component ===
+                                "Immediate Loading Done"
+                              )
+                                return null;
+                              const changed =
+                                cfg.mode === "standard" &&
+                                cfg.phase2_cuff_height_mm &&
+                                cfg.cuff_height_mm &&
+                                String(cfg.phase2_cuff_height_mm) !==
+                                  String(cfg.cuff_height_mm);
+                              const isCustom = cfg.mode === "customised";
+                              const chipBg = isCustom ? "#F3E5F5" : "#E0F2F1";
+                              const chipColor = isCustom
+                                ? "#6A1B9A"
+                                : "#00695C";
+                              return (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    borderWidth: 1,
+                                    borderColor: "#E0E0E0",
+                                    borderRadius: 8,
+                                    backgroundColor: "#FAFAFA",
+                                    padding: 10,
+                                    marginBottom: 8,
+                                  }}
+                                  data-testid={`phase3-ha-card-${idx}`}
+                                >
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      flexWrap: "wrap",
+                                      gap: 6,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        fontWeight: "800",
+                                        color: "#1A2332",
+                                      }}
+                                    >
+                                      {_fdi(idx)}
+                                    </Text>
+                                    <View
+                                      style={{
+                                        backgroundColor: chipBg,
+                                        borderColor: chipColor,
+                                        borderWidth: 1,
+                                        paddingHorizontal: 8,
+                                        paddingVertical: 2,
+                                        borderRadius: 999,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 10,
+                                          fontWeight: "700",
+                                          color: chipColor,
+                                          letterSpacing: 0.3,
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        {isCustom
+                                          ? "Customised"
+                                          : "Standard cuff height"}
+                                      </Text>
+                                    </View>
+                                    {cfg.phase2_component && (
+                                      <Text
+                                        style={{
+                                          fontSize: 10,
+                                          color: "#78909C",
+                                          fontStyle: "italic",
+                                        }}
+                                      >
+                                        Phase 2: {cfg.phase2_component}
+                                      </Text>
+                                    )}
+                                  </View>
+                                  {cfg.mode === "standard" &&
+                                    cfg.cuff_height_mm && (
+                                      <Text
+                                        style={{
+                                          marginTop: 4,
+                                          fontSize: 12.5,
+                                          color: "#37474F",
+                                        }}
+                                      >
+                                        Cuff height:{" "}
+                                        <Text
+                                          style={{
+                                            fontWeight: "700",
+                                            color: "#00695C",
+                                          }}
+                                        >
+                                          {cfg.cuff_height_mm} mm
+                                        </Text>
+                                        {changed && (
+                                          <Text
+                                            style={{
+                                              color: "#E65100",
+                                              fontStyle: "italic",
+                                            }}
+                                          >
+                                            {"  "}(was{" "}
+                                            {cfg.phase2_cuff_height_mm} mm in
+                                            Phase 2)
+                                          </Text>
+                                        )}
+                                      </Text>
+                                    )}
+                                  {isCustom && cfg.customised_details && (
+                                    <View
+                                      style={{
+                                        marginTop: 6,
+                                        backgroundColor: "#FFF",
+                                        borderLeftWidth: 3,
+                                        borderLeftColor: "#6A1B9A",
+                                        padding: 8,
+                                        borderRadius: 4,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 11,
+                                          fontWeight: "700",
+                                          color: "#6A1B9A",
+                                          marginBottom: 2,
+                                          letterSpacing: 0.3,
+                                          textTransform: "uppercase",
+                                        }}
+                                      >
+                                        Customised healing abutment
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 12.5,
+                                          color: "#263238",
+                                          lineHeight: 18,
+                                        }}
+                                      >
+                                        {cfg.customised_details}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        ) : (
+                          haArr.length > 0 &&
                           (isArrHA ? (
                             (haRaw as any[]).map((val: any, idx: number) => {
                               if (!nonEmpty(val)) return null;
@@ -7873,7 +8715,8 @@ export default function ProcedureDetailScreen() {
                               label="Healing Abutment Height"
                               value={`${haRaw} mm`}
                             />
-                          ))}
+                          ))
+                        )}
                       </View>
                     );
                   })()}
@@ -7953,7 +8796,11 @@ export default function ProcedureDetailScreen() {
                                       color: "#333",
                                     }}
                                   >
-                                    {f.tooth_label || `Implant ${idx + 1}`}
+                                    {f.tooth_label
+                                      ? f.tooth_label.startsWith("Implant")
+                                        ? f.tooth_label
+                                        : `Implant ${f.tooth_label}`
+                                      : `Implant ${idx + 1}`}
                                   </Text>
                                   <Text
                                     style={{ fontSize: 11, color: "#888" }}
@@ -9819,10 +10666,18 @@ export default function ProcedureDetailScreen() {
             happened on this case. Placed right after the phase
             approve/reject section so it reads as the next thing needing
             attention, matching the Phase 1-4 approval UX. */}
-            <TransferApprovalCard
-              procedure={procedure}
-              onChanged={() => loadProcedure()}
-            />
+            <View
+              onLayout={(e) => {
+                transferAnchorY.current = e.nativeEvent.layout.y;
+              }}
+              data-testid="transfer-anchor"
+              testID="transfer-anchor"
+            >
+              <TransferApprovalCard
+                procedure={procedure}
+                onChanged={() => loadProcedure()}
+              />
+            </View>
             <ContributionTimelineCard procedureId={id as string} />
             {/* iter-393: Pre-Implant Augmentation — round status, Step 1/2/3
                 launch buttons, faculty approve/reject, and the Phase-2 review
@@ -10003,7 +10858,7 @@ export default function ProcedureDetailScreen() {
                       <View key={h.id || idx} style={resStyles.editHistoryItem}>
                         <View style={resStyles.editHistoryItemHeader}>
                           <Text style={resStyles.editHistoryPosition}>
-                            Tooth #{h.position}
+                            Implant {h.position}
                           </Text>
                           <View
                             style={[
@@ -10522,7 +11377,7 @@ export default function ProcedureDetailScreen() {
                         .replace(/^phase4_step1_data\./, "Phase 4 · ")
                         .replace(/^medical_assessment\./, "Medical · ")
                         .replace(/_/g, " ")
-                        .replace(/\b\w/g, (c) => c.toUpperCase());
+                        .replace(/\b\w/g, (c: string) => c.toUpperCase());
                       const roleLabel =
                         entry.edited_by_role === "implant_incharge"
                           ? "Implant In-Charge"
@@ -12530,5 +13385,22 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontWeight: "600",
     letterSpacing: 0.1,
+  },
+  durationPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#E3F2FD",
+    borderWidth: 1,
+    borderColor: "#90CAF9",
+  },
+  durationPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0D47A1",
+    letterSpacing: 0.2,
   },
 });

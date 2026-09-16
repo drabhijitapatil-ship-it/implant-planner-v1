@@ -39,9 +39,11 @@ type Props = {
   onChange: (next: string | string[]) => void;
   selectedColor?: string;                          // default red — "selected for extraction" / "missing"
   presentColor?: string;                           // default blue — "present"
+  presentBorderColor?: string;                     // iter-Feb-2026 (v3): border for unselected teeth (default blue)
   selectedLabel?: string;                          // legend caption, default "Selected"
   presentLabel?: string;                           // legend caption, default "Present"
   showLegend?: boolean;
+  hidePresentLegend?: boolean;                     // iter-Feb-2026 (v3): hide the "Present" legend chip entirely
   testIDPrefix?: string;
 };
 
@@ -51,9 +53,11 @@ export default function FdiAnatomicalChart({
   onChange,
   selectedColor = '#E53935',
   presentColor = '#1E88E5',
+  presentBorderColor = '#1565C0',
   selectedLabel = 'Missing',
   presentLabel = 'Present',
   showLegend = true,
+  hidePresentLegend = false,
   testIDPrefix = 'fdi',
 }: Props) {
   const selected: string[] = mode === 'multi'
@@ -84,7 +88,7 @@ export default function FdiAnatomicalChart({
           borderRadius: r,
           backgroundColor: isSelected ? selectedColor : presentColor,
           borderWidth: 1.5,
-          borderColor: isSelected ? '#B71C1C' : '#1565C0',
+          borderColor: isSelected ? '#B71C1C' : presentBorderColor,
           alignItems: 'center',
           justifyContent: 'center',
           marginHorizontal: 1,
@@ -101,10 +105,12 @@ export default function FdiAnatomicalChart({
     <View>
       {showLegend && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: presentColor }} />
-            <Text style={{ fontSize: 10, color: '#546E7A' }}>{presentLabel}</Text>
-          </View>
+          {!hidePresentLegend && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: presentColor }} />
+              <Text style={{ fontSize: 10, color: '#546E7A' }}>{presentLabel}</Text>
+            </View>
+          )}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: selectedColor }} />
             <Text style={{ fontSize: 10, color: '#546E7A' }}>{selectedLabel}</Text>

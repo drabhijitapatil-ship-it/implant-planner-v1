@@ -42,6 +42,9 @@ import {
 import RevisionComparisonModal, {
   type ComparisonRevision,
 } from "./RevisionComparisonModal";
+import ZygomaImplantSelection, {
+  type ZygImplantRow,
+} from "./ZygomaImplantSelection";
 
 // ── Drilling Protocol PDF helpers (A4, backend-rendered) ────────────────────
 type DrillingPdfPayload = {
@@ -265,6 +268,10 @@ interface ImplantPlanItem {
   bone_type?: string;
   risk_level?: string;
   risk_score?: number;
+  // iter-Jun-2026 (v6): Zygoma/Pterygoid extended fields
+  implant_type?: "conventional" | "zygoma" | "pterygoid";
+  side?: "Right" | "Left" | "";
+  row_label?: string;
 }
 interface Props {
   procedureId: string;
@@ -1409,6 +1416,21 @@ export default function CaseImplantPlanning({
   // Drilling protocol is hidden during Phase 1 (Step 2/4, 3/4) and unlocked in Phase 2+
   const showDrillingProtocol = !isPhase1Status(procedureStatus);
 
+  // iter-Jun-2026 (v6): Zygoma/Pterygoid workflow state for Phase 2
+  // implant selector. `zygConfig` is the Phase 1 configuration string,
+  // `convLocations` the pre-selected FDI codes for conventional implants in
+  // mixed cases.
+  const [zygConfig, setZygConfig] = useState<string>("");
+  const [convLocations, setConvLocations] = useState<string[]>([]);
+  const ZYG_PROCEDURE_TYPES = new Set<string>([
+    "Quad Zygoma Implants",
+    "Zygoma and Pterygoid Implants",
+    "Pterygoid and Conventional Implants",
+    "Zygoma and Conventional Implants",
+    "Zygoma, Pterygoid and Conventional Implants",
+  ]);
+  const isZygCase = !!procedureType && ZYG_PROCEDURE_TYPES.has(procedureType);
+
   const checkImplantPlansComplete = useCallback(
     (plansList: ImplantPlanItem[]) => {
       if (!plansList || plansList.length === 0) return false;
@@ -1416,7 +1438,7 @@ export default function CaseImplantPlanning({
         (p) => !!p.system && !!p.diameter && !!p.length,
       );
       if (!allValid) return false;
-      if (missingTeeth && missingTeeth.length > 0) {
+      if (!isZygCase && missingTeeth && missingTeeth.length > 0) {
         const positionsWithPlan = new Set(
           plansList.map((p) => String(p.position)),
         );
@@ -1427,16 +1449,38 @@ export default function CaseImplantPlanning({
       }
       return true;
     },
-    [missingTeeth],
+    [isZygCase, missingTeeth],
   );
 
   const [survivalReview, setSurvivalReview] = useState<any | null>(null);
 
   const loadData = useCallback(async () => {
     try {
+      // iter-Feb-2026: Zygoma/Pterygoid procedure types fetch the "advanced"
+      // implant catalog (Refirm Z-Series + P-Series). Mixed cases (that
+      // combine advanced + conventional implants) fetch ALL systems so the
+      // operator can plan both advanced anchor implants and anterior
+      // conventional implants from a single picker.
+      const PURE_ADVANCED = new Set([
+        "Quad Zygoma Implants",
+        "Zygoma and Pterygoid Implants",
+      ]);
+      const MIXED = new Set([
+        "Pterygoid and Conventional Implants",
+        "Zygoma and Conventional Implants",
+        "Zygoma, Pterygoid and Conventional Implants",
+      ]);
+      let systemsQs = "";
+      if (procedureType) {
+        if (MIXED.has(procedureType)) {
+          systemsQs = "?implant_type=all";
+        } else if (PURE_ADVANCED.has(procedureType)) {
+          systemsQs = "?implant_type=advanced";
+        }
+      }
       const [planRes, sysRes, toothRes, procRes] = await Promise.allSettled([
         api.get(`/procedures/${procedureId}/implant-plan`),
-        api.get("/implant-library/systems"),
+        api.get(`/implant-library/systems${systemsQs}`),
         api.get("/implant-library/tooth-recommendations"),
         api.get(`/procedures/${procedureId}`),
       ]);
@@ -1450,14 +1494,26 @@ export default function CaseImplantPlanning({
         setToothRecs(toothRes.value.data || {});
       // iter-345: load survival review so Implant Planning cards can show
       // Active/Inactive badges + append replacement cards at the bottom.
-      if (procRes.status === "fulfilled")
+      if (procRes.status === "fulfilled") {
         setSurvivalReview(procRes.value.data?.phase2_survival_review || null);
+        // iter-Jun-2026 (v6): pick up Phase 1 zygoma config + conventional sites
+        setZygConfig(procRes.value.data?.zygoma_pterygoid_configuration || "");
+        setConvLocations(
+          procRes.value.data?.conventional_implant_locations || [],
+        );
+      }
     } catch (err) {
       console.error("Failed to load implant planning data:", err);
     } finally {
       setLoading(false);
     }
-  }, [procedureId, missingTeeth, checkImplantPlansComplete, onPlanUpdated]);
+  }, [
+    procedureId,
+    procedureType,
+    missingTeeth,
+    checkImplantPlansComplete,
+    onPlanUpdated,
+  ]);
 
   useEffect(() => {
     loadData();
@@ -1572,6 +1628,75 @@ export default function CaseImplantPlanning({
 
   const usedPositions = plans.map((p) => p.position);
 
+  // iter-Jun-2026 (v6): Bidirectional mappers between the shared
+  // ImplantPlanItem shape and the ZygImplantRow used by ZygomaImplantSelection.
+  const plansToZygRows = (list: ImplantPlanItem[]): ZygImplantRow[] =>
+    list.map((p) => ({
+      implant_type: (p.implant_type as any) || "conventional",
+      side: p.side as any,
+      tooth_position:
+        !p.implant_type || p.implant_type === "conventional"
+          ? p.position
+          : undefined,
+      brand: p.brand,
+      system: p.system,
+      diameter: p.diameter,
+      length: p.length,
+      row_label: p.row_label,
+    }));
+  const zygRowsToPlans = (rows: ZygImplantRow[]): ImplantPlanItem[] => {
+    // Deterministic synthetic position codes so each zygoma/pterygoid row
+    // has a unique `position` (backend enforces uniqueness + <=10 rows).
+    const rightZygCount: number[] = [];
+    const leftZygCount: number[] = [];
+    const rightPterCount: number[] = [];
+    const leftPterCount: number[] = [];
+    return rows.map((r) => {
+      let position = r.tooth_position || "";
+      let row_label = r.row_label || "";
+      if (r.implant_type === "zygoma") {
+        if (r.side === "Right") {
+          rightZygCount.push(1);
+          const n = rightZygCount.length;
+          position = `ZR${n}`;
+          row_label = row_label || `Zygoma Right #${n}`;
+        } else if (r.side === "Left") {
+          leftZygCount.push(1);
+          const n = leftZygCount.length;
+          position = `ZL${n}`;
+          row_label = row_label || `Zygoma Left #${n}`;
+        }
+      } else if (r.implant_type === "pterygoid") {
+        if (r.side === "Right") {
+          rightPterCount.push(1);
+          const n = rightPterCount.length;
+          position = `PR${n}`;
+          row_label = row_label || `Pterygoid Right${n > 1 ? ` #${n}` : ""}`;
+        } else if (r.side === "Left") {
+          leftPterCount.push(1);
+          const n = leftPterCount.length;
+          position = `PL${n}`;
+          row_label = row_label || `Pterygoid Left${n > 1 ? ` #${n}` : ""}`;
+        }
+      }
+      // Placeholder brand/system/diameter/length for rows in "configure me" state
+      // (Quad Zygoma pre-populates 4 empty rows). Backend requires these fields,
+      // so we send safe defaults; a completed row will overwrite them.
+      return {
+        position,
+        brand: r.brand || "TBD",
+        system: r.system || "TBD",
+        diameter:
+          typeof r.diameter === "number" ? r.diameter : Number(r.diameter) || 0,
+        length:
+          typeof r.length === "number" ? r.length : Number(r.length) || 0,
+        implant_type: (r.implant_type as any) || "conventional",
+        side: (r.side as any) || undefined,
+        row_label: row_label || undefined,
+      } as ImplantPlanItem;
+    });
+  };
+
   if (loading) {
     return (
       <View style={st.loadingBox}>
@@ -1581,20 +1706,81 @@ export default function CaseImplantPlanning({
     );
   }
 
+  // iter-Jun-2026 (v7): Zygoma/Pterygoid procedures render TWO stacked
+  // sections: the specialized zygoma/pterygoid picker at top, and — for
+  // mixed configurations — the standard FDI-chart conventional flow below.
+  // This gives conventional implants the same experience as Single/Multiple
+  // Conventional cases while keeping zygoma/pterygoid rows purple.
+  const configHasConventional = /conventional/i.test(zygConfig || "");
+  const showConventionalSection = !isZygCase || configHasConventional;
+  const conventionalOnlyPlans = isZygCase
+    ? plans.filter((p) => !p.implant_type || p.implant_type === "conventional")
+    : plans;
+  const zygOnlyPlans = isZygCase
+    ? plans.filter(
+        (p) => p.implant_type === "zygoma" || p.implant_type === "pterygoid",
+      )
+    : [];
+  const allowedTeethForModal: string[] | undefined = isZygCase
+    ? convLocations
+    : missingTeeth;
+
   return (
     <View style={st.container} data-testid="case-implant-planning">
       <View style={st.header}>
         <View style={st.headerLeft}>
-          <Ionicons name="medical" size={22} color="#1E88E5" />
-          <Text style={st.headerTitle}>Implant Planning</Text>
+          <Ionicons
+            name="medical"
+            size={22}
+            color={isZygCase ? "#5E35B1" : "#1E88E5"}
+          />
+          <Text style={st.headerTitle}>
+            {isZygCase
+              ? "Zygoma / Pterygoid Implant Planning"
+              : "Implant Planning"}
+          </Text>
         </View>
         <View style={st.badge}>
           <Text style={st.badgeText}>{plans.length}</Text>
         </View>
       </View>
 
+      {/* iter-Jun-2026 (v7): Zygoma/Pterygoid picker (only for the 5 advanced procedure types) */}
+      {isZygCase && (
+        <ZygomaImplantSelection
+          procedureType={procedureType || ""}
+          configuration={zygConfig}
+          conventionalLocations={convLocations}
+          systems={systems as any}
+          value={plansToZygRows(zygOnlyPlans)}
+          onChange={(rows) => {
+            // Rebuild `plans` = (updated zyg/pter rows) + (existing conventional rows).
+            const nextZygPlans = zygRowsToPlans(rows);
+            savePlans([...nextZygPlans, ...conventionalOnlyPlans]);
+          }}
+          readOnly={!canEdit || !!saving}
+        />
+      )}
+
+      {/* iter-Jun-2026 (v7): Section divider — separates zygoma section from
+          conventional section in mixed advanced cases. */}
+      {isZygCase && showConventionalSection && (
+        <View style={st.zygDivider} data-testid="zyg-conventional-divider">
+          <View style={st.zygDividerLine} />
+          <Text style={st.zygDividerText}>Conventional Implants</Text>
+          <View style={st.zygDividerLine} />
+        </View>
+      )}
+
       {/* Saved Implant Cards */}
       {plans.map((plan, idx) => {
+        // iter-Jun-2026 (v7): In zygoma cases, skip zygoma/pterygoid rows — the
+        // dedicated ZygomaImplantSelection above already renders them.
+        if (
+          isZygCase &&
+          (plan.implant_type === "zygoma" || plan.implant_type === "pterygoid")
+        )
+          return null;
         const rec = toothRecs[plan.position];
         // iter-345: derive Active/Inactive from survival review data.
         const surv = (survivalReview?.implants || {})[String(idx)] || {};
@@ -1744,6 +1930,7 @@ export default function CaseImplantPlanning({
                 st.implantCard,
                 isInactive && st.implantCardInactive,
                 isTreatmentEnded && st.implantCardEnded,
+                isZygCase && st.zygCenteredCard,
               ]}
               data-testid={`implant-plan-${idx}`}
             >
@@ -2049,13 +2236,13 @@ export default function CaseImplantPlanning({
                             plan.brand,
                             plan.system,
                             plan.diameter,
-                            plan.bone_type,
+                            plan.bone_type || "D2",
                             plan.length,
                           );
                           return printDrillingProtocolPdf({
                             implant: plan,
-                            bone: plan.bone_type,
-                            tooth: plan.tooth || "",
+                            bone: plan.bone_type || "D2",
+                            tooth: plan.position || "",
                             patientName,
                             patientId,
                             procedureDate,
@@ -2068,13 +2255,13 @@ export default function CaseImplantPlanning({
                             plan.brand,
                             plan.system,
                             plan.diameter,
-                            plan.bone_type,
+                            plan.bone_type || "D2",
                             plan.length,
                           );
                           return exportDrillingProtocolPdf({
                             implant: plan,
-                            bone: plan.bone_type,
-                            tooth: plan.tooth || "",
+                            bone: plan.bone_type || "D2",
+                            tooth: plan.position || "",
                             patientName,
                             patientId,
                             procedureDate,
@@ -2137,7 +2324,11 @@ export default function CaseImplantPlanning({
               return (
                 <View
                   key={`chain-${idx}-${revNum}`}
-                  style={[st.implantCard, st.implantCardInactive]}
+                  style={[
+                    st.implantCard,
+                    st.implantCardInactive,
+                    isZygCase && st.zygCenteredCard,
+                  ]}
                   data-testid={`implant-revision-${idx}-r${revNum}`}
                 >
                   <View style={st.implantCardHeader}>
@@ -2279,7 +2470,7 @@ export default function CaseImplantPlanning({
                 return (
                   <View
                     key={`active-repl-${idx}`}
-                    style={st.implantCard}
+                    style={[st.implantCard, isZygCase && st.zygCenteredCard]}
                     data-testid={`implant-revision-active-${idx}`}
                   >
                     <View style={st.implantCardHeader}>
@@ -2411,7 +2602,7 @@ export default function CaseImplantPlanning({
           now rendered inline within each site's group above. The prior
           separate render block was removed. */}
 
-      {plans.length === 0 && (
+      {plans.length === 0 && !isZygCase && (
         <View style={st.emptyState}>
           <Ionicons name="medical-outline" size={36} color="#CCC" />
           <Text style={st.emptyText}>No implants planned yet</Text>
@@ -2420,16 +2611,27 @@ export default function CaseImplantPlanning({
           </Text>
         </View>
       )}
+      {isZygCase && showConventionalSection && conventionalOnlyPlans.length === 0 && (
+        <View style={[st.emptyState, st.zygCenteredCard]}>
+          <Ionicons name="medical-outline" size={36} color="#CCC" />
+          <Text style={st.emptyText}>No conventional implants planned yet</Text>
+          <Text style={st.emptySubtext}>Add conventional anterior implants below</Text>
+        </View>
+      )}
 
       {canAddImplant &&
-        Array.isArray(missingTeeth) &&
-        missingTeeth.length > 0 &&
+        showConventionalSection &&
+        Array.isArray(allowedTeethForModal) &&
+        allowedTeethForModal.length > 0 &&
         (() => {
-          const planned = new Set(plans.map((p) => p.position));
-          const pending = missingTeeth.filter((t) => !planned.has(t));
+          const planned = new Set(conventionalOnlyPlans.map((p) => p.position));
+          const pending = allowedTeethForModal.filter((t) => !planned.has(t));
           if (pending.length === 0) return null;
           return (
-            <View style={st.pendingWrap} data-testid="pending-implant-teeth">
+            <View
+              style={[st.pendingWrap, isZygCase && st.zygCenteredCard]}
+              data-testid="pending-implant-teeth"
+            >
               <View style={st.pendingHeader}>
                 <Ionicons
                   name="alert-circle-outline"
@@ -2457,7 +2659,7 @@ export default function CaseImplantPlanning({
                     activeOpacity={0.8}
                   >
                     <Ionicons name="add-circle" size={14} color="#E65100" />
-                    <Text style={st.pendingChipText}>FDI {t}</Text>
+                    <Text style={st.pendingChipText}>Implant {t}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -2465,9 +2667,9 @@ export default function CaseImplantPlanning({
           );
         })()}
 
-      {canAddImplant && (
+      {canAddImplant && showConventionalSection && (
         <TouchableOpacity
-          style={st.addButton}
+          style={[st.addButton, isZygCase && st.zygCenteredCard]}
           onPress={() => {
             setEditingIdx(null);
             setPendingPreset(undefined);
@@ -2481,7 +2683,9 @@ export default function CaseImplantPlanning({
           ) : (
             <>
               <Ionicons name="add-circle" size={20} color="#1E88E5" />
-              <Text style={st.addButtonText}>Add Implant Position</Text>
+              <Text style={st.addButtonText}>
+                {isZygCase ? "Add Conventional Implant" : "Add Implant Position"}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -2508,8 +2712,8 @@ export default function CaseImplantPlanning({
         medicalAssessment={medicalAssessment}
         procedureType={procedureType}
         procedureId={procedureId}
-        allowedTeeth={missingTeeth}
-        missingTeeth={missingTeeth}
+        allowedTeeth={allowedTeethForModal}
+        missingTeeth={allowedTeethForModal}
         edentulousSiteMeasurements={edentulousSiteMeasurements}
         defaultOcclusocervical={defaultOcclusocervical}
         defaultMesiodistal={defaultMesiodistal}
@@ -3559,9 +3763,9 @@ function ModalContent(props: any) {
                           key={proc}
                           style={[ms.procChip, sel && ms.procChipActive]}
                           onPress={() =>
-                            setSProcedures((prev) =>
+                            setSProcedures((prev: string[]) =>
                               sel
-                                ? prev.filter((p) => p !== proc)
+                                ? prev.filter((p: string) => p !== proc)
                                 : [...prev, proc],
                             )
                           }
@@ -5045,7 +5249,7 @@ function ModalContent(props: any) {
             </View>
             <FlatList
               data={systems
-                .filter((s) => {
+                .filter((s: ImplantSystem) => {
                   if (!systemSearch.trim()) return true;
                   const q = systemSearch.toLowerCase();
                   return (
@@ -5053,7 +5257,7 @@ function ModalContent(props: any) {
                     s.system.toLowerCase().includes(q)
                   );
                 })
-                .sort((a, b) => {
+                .sort((a: ImplantSystem, b: ImplantSystem) => {
                   // Primary: always alphabetical by brand + system
                   return `${a.brand} ${a.system}`.localeCompare(
                     `${b.brand} ${b.system}`,
@@ -5302,6 +5506,26 @@ const dc = StyleSheet.create({
 // ── Styles ─────────────────────────────────────────────────
 const st = StyleSheet.create({
   container: { marginBottom: 12 },
+  // iter-Jun-2026 (v7): centered narrow card for Zygoma-case implant cards
+  zygCenteredCard: { alignSelf: "center", width: "100%", maxWidth: 380 },
+  zygDivider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 14,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 420,
+  },
+  zygDividerLine: { flex: 1, height: 1, backgroundColor: "#CFD8DC" },
+  zygDividerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#5E35B1",
+    marginHorizontal: 10,
+    letterSpacing: 0.4,
+  },
   loadingBox: {
     backgroundColor: "#FFF",
     padding: 20,
@@ -5644,6 +5868,58 @@ const st = StyleSheet.create({
     color: "#E65100",
     letterSpacing: 0.3,
   },
+  // ── Bridge nudge modal styles ──
+  bridgeBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(13,71,161,0.45)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  bridgeSheet: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    padding: 22,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  bridgeTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#0D47A1",
+    marginBottom: 4,
+  },
+  bridgeBody: { fontSize: 13.5, color: "#37474F", lineHeight: 19 },
+  bridgeBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bridgeBtnGhost: {
+    borderWidth: 1.5,
+    borderColor: "#CFD8DC",
+    backgroundColor: "#FFF",
+  },
+  bridgeBtnGhostText: { fontSize: 13.5, fontWeight: "700", color: "#546E7A" },
+  bridgeBtnPrimary: { backgroundColor: "#1565C0" },
+  bridgeBtnPrimaryText: { fontSize: 13.5, fontWeight: "700", color: "#FFF" },
+  bridgeMaterialRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#E0E7EE",
+    marginTop: 8,
+    backgroundColor: "#F8FAFC",
+  },
+  bridgeMaterialText: { fontSize: 14, fontWeight: "600", color: "#37474F" },
 });
 
 const ms = StyleSheet.create({
@@ -6346,56 +6622,4 @@ const ms = StyleSheet.create({
     borderRadius: 6,
     alignSelf: "flex-start",
   },
-  // ── Bridge nudge modal styles ──
-  bridgeBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(13,71,161,0.45)",
-    justifyContent: "center",
-    padding: 24,
-  },
-  bridgeSheet: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  bridgeTitle: {
-    fontSize: 17,
-    fontWeight: "800",
-    color: "#0D47A1",
-    marginBottom: 4,
-  },
-  bridgeBody: { fontSize: 13.5, color: "#37474F", lineHeight: 19 },
-  bridgeBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bridgeBtnGhost: {
-    borderWidth: 1.5,
-    borderColor: "#CFD8DC",
-    backgroundColor: "#FFF",
-  },
-  bridgeBtnGhostText: { fontSize: 13.5, fontWeight: "700", color: "#546E7A" },
-  bridgeBtnPrimary: { backgroundColor: "#1565C0" },
-  bridgeBtnPrimaryText: { fontSize: 13.5, fontWeight: "700", color: "#FFF" },
-  bridgeMaterialRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: "#E0E7EE",
-    marginTop: 8,
-    backgroundColor: "#F8FAFC",
-  },
-  bridgeMaterialText: { fontSize: 14, fontWeight: "600", color: "#37474F" },
 });

@@ -44,6 +44,10 @@ import {
 } from "../../utils/implantValidation";
 import ExistingPatientBanner from "../../components/ExistingPatientBanner";
 import PatientNameMatchBanner from "../../components/PatientNameMatchBanner";
+import ZygomaPterygoidPhase1Form, {
+  ZygomaPterygoidPhase1Data,
+} from "../../components/ZygomaPterygoidPhase1Form";
+import GroupedDescDropdown from "../../components/GroupedDescDropdown";
 
 import {
   PROCEDURE_TYPES,
@@ -77,7 +81,30 @@ import {
   calculateMedicalRisk,
   getProstheticOptions,
   PHASE1_ATTACHMENT_TYPE_OPTIONS,
+  isZygomaPterygoidProcedure,
+  isZygomaFullArchProcedure,
+  needsConventionalImplantLocation,
+  ZYGOMA_PTERYGOID_CONFIGURATIONS,
 } from "../../constants/checklist";
+
+import {
+  PROVISIONAL_GROUPED_OPTIONS,
+  SC_ABUTMENT_TYPE_OPTIONS,
+  SC_RETENTION_TYPE_OPTIONS,
+  SC_CROWN_MATERIAL_OPTIONS,
+} from "../../constants/singleConventional";
+import {
+  GROUP_A_PROVISIONAL_OPTIONS,
+  GROUP_A_PROSTHESIS_TYPE_OPTIONS,
+  GROUP_A_ABUTMENT_TYPE_OPTIONS,
+  GROUP_A_RETENTION_OPTIONS,
+  GROUP_A_CROWN_MATERIAL_OPTIONS,
+  GROUP_B_PROVISIONAL_OPTIONS,
+  GROUP_B_PROSTHETIC_PLAN_OPTIONS,
+  GROUP_C_PROVISIONAL_OPTIONS,
+  GROUP_C_PROSTHETIC_PLAN_OPTIONS,
+  getEffectiveWorkflow,
+} from "../../constants/prosthesisWorkflows";
 
 import { BACKEND_URL } from "../../utils/config";
 
@@ -639,7 +666,37 @@ export default function NewProcedureScreen() {
     // "Overdenture with Attachment". "Other" opens the free-text field below.
     attachment_type: "",
     attachment_type_other: "",
+    // iter-Feb-2026: Single-Conventional-Implant workflow fields.
+    // Only used when implant_procedure_type === 'Single Conventional Implant'.
+    // • type_of_provisional — required when Immediate Loading is picked.
+    // • sc_abutment_type / sc_retention_type / sc_crown_material — replace
+    //   the legacy Prosthetic Plan dropdown for this procedure type.
+    type_of_provisional: "",
+    type_of_provisional_other: "",
+    sc_abutment_type: "",
+    sc_abutment_type_other: "",
+    sc_retention_type: "",
+    sc_retention_type_other: "",
+    sc_crown_material: "",
+    sc_crown_material_other: "",
+    // iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflow.
+    // Group A (Multi Conv + Pterygoid+Conv): 4 fields
+    // Group B (All-on-X): fa_prosthetic_plan
+    // Group C (Quad Zygoma + Zygo variants): zp_prosthetic_plan
+    ma_prosthesis_type: "",
+    ma_prosthesis_type_other: "",
+    ma_abutment_type: "",
+    ma_abutment_type_other: "",
+    ma_retention_type: "",
+    ma_retention_type_other: "",
+    ma_crown_material: "",
+    ma_crown_material_other: "",
+    fa_prosthetic_plan: "",
+    fa_prosthetic_plan_other: "",
+    zp_prosthetic_plan: "",
+    zp_prosthetic_plan_other: "",
     bone_graft_specifications: "",
+    edentulous_sites: [] as string[],
     // Clinical Examination
     occlusocervical_height: "",
     mesiodistal_space: "",
@@ -686,6 +743,12 @@ export default function NewProcedureScreen() {
     // Medical Assessment
     medical_assessment: {} as Record<string, string>,
     medical_risk_level: "",
+    // iter-Feb-2026: Zygoma & Pterygoid workflow data.
+    zygoma_pterygoid_data: null as ZygomaPterygoidPhase1Data | null,
+    zygoma_pterygoid_configuration: undefined as string | undefined,
+    // iter-Feb-2026 (v3): Conventional implant placement sites for mixed
+    // advanced+conventional cases (Pterygoid+Conv, Zygoma+Conv, all-3).
+    conventional_implant_locations: [] as string[],
   });
 
   // Checklist state
@@ -1007,6 +1070,19 @@ export default function NewProcedureScreen() {
     });
   }, [isExistingImplantCase, existingImplantTeeth]);
 
+  // iter-Feb-2026 (v3): Zygoma cases are anatomically maxillary-only. When
+  // any of the 4 Zygoma procedure types is selected, auto-force the Arch
+  // to "Maxillary" (both on initial selection and if the procedure type is
+  // switched from a mandibular All-on-X to a Zygoma type).
+  useEffect(() => {
+    if (
+      isZygomaFullArchProcedure(formData.implant_procedure_type) &&
+      formData.arch !== "Maxillary"
+    ) {
+      setFormData((prev) => ({ ...prev, arch: "Maxillary" }));
+    }
+  }, [formData.implant_procedure_type]);
+
   const FORM_STORAGE_KEY = `new_procedure_form_${user?.id || "anon"}`;
   const appState = useRef(AppState.currentState);
 
@@ -1036,11 +1112,13 @@ export default function NewProcedureScreen() {
                 patient_email: proc.patient_email || "",
                 registration_number: proc.registration_number || "",
                 chief_complaint: proc.chief_complaint || "",
-                student_name: proc.student_name || prev.student_name || "",
-                supervisor_id: proc.supervisor_id || "",
-                supervisor_name: proc.supervisor_name || "",
-                implant_incharge_id: proc.implant_incharge_id || "",
-                implant_incharge_name: proc.implant_incharge_name || "",
+                student_name: proc.student_name || prev.student_name,
+                supervisor_id: proc.supervisor_id || prev.supervisor_id,
+                supervisor_name: proc.supervisor_name || prev.supervisor_name,
+                implant_incharge_id:
+                  proc.implant_incharge_id || prev.implant_incharge_id,
+                implant_incharge_name:
+                  proc.implant_incharge_name || prev.implant_incharge_name,
                 receipt_number: proc.receipt_number || "",
                 amount_paid:
                   proc.amount_paid != null ? String(proc.amount_paid) : "",
@@ -1051,8 +1129,7 @@ export default function NewProcedureScreen() {
                 sinus_lift_type: proc.sinus_lift_type || "",
                 bone_graft_material_details:
                   proc.bone_graft_material_details || "",
-                procedure_surgery_type:
-                  normalizeSurgeryApproach(proc.procedure_surgery_type) || "",
+                procedure_surgery_type: proc.procedure_surgery_type || "",
                 guided_surgery_type: proc.guided_surgery_type || "",
                 static_guide_type: proc.static_guide_type || "",
                 sleeve_type: proc.sleeve_type || "",
@@ -1064,10 +1141,7 @@ export default function NewProcedureScreen() {
                   ? proc.missing_teeth
                   : [],
                 edentulous_site_measurements:
-                  proc.edentulous_site_measurements &&
-                  typeof proc.edentulous_site_measurements === "object"
-                    ? proc.edentulous_site_measurements
-                    : {},
+                  proc.edentulous_site_measurements || {},
                 arch: proc.arch || "",
                 loading_type: Array.isArray(proc.loading_type)
                   ? proc.loading_type
@@ -1076,7 +1150,33 @@ export default function NewProcedureScreen() {
                 prosthetic_plan_other: proc.prosthetic_plan_other || "",
                 attachment_type: proc.attachment_type || "",
                 attachment_type_other: proc.attachment_type_other || "",
-                bone_graft_specifications: proc.bone_graft_specifications || "",
+                // iter-Feb-2026: Single-Conventional-Implant workflow fields
+                type_of_provisional: proc.type_of_provisional || "",
+                type_of_provisional_other:
+                  proc.type_of_provisional_other || "",
+                sc_abutment_type: proc.sc_abutment_type || "",
+                sc_abutment_type_other: proc.sc_abutment_type_other || "",
+                sc_retention_type: proc.sc_retention_type || "",
+                sc_retention_type_other: proc.sc_retention_type_other || "",
+                sc_crown_material: proc.sc_crown_material || "",
+                sc_crown_material_other: proc.sc_crown_material_other || "",
+                ma_prosthesis_type: proc.ma_prosthesis_type || "",
+                ma_prosthesis_type_other:
+                  proc.ma_prosthesis_type_other || "",
+                ma_abutment_type: proc.ma_abutment_type || "",
+                ma_abutment_type_other: proc.ma_abutment_type_other || "",
+                ma_retention_type: proc.ma_retention_type || "",
+                ma_retention_type_other: proc.ma_retention_type_other || "",
+                ma_crown_material: proc.ma_crown_material || "",
+                ma_crown_material_other: proc.ma_crown_material_other || "",
+                fa_prosthetic_plan: proc.fa_prosthetic_plan || "",
+                fa_prosthetic_plan_other:
+                  proc.fa_prosthetic_plan_other || "",
+                zp_prosthetic_plan: proc.zp_prosthetic_plan || "",
+                zp_prosthetic_plan_other:
+                  proc.zp_prosthetic_plan_other || "",
+                bone_graft_specifications:
+                  proc.bone_graft_specifications || "",
                 // Clinical Examination
                 occlusocervical_height: proc.occlusocervical_height || "",
                 mesiodistal_space: proc.mesiodistal_space || "",
@@ -1097,7 +1197,8 @@ export default function NewProcedureScreen() {
                 opposing_dentition: proc.opposing_dentition || "",
                 // Occlusal Analysis (full-arch)
                 vertical_dimension_mm: proc.vertical_dimension_mm || "",
-                available_interarch_space: proc.available_interarch_space || "",
+                available_interarch_space:
+                  proc.available_interarch_space || "",
                 opposing_arch: proc.opposing_arch || "",
                 tmj: proc.tmj || "",
                 // Aesthetic Risk Assessment
@@ -1107,6 +1208,18 @@ export default function NewProcedureScreen() {
                 medical_assessment:
                   proc.medical_assessment || prev.medical_assessment,
                 medical_risk_level: proc.medical_risk_level || "",
+                // iter-Feb-2026: Zygoma & Pterygoid workflow data
+                zygoma_pterygoid_data:
+                  (proc.zygoma_pterygoid_data?.phase1 ||
+                    proc.zygoma_pterygoid_data ||
+                    {}) as ZygomaPterygoidPhase1Data,
+                zygoma_pterygoid_configuration:
+                  proc.zygoma_pterygoid_configuration || "",
+                conventional_implant_locations: Array.isArray(
+                  proc.conventional_implant_locations,
+                )
+                  ? proc.conventional_implant_locations
+                  : [],
               }));
               // Restore checklist items if saved
               // iter-296b: restore items with EITHER true OR false values. The
@@ -1301,14 +1414,49 @@ export default function NewProcedureScreen() {
           procedure_time: "",
           implant_procedure_type: "",
           num_implants: "",
+          sinus_lift_type: "",
+          bone_graft_material_details: "",
+          procedure_surgery_type: "",
+          guided_surgery_type: "",
+          static_guide_type: "",
+          sleeve_type: "",
+          dynamic_nav_system: "",
           teeth_present: [] as string[],
+          missing_teeth: [] as string[],
+          edentulous_site_measurements: {} as Record<
+            string,
+            { oc?: string; md?: string }
+          >,
           arch: "",
           loading_type: [] as string[],
+          type_of_provisional: "",
+          type_of_provisional_other: "",
           prosthetic_plan: "",
           prosthetic_plan_other: "",
           attachment_type: "",
           attachment_type_other: "",
           bone_graft_specifications: "",
+          sc_abutment_type: "",
+          sc_abutment_type_other: "",
+          sc_retention_type: "",
+          sc_retention_type_other: "",
+          sc_crown_material: "",
+          sc_crown_material_other: "",
+          ma_prosthesis_type: "",
+          ma_prosthesis_type_other: "",
+          ma_abutment_type: "",
+          ma_abutment_type_other: "",
+          ma_retention_type: "",
+          ma_retention_type_other: "",
+          ma_crown_material: "",
+          ma_crown_material_other: "",
+          fa_prosthetic_plan: "",
+          fa_prosthetic_plan_other: "",
+          zp_prosthetic_plan: "",
+          zp_prosthetic_plan_other: "",
+          zygoma_pterygoid_data: null,
+          zygoma_pterygoid_configuration: undefined,
+          conventional_implant_locations: [] as string[],
           edentulous_sites: [] as string[],
           occlusocervical_height: "",
           mesiodistal_space: "",
@@ -1327,6 +1475,22 @@ export default function NewProcedureScreen() {
           tmj: "",
           smile_line: "",
           gingival_biotype: "",
+          clinical_exam_per_site: {} as Record<
+            string,
+            {
+              ridge_contour?: string;
+              soft_tissue_thickness?: string;
+              keratinized_mucosa?: string;
+            }
+          >,
+          atrophy_max_ant_h: "",
+          atrophy_max_post_h: "",
+          atrophy_max_ant_w: "",
+          atrophy_max_post_w: "",
+          atrophy_man_ant_h: "",
+          atrophy_man_post_h: "",
+          atrophy_man_ant_w: "",
+          atrophy_man_post_w: "",
           medical_assessment: {} as Record<string, string>,
           medical_risk_level: "",
         });
@@ -2039,6 +2203,180 @@ export default function NewProcedureScreen() {
       );
       return;
     }
+    // iter-Feb-2026 / -C — Single-Conventional-Implant workflow validation.
+    // Now includes overlap types with num_implants='Single Implant'.
+    if (
+      getEffectiveWorkflow(
+        sanitized.implant_procedure_type,
+        sanitized.num_implants,
+      ) === "SC"
+    ) {
+      const otherFilled = (v: string, o: string) =>
+        v !== "Other" || (!!o && o.trim().length > 0);
+      if (
+        sanitized.loading_type.includes("Immediate Loading") &&
+        !sanitized.type_of_provisional
+      ) {
+        Alert.alert(
+          "Missing Field",
+          "Please select the Type of Provisional for Immediate Loading.",
+        );
+        return;
+      }
+      if (!sanitized.sc_abutment_type) {
+        Alert.alert("Missing Field", "Please select the Abutment Type.");
+        return;
+      }
+      if (
+        !otherFilled(
+          sanitized.sc_abutment_type,
+          sanitized.sc_abutment_type_other,
+        )
+      ) {
+        Alert.alert(
+          "Missing Field",
+          "Please describe the custom Abutment Type.",
+        );
+        return;
+      }
+      if (!sanitized.sc_retention_type) {
+        Alert.alert("Missing Field", "Please select the Type of Retention.");
+        return;
+      }
+      if (
+        !otherFilled(
+          sanitized.sc_retention_type,
+          sanitized.sc_retention_type_other,
+        )
+      ) {
+        Alert.alert(
+          "Missing Field",
+          "Please describe the custom Type of Retention.",
+        );
+        return;
+      }
+      if (!sanitized.sc_crown_material) {
+        Alert.alert("Missing Field", "Please select the Crown Material.");
+        return;
+      }
+      if (
+        !otherFilled(
+          sanitized.sc_crown_material,
+          sanitized.sc_crown_material_other,
+        )
+      ) {
+        Alert.alert(
+          "Missing Field",
+          "Please describe the custom Crown Material.",
+        );
+        return;
+      }
+    }
+    // iter-Feb-2026-B / -C — Multiple / Full-Arch / Zygoma workflow validation.
+    {
+      const g = getEffectiveWorkflow(
+        sanitized.implant_procedure_type,
+        sanitized.num_implants,
+      );
+      const otherFilled = (v: string, o: string) =>
+        v !== "Other" || (!!o && o.trim().length > 0);
+      if (
+        (g === "A" || g === "B" || g === "C") &&
+        sanitized.loading_type.includes("Immediate Loading")
+      ) {
+        if (!sanitized.type_of_provisional) {
+          Alert.alert("Missing Field", "Please select the Type of Provisional.");
+          return;
+        }
+        if (
+          !otherFilled(
+            sanitized.type_of_provisional,
+            sanitized.type_of_provisional_other,
+          )
+        ) {
+          Alert.alert(
+            "Missing Field",
+            "Please describe the custom Type of Provisional.",
+          );
+          return;
+        }
+      }
+      if (g === "A") {
+        const rows: [string, string, string, string][] = [
+          [
+            "Prosthesis Type",
+            sanitized.ma_prosthesis_type,
+            sanitized.ma_prosthesis_type_other,
+            "ma_prosthesis_type",
+          ],
+          [
+            "Abutment Type",
+            sanitized.ma_abutment_type,
+            sanitized.ma_abutment_type_other,
+            "ma_abutment_type",
+          ],
+          [
+            "Type of Retention",
+            sanitized.ma_retention_type,
+            sanitized.ma_retention_type_other,
+            "ma_retention_type",
+          ],
+          [
+            "Crown/Bridge Material",
+            sanitized.ma_crown_material,
+            sanitized.ma_crown_material_other,
+            "ma_crown_material",
+          ],
+        ];
+        for (const [label, val, other] of rows) {
+          if (!val) {
+            Alert.alert("Missing Field", `Please select ${label}.`);
+            return;
+          }
+          if (!otherFilled(val, other)) {
+            Alert.alert(
+              "Missing Field",
+              `Please describe the custom ${label}.`,
+            );
+            return;
+          }
+        }
+      } else if (g === "B") {
+        if (!sanitized.fa_prosthetic_plan) {
+          Alert.alert("Missing Field", "Please select the Prosthetic Plan.");
+          return;
+        }
+        if (
+          !otherFilled(
+            sanitized.fa_prosthetic_plan,
+            sanitized.fa_prosthetic_plan_other,
+          )
+        ) {
+          Alert.alert(
+            "Missing Field",
+            "Please describe the custom Prosthetic Plan.",
+          );
+          return;
+        }
+      } else if (g === "C") {
+        if (!sanitized.zp_prosthetic_plan) {
+          Alert.alert("Missing Field", "Please select the Prosthetic Plan.");
+          return;
+        }
+        if (
+          !otherFilled(
+            sanitized.zp_prosthetic_plan,
+            sanitized.zp_prosthetic_plan_other,
+          )
+        ) {
+          Alert.alert(
+            "Missing Field",
+            "Please describe the custom Prosthetic Plan.",
+          );
+          return;
+        }
+      }
+    }
     // iter-137: Type of Attachment is required when Prosthetic Plan is Overdenture-with-Attachment.
     if (sanitized.prosthetic_plan === "Overdenture with Attachment") {
       if (!sanitized.attachment_type) {
@@ -2155,6 +2493,110 @@ export default function NewProcedureScreen() {
                 })),
             }
           : {}),
+        // iter-Feb-2026: Zygoma & Pterygoid workflow payload — only send
+        // when procedure type is one of the advanced maxillary types.
+        ...(isZygomaPterygoidProcedure(sanitized.implant_procedure_type)
+          ? {
+              zygoma_pterygoid_data: {
+                phase1: sanitized.zygoma_pterygoid_data || {},
+              },
+              zygoma_pterygoid_configuration:
+                sanitized.zygoma_pterygoid_configuration || "",
+            }
+          : {}),
+        // iter-Feb-2026 (v3): Conventional implant sites for mixed cases.
+        ...(needsConventionalImplantLocation(sanitized.implant_procedure_type)
+          ? {
+              conventional_implant_locations:
+                sanitized.conventional_implant_locations || [],
+            }
+          : {}),
+        // iter-Feb-2026 / -C — SC + overlap-with-Single workflow payload.
+        ...(getEffectiveWorkflow(
+          sanitized.implant_procedure_type,
+          sanitized.num_implants,
+        ) === "SC"
+          ? {
+              type_of_provisional: sanitized.loading_type.includes(
+                "Immediate Loading",
+              )
+                ? sanitized.type_of_provisional || ""
+                : "",
+              type_of_provisional_other:
+                sanitized.loading_type.includes("Immediate Loading") &&
+                sanitized.type_of_provisional === "Other"
+                  ? sanitized.type_of_provisional_other || ""
+                  : "",
+              sc_abutment_type: sanitized.sc_abutment_type || "",
+              sc_abutment_type_other:
+                sanitized.sc_abutment_type === "Other"
+                  ? sanitized.sc_abutment_type_other || ""
+                  : "",
+              sc_retention_type: sanitized.sc_retention_type || "",
+              sc_retention_type_other:
+                sanitized.sc_retention_type === "Other"
+                  ? sanitized.sc_retention_type_other || ""
+                  : "",
+              sc_crown_material: sanitized.sc_crown_material || "",
+              sc_crown_material_other:
+                sanitized.sc_crown_material === "Other"
+                  ? sanitized.sc_crown_material_other || ""
+                  : "",
+            }
+          : {}),
+        // iter-Feb-2026-B / -C — Multiple/Full-Arch/Zygoma workflow payload.
+        ...(() => {
+          const g = getEffectiveWorkflow(
+            sanitized.implant_procedure_type,
+            sanitized.num_implants,
+          );
+          if (!g || g === "SC") return {};
+          const provIL = sanitized.loading_type.includes("Immediate Loading");
+          const base: Record<string, any> = {
+            type_of_provisional: provIL
+              ? sanitized.type_of_provisional || ""
+              : "",
+            type_of_provisional_other:
+              provIL && sanitized.type_of_provisional === "Other"
+                ? sanitized.type_of_provisional_other || ""
+                : "",
+          };
+          if (g === "A") {
+            base.ma_prosthesis_type = sanitized.ma_prosthesis_type || "";
+            base.ma_prosthesis_type_other =
+              sanitized.ma_prosthesis_type === "Other"
+                ? sanitized.ma_prosthesis_type_other || ""
+                : "";
+            base.ma_abutment_type = sanitized.ma_abutment_type || "";
+            base.ma_abutment_type_other =
+              sanitized.ma_abutment_type === "Other"
+                ? sanitized.ma_abutment_type_other || ""
+                : "";
+            base.ma_retention_type = sanitized.ma_retention_type || "";
+            base.ma_retention_type_other =
+              sanitized.ma_retention_type === "Other"
+                ? sanitized.ma_retention_type_other || ""
+                : "";
+            base.ma_crown_material = sanitized.ma_crown_material || "";
+            base.ma_crown_material_other =
+              sanitized.ma_crown_material === "Other"
+                ? sanitized.ma_crown_material_other || ""
+                : "";
+          } else if (g === "B") {
+            base.fa_prosthetic_plan = sanitized.fa_prosthetic_plan || "";
+            base.fa_prosthetic_plan_other =
+              sanitized.fa_prosthetic_plan === "Other"
+                ? sanitized.fa_prosthetic_plan_other || ""
+                : "";
+          } else if (g === "C") {
+            base.zp_prosthetic_plan = sanitized.zp_prosthetic_plan || "";
+            base.zp_prosthetic_plan_other =
+              sanitized.zp_prosthetic_plan === "Other"
+                ? sanitized.zp_prosthetic_plan_other || ""
+                : "";
+          }
+          return base;
+        })(),
       };
 
       let res;
@@ -2839,7 +3281,56 @@ export default function NewProcedureScreen() {
       ) {
         missImplantDetails.push("Number of Implants");
       }
-      if (!formData.prosthetic_plan) missImplantDetails.push("Prosthetic Plan");
+      // iter-Feb-2026: Single-Conventional-Implant cases use the 3-part flow
+      // (Abutment / Retention / Crown Material) instead of Prosthetic Plan.
+      // iter-Feb-2026-B: Multiple / Full-Arch / Zygoma use group-specific plans.
+      if (
+        !formData.prosthetic_plan &&
+        formData.implant_procedure_type !== "Single Conventional Implant" &&
+        getEffectiveWorkflow(
+          formData.implant_procedure_type,
+          formData.num_implants,
+        ) === null
+      ) {
+        missImplantDetails.push("Prosthetic Plan");
+      }
+      // iter-Feb-2026 / -C — Single-Conventional-Implant plan (3 sub-fields).
+      // Applies to pure SC + overlap types with num_implants='Single Implant'.
+      if (
+        getEffectiveWorkflow(
+          formData.implant_procedure_type,
+          formData.num_implants,
+        ) === "SC"
+      ) {
+        if (!formData.sc_abutment_type) missImplantDetails.push("Abutment Type");
+        if (!formData.sc_retention_type)
+          missImplantDetails.push("Type of Retention");
+        if (!formData.sc_crown_material)
+          missImplantDetails.push("Crown Material");
+      }
+      // iter-Feb-2026-B / -C — Group A/B/C plan validation for review pill.
+      {
+        const g = getEffectiveWorkflow(
+          formData.implant_procedure_type,
+          formData.num_implants,
+        );
+        if (g === "A") {
+          if (!formData.ma_prosthesis_type)
+            missImplantDetails.push("Prosthesis Type");
+          if (!formData.ma_abutment_type)
+            missImplantDetails.push("Abutment Type");
+          if (!formData.ma_retention_type)
+            missImplantDetails.push("Type of Retention");
+          if (!formData.ma_crown_material)
+            missImplantDetails.push("Crown/Bridge Material");
+        } else if (g === "B") {
+          if (!formData.fa_prosthetic_plan)
+            missImplantDetails.push("Prosthetic Plan");
+        } else if (g === "C") {
+          if (!formData.zp_prosthetic_plan)
+            missImplantDetails.push("Prosthetic Plan");
+        }
+      }
       // iter-387: surgical-approach cascade requirements
       if (!formData.procedure_surgery_type)
         missImplantDetails.push("Procedure Type");
@@ -2945,6 +3436,17 @@ export default function NewProcedureScreen() {
         missMedicalOrChecklist.push("Both Patient Intra-oral Photographs");
       if (!formData.loading_type || formData.loading_type.length === 0)
         missMedicalOrChecklist.push("Type of Loading");
+      // iter-Feb-2026 / -B / -C — Type of Provisional (any workflow group)
+      if (
+        getEffectiveWorkflow(
+          formData.implant_procedure_type,
+          formData.num_implants,
+        ) !== null &&
+        (formData.loading_type || []).includes("Immediate Loading") &&
+        !formData.type_of_provisional
+      ) {
+        missMedicalOrChecklist.push("Type of Provisional");
+      }
       const ma = formData.medical_assessment || {};
       if (!ma.diabetes)
         missMedicalOrChecklist.push("Diabetes (medical assessment)");
@@ -4523,6 +5025,29 @@ export default function NewProcedureScreen() {
                   updateForm("num_implants", "");
                   updateForm("prosthetic_plan", "");
                   updateForm("prosthetic_plan_other", "");
+                  updateForm("type_of_provisional", "");
+                  updateForm("type_of_provisional_other", "");
+                  updateForm("sc_abutment_type", "");
+                  updateForm("sc_abutment_type_other", "");
+                  updateForm("sc_retention_type", "");
+                  updateForm("sc_retention_type_other", "");
+                  updateForm("sc_crown_material", "");
+                  updateForm("sc_crown_material_other", "");
+                  updateForm("ma_prosthesis_type", "");
+                  updateForm("ma_prosthesis_type_other", "");
+                  updateForm("ma_abutment_type", "");
+                  updateForm("ma_abutment_type_other", "");
+                  updateForm("ma_retention_type", "");
+                  updateForm("ma_retention_type_other", "");
+                  updateForm("ma_crown_material", "");
+                  updateForm("ma_crown_material_other", "");
+                  updateForm("fa_prosthetic_plan", "");
+                  updateForm("fa_prosthetic_plan_other", "");
+                  updateForm("zp_prosthetic_plan", "");
+                  updateForm("zp_prosthetic_plan_other", "");
+                  updateForm("zygoma_pterygoid_data", null);
+                  updateForm("zygoma_pterygoid_configuration", undefined);
+                  updateForm("conventional_implant_locations", []);
                   // iter-328: also reset Sinus Lift sub-fields whenever the
                   // top-level procedure type changes so leftover values don't
                   // persist into a non-sinus-lift case.
@@ -4698,18 +5223,66 @@ export default function NewProcedureScreen() {
                   </Text>
                 </View>
               )}
+              {/* iter-Feb-2026: Zygoma & Pterygoid Advanced Workflow — surfaces
+                  when one of the 4 advanced maxillary procedure types is selected.
+                  Renders as a self-contained extended Phase 1 form and persists
+                  data under formData.zygoma_pterygoid_data (nested dict). */}
+              {isZygomaPterygoidProcedure(formData.implant_procedure_type) && (
+                <View style={{ marginTop: 8 }}>
+                  <ZygomaPterygoidPhase1Form
+                    procedureType={formData.implant_procedure_type}
+                    value={{
+                      ...(formData.zygoma_pterygoid_data || {}),
+                      configuration:
+                        formData.zygoma_pterygoid_configuration ||
+                        (formData.zygoma_pterygoid_data as any)?.configuration,
+                    }}
+                    onChange={(next: ZygomaPterygoidPhase1Data) => {
+                      updateForm("zygoma_pterygoid_data", next);
+                      // Also mirror the top-level configuration for validation.
+                      if (next.configuration !== undefined) {
+                        updateForm(
+                          "zygoma_pterygoid_configuration",
+                          next.configuration
+                        );
+                      }
+                    }}
+                  />
+                </View>
+              )}
+
               {/* iter-235: hide the Arch dropdown for Existing Implant — it lives
             inside the ExistingImplantSection between Type of Implant Procedure
             Done and Implant Selection instead. */}
               {isFullArch && !isExistingImplantCase && (
-                <Dropdown
-                  label="Arch"
-                  value={formData.arch}
-                  options={["Maxillary", "Mandibular"]}
-                  onChange={(v) => updateForm("arch", v)}
-                  required
-                  data-testid="arch-dropdown"
-                />
+                isZygomaFullArchProcedure(formData.implant_procedure_type) ? (
+                  // iter-Feb-2026 (v3): Zygoma implants are anatomically maxillary-
+                  // only. Lock the Arch to "Maxillary" (read-only chip) and skip
+                  // the Mandibular option entirely.
+                  <View style={styles.fieldContainer}>
+                    <Text style={styles.label}>
+                      Arch <Text style={{ color: "#DC3545" }}>*</Text>
+                    </Text>
+                    <View
+                      style={s_zyg_arch.lockedChip}
+                      testID="arch-locked-maxillary"
+                    >
+                      <Ionicons name="lock-closed" size={14} color="#5E35B1" />
+                      <Text style={s_zyg_arch.lockedText}>
+                        Maxillary (locked — Zygoma cases are maxillary-only)
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <Dropdown
+                    label="Arch"
+                    value={formData.arch}
+                    options={["Maxillary", "Mandibular"]}
+                    onChange={(v) => updateForm("arch", v)}
+                    required
+                    data-testid="arch-dropdown"
+                  />
+                )
               )}
             </View>
 
@@ -4719,7 +5292,15 @@ export default function NewProcedureScreen() {
                   {/* ─── Prosthetic Treatment Plan ─── (moved here per iter-134; now appears
             BEFORE the FDI chart so that an Overdenture-with-Attachment choice
             can flip the case into a full-arch protocol and skip teeth selection.) */}
-                  {prostheticOptions.length > 0 && (
+                  {/* iter-Feb-2026 — For pure Single Conventional Implant cases the
+            legacy single dropdown is replaced by a 3-part flow (Abutment /
+            Retention / Crown Material). All other procedure types keep the
+            existing single Prosthetic-Plan dropdown. */}
+                  {getEffectiveWorkflow(
+                    formData.implant_procedure_type,
+                    formData.num_implants
+                  ) === "SC" ? (
+                    // iter-Feb-2026 / -C — SC (pure or overlap+Single) → 3-part flow.
                     <View
                       style={styles.section}
                       onLayout={
@@ -4729,83 +5310,411 @@ export default function NewProcedureScreen() {
                       <Text style={styles.sectionTitle}>
                         Prosthetic Treatment Plan
                       </Text>
-                      <Dropdown
-                        label="Prosthetic Plan"
-                        value={formData.prosthetic_plan}
-                        options={prostheticOptions}
+                      <GroupedDescDropdown
+                        label="1. Abutment Type"
+                        required
+                        value={formData.sc_abutment_type}
                         onChange={(v) => {
-                          updateForm("prosthetic_plan", v);
-                          // Flip into Overdenture-with-Attachment full-arch protocol → wipe
-                          // any previously-chosen missing teeth (FDI chart will be hidden).
-                          if (
-                            v === "Overdenture with Attachment" &&
-                            isNonFullArch
-                          ) {
-                            updateForm("missing_teeth", []);
-                            updateForm("edentulous_site_measurements", {});
-                            updateForm("clinical_exam_per_site", {});
-                          }
-                          // Leaving Overdenture → clear the attachment-type sub-selection.
-                          if (v !== "Overdenture with Attachment") {
-                            updateForm("attachment_type", "");
-                            updateForm("attachment_type_other", "");
-                          }
+                          updateForm("sc_abutment_type", v);
+                          if (v !== "Other")
+                            updateForm("sc_abutment_type_other", "");
                         }}
+                        options={SC_ABUTMENT_TYPE_OPTIONS}
+                        testID="sc-abutment-type-dropdown"
                       />
-                      {formData.prosthetic_plan === "Other" && (
+                      {formData.sc_abutment_type === "Other" && (
                         <View style={styles.fieldContainer}>
                           <Text style={styles.label}>
-                            Specify Prosthetic Plan
+                            Specify Abutment Type{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
                           </Text>
                           <TextInput
                             style={styles.input}
-                            value={formData.prosthetic_plan_other}
+                            value={formData.sc_abutment_type_other}
                             onChangeText={(v) =>
-                              updateForm("prosthetic_plan_other", v)
+                              updateForm("sc_abutment_type_other", v)
                             }
-                            placeholder="Enter custom prosthetic plan"
+                            placeholder="Enter custom abutment type"
                             multiline
+                            data-testid="sc-abutment-type-other-input"
                           />
                         </View>
                       )}
-                      {/* Type of Attachment (iter-137) — sub-question that appears only
-              when Overdenture-with-Attachment is the chosen plan. Free-text
-              input appears when "Other" is picked. */}
-                      {formData.prosthetic_plan ===
-                        "Overdenture with Attachment" && (
-                        <>
-                          <Dropdown
-                            label="Type of Attachment"
-                            value={formData.attachment_type}
-                            options={PHASE1_ATTACHMENT_TYPE_OPTIONS}
-                            onChange={(v) => {
-                              updateForm("attachment_type", v);
-                              if (v !== "Other")
-                                updateForm("attachment_type_other", "");
-                            }}
-                            required
-                            testID="attachment-type-dropdown"
+                      <GroupedDescDropdown
+                        label="2. Type of Retention"
+                        required
+                        value={formData.sc_retention_type}
+                        onChange={(v) => {
+                          updateForm("sc_retention_type", v);
+                          if (v !== "Other")
+                            updateForm("sc_retention_type_other", "");
+                        }}
+                        options={SC_RETENTION_TYPE_OPTIONS}
+                        testID="sc-retention-type-dropdown"
+                      />
+                      {formData.sc_retention_type === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Type of Retention{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.sc_retention_type_other}
+                            onChangeText={(v) =>
+                              updateForm("sc_retention_type_other", v)
+                            }
+                            placeholder="Enter custom retention"
+                            multiline
+                            data-testid="sc-retention-type-other-input"
                           />
-                          {formData.attachment_type === "Other" && (
-                            <View style={styles.fieldContainer}>
-                              <Text style={styles.label}>
-                                Specify Attachment Type
-                                <Text style={{ color: "#DC3545" }}> *</Text>
-                              </Text>
-                              <TextInput
-                                style={styles.input}
-                                value={formData.attachment_type_other}
-                                onChangeText={(v) =>
-                                  updateForm("attachment_type_other", v)
-                                }
-                                placeholder="Enter custom attachment type"
-                                data-testid="attachment-type-other-input"
-                              />
-                            </View>
-                          )}
-                        </>
+                        </View>
+                      )}
+                      <GroupedDescDropdown
+                        label="3. Crown Material"
+                        required
+                        value={formData.sc_crown_material}
+                        onChange={(v) => {
+                          updateForm("sc_crown_material", v);
+                          if (v !== "Other")
+                            updateForm("sc_crown_material_other", "");
+                        }}
+                        options={SC_CROWN_MATERIAL_OPTIONS}
+                        testID="sc-crown-material-dropdown"
+                      />
+                      {formData.sc_crown_material === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Crown Material{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.sc_crown_material_other}
+                            onChangeText={(v) =>
+                              updateForm("sc_crown_material_other", v)
+                            }
+                            placeholder="Enter custom crown material"
+                            multiline
+                            data-testid="sc-crown-material-other-input"
+                          />
+                        </View>
                       )}
                     </View>
+                  ) : getEffectiveWorkflow(
+                      formData.implant_procedure_type,
+                      formData.num_implants
+                    ) === "A" ? (
+                    // iter-Feb-2026-B — Group A: Multiple Conv / Pterygoid + Conv → 4-part flow.
+                    <View
+                      style={styles.section}
+                      onLayout={
+                        showFlowStrip ? onExistingStepLayout(1) : undefined
+                      }
+                    >
+                      <Text style={styles.sectionTitle}>
+                        Prosthetic Treatment Plan
+                      </Text>
+                      <GroupedDescDropdown
+                        label="1. Prosthesis Type"
+                        required
+                        value={formData.ma_prosthesis_type}
+                        onChange={(v) => {
+                          updateForm("ma_prosthesis_type", v);
+                          if (v !== "Other")
+                            updateForm("ma_prosthesis_type_other", "");
+                        }}
+                        options={GROUP_A_PROSTHESIS_TYPE_OPTIONS}
+                        testID="ma-prosthesis-type-dropdown"
+                      />
+                      {formData.ma_prosthesis_type === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Prosthesis Type{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.ma_prosthesis_type_other}
+                            onChangeText={(v) =>
+                              updateForm("ma_prosthesis_type_other", v)
+                            }
+                            placeholder="Enter custom prosthesis type"
+                            multiline
+                            data-testid="ma-prosthesis-type-other-input"
+                          />
+                        </View>
+                      )}
+                      <GroupedDescDropdown
+                        label="2. Abutment Type"
+                        required
+                        value={formData.ma_abutment_type}
+                        onChange={(v) => {
+                          updateForm("ma_abutment_type", v);
+                          if (v !== "Other")
+                            updateForm("ma_abutment_type_other", "");
+                        }}
+                        options={GROUP_A_ABUTMENT_TYPE_OPTIONS}
+                        testID="ma-abutment-type-dropdown"
+                      />
+                      {formData.ma_abutment_type === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Abutment Type{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.ma_abutment_type_other}
+                            onChangeText={(v) =>
+                              updateForm("ma_abutment_type_other", v)
+                            }
+                            placeholder="Enter custom abutment type"
+                            multiline
+                            data-testid="ma-abutment-type-other-input"
+                          />
+                        </View>
+                      )}
+                      <GroupedDescDropdown
+                        label="3. Type of Retention"
+                        required
+                        value={formData.ma_retention_type}
+                        onChange={(v) => {
+                          updateForm("ma_retention_type", v);
+                          if (v !== "Other")
+                            updateForm("ma_retention_type_other", "");
+                        }}
+                        options={GROUP_A_RETENTION_OPTIONS}
+                        testID="ma-retention-type-dropdown"
+                      />
+                      {formData.ma_retention_type === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Retention Type{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.ma_retention_type_other}
+                            onChangeText={(v) =>
+                              updateForm("ma_retention_type_other", v)
+                            }
+                            placeholder="Enter custom retention type"
+                            multiline
+                            data-testid="ma-retention-type-other-input"
+                          />
+                        </View>
+                      )}
+                      <GroupedDescDropdown
+                        label="4. Crown/Bridge Material"
+                        required
+                        value={formData.ma_crown_material}
+                        onChange={(v) => {
+                          updateForm("ma_crown_material", v);
+                          if (v !== "Other")
+                            updateForm("ma_crown_material_other", "");
+                        }}
+                        options={GROUP_A_CROWN_MATERIAL_OPTIONS}
+                        testID="ma-crown-material-dropdown"
+                      />
+                      {formData.ma_crown_material === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Crown/Bridge Material{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.ma_crown_material_other}
+                            onChangeText={(v) =>
+                              updateForm("ma_crown_material_other", v)
+                            }
+                            placeholder="Enter custom material"
+                            multiline
+                            data-testid="ma-crown-material-other-input"
+                          />
+                        </View>
+                      )}
+                    </View>
+                  ) : getEffectiveWorkflow(
+                      formData.implant_procedure_type,
+                      formData.num_implants
+                    ) === "B" ? (
+                    // iter-Feb-2026-B — Group B: All on 4/6/X → single grouped plan.
+                    <View
+                      style={styles.section}
+                      onLayout={
+                        showFlowStrip ? onExistingStepLayout(1) : undefined
+                      }
+                    >
+                      <Text style={styles.sectionTitle}>
+                        Prosthetic Treatment Plan
+                      </Text>
+                      <GroupedDescDropdown
+                        label="Prosthetic Plan"
+                        required
+                        value={formData.fa_prosthetic_plan}
+                        onChange={(v) => {
+                          updateForm("fa_prosthetic_plan", v);
+                          if (v !== "Other")
+                            updateForm("fa_prosthetic_plan_other", "");
+                        }}
+                        groups={GROUP_B_PROSTHETIC_PLAN_OPTIONS}
+                        testID="fa-prosthetic-plan-dropdown"
+                      />
+                      {formData.fa_prosthetic_plan === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Prosthetic Plan{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.fa_prosthetic_plan_other}
+                            onChangeText={(v) =>
+                              updateForm("fa_prosthetic_plan_other", v)
+                            }
+                            placeholder="Enter custom prosthetic plan"
+                            multiline
+                            data-testid="fa-prosthetic-plan-other-input"
+                          />
+                        </View>
+                      )}
+                    </View>
+                  ) : getEffectiveWorkflow(
+                      formData.implant_procedure_type,
+                      formData.num_implants
+                    ) === "C" ? (
+                    // iter-Feb-2026-B — Group C: Quad Zygoma + Zygo variants → 6-option plan.
+                    <View
+                      style={styles.section}
+                      onLayout={
+                        showFlowStrip ? onExistingStepLayout(1) : undefined
+                      }
+                    >
+                      <Text style={styles.sectionTitle}>
+                        Prosthetic Treatment Plan
+                      </Text>
+                      <GroupedDescDropdown
+                        label="Prosthetic Plan"
+                        required
+                        value={formData.zp_prosthetic_plan}
+                        onChange={(v) => {
+                          updateForm("zp_prosthetic_plan", v);
+                          if (v !== "Other")
+                            updateForm("zp_prosthetic_plan_other", "");
+                        }}
+                        options={GROUP_C_PROSTHETIC_PLAN_OPTIONS}
+                        testID="zp-prosthetic-plan-dropdown"
+                      />
+                      {formData.zp_prosthetic_plan === "Other" && (
+                        <View style={styles.fieldContainer}>
+                          <Text style={styles.label}>
+                            Specify Prosthetic Plan{" "}
+                            <Text style={{ color: "#DC3545" }}>*</Text>
+                          </Text>
+                          <TextInput
+                            style={styles.input}
+                            value={formData.zp_prosthetic_plan_other}
+                            onChangeText={(v) =>
+                              updateForm("zp_prosthetic_plan_other", v)
+                            }
+                            placeholder="Enter custom prosthetic plan"
+                            multiline
+                            data-testid="zp-prosthetic-plan-other-input"
+                          />
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    prostheticOptions.length > 0 && (
+                      <View
+                        style={styles.section}
+                        onLayout={
+                          showFlowStrip ? onExistingStepLayout(1) : undefined
+                        }
+                      >
+                        <Text style={styles.sectionTitle}>
+                          Prosthetic Treatment Plan
+                        </Text>
+                        <Dropdown
+                          label="Prosthetic Plan"
+                          value={formData.prosthetic_plan}
+                          options={prostheticOptions}
+                          onChange={(v) => {
+                            updateForm("prosthetic_plan", v);
+                            // Flip into Overdenture-with-Attachment full-arch protocol → wipe
+                            // any previously-chosen missing teeth (FDI chart will be hidden).
+                            if (
+                              v === "Overdenture with Attachment" &&
+                              isNonFullArch
+                            ) {
+                              updateForm("missing_teeth", []);
+                              updateForm("edentulous_site_measurements", {});
+                              updateForm("clinical_exam_per_site", {});
+                            }
+                            // Leaving Overdenture → clear the attachment-type sub-selection.
+                            if (v !== "Overdenture with Attachment") {
+                              updateForm("attachment_type", "");
+                              updateForm("attachment_type_other", "");
+                            }
+                          }}
+                        />
+                        {formData.prosthetic_plan === "Other" && (
+                          <View style={styles.fieldContainer}>
+                            <Text style={styles.label}>
+                              Specify Prosthetic Plan
+                            </Text>
+                            <TextInput
+                              style={styles.input}
+                              value={formData.prosthetic_plan_other}
+                              onChangeText={(v) =>
+                                updateForm("prosthetic_plan_other", v)
+                              }
+                              placeholder="Enter custom prosthetic plan"
+                              multiline
+                            />
+                          </View>
+                        )}
+                        {/* Type of Attachment (iter-137) — sub-question that appears only
+                when Overdenture-with-Attachment is the chosen plan. Free-text
+                input appears when "Other" is picked. */}
+                        {formData.prosthetic_plan ===
+                          "Overdenture with Attachment" && (
+                          <>
+                            <Dropdown
+                              label="Type of Attachment"
+                              value={formData.attachment_type}
+                              options={PHASE1_ATTACHMENT_TYPE_OPTIONS}
+                              onChange={(v) => {
+                                updateForm("attachment_type", v);
+                                if (v !== "Other")
+                                  updateForm("attachment_type_other", "");
+                              }}
+                              required
+                              testID="attachment-type-dropdown"
+                            />
+                            {formData.attachment_type === "Other" && (
+                              <View style={styles.fieldContainer}>
+                                <Text style={styles.label}>
+                                  Specify Attachment Type
+                                  <Text style={{ color: "#DC3545" }}> *</Text>
+                                </Text>
+                                <TextInput
+                                  style={styles.input}
+                                  value={formData.attachment_type_other}
+                                  onChangeText={(v) =>
+                                    updateForm("attachment_type_other", v)
+                                  }
+                                  placeholder="Enter custom attachment type"
+                                  data-testid="attachment-type-other-input"
+                                />
+                              </View>
+                            )}
+                          </>
+                        )}
+                      </View>
+                    )
                   )}
 
                   {/* ─── FDI Chart (Non-Full-Arch Only) — Missing Teeth selector ─── */}
@@ -4905,6 +5814,43 @@ export default function NewProcedureScreen() {
                         </View>
                       );
                     })()}
+
+                  {/* iter-Feb-2026 (v3): Conventional Implant Location FDI chart.
+                      Appears for the 3 mixed advanced+conventional procedure types
+                      (Pterygoid+Conventional, Zygoma+Conventional, and
+                      Zygoma,Pterygoid+Conventional). Same anatomical chart as
+                      "Missing Teeth" but drives a separate field
+                      `conventional_implant_locations`. Red for selected sites, no
+                      blue for unselected — the operator picks the FDI positions
+                      where conventional implants will be placed. These positions
+                      are later used during Implant Selection. */}
+                  {needsConventionalImplantLocation(formData.implant_procedure_type) && (() => {
+                    const locs = formData.conventional_implant_locations || [];
+                    return (
+                      <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Conventional Implant Location</Text>
+                        <Text style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+                          Select the location where conventional implant/implants need to be placed
+                        </Text>
+                        <FdiAnatomicalChart
+                          mode="multi"
+                          value={locs}
+                          onChange={(next) => updateForm('conventional_implant_locations', next as string[])}
+                          selectedColor="#E53935"
+                          presentColor="#FAFAFA"
+                          presentBorderColor="#B0BEC5"
+                          selectedLabel="Implant Location"
+                          hidePresentLegend
+                          testIDPrefix="fdi-conv-implant-loc"
+                        />
+                        {locs.length > 0 ? (
+                          <Text style={{ fontSize: 12, color: '#B71C1C', fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
+                            {locs.length} {locs.length === 1 ? 'site' : 'sites'} marked — {locs.slice().sort().join(', ')}
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  })()}
                 </>
               )}
 
@@ -5706,7 +6652,10 @@ export default function NewProcedureScreen() {
                     {/* iter-235: hide Atrophy Assessment for Existing Implant full-arch
                   cases — the implants are already placed so an atrophy class /
                   therapeutic-option recommendation is not actionable. */}
-                    {!isExistingImplantCase && (
+                    {!isExistingImplantCase &&
+                      !isZygomaFullArchProcedure(
+                        formData.implant_procedure_type
+                      ) && (
                       <>
                         <Text
                           style={[styles.subSectionTitle, { marginTop: 18 }]}
@@ -5994,6 +6943,67 @@ export default function NewProcedureScreen() {
                 ))}
               </View>
             </View>
+
+            {/* iter-Feb-2026 / -B / -C — Type of Provisional
+                Renders for ANY effective workflow when Immediate Loading is
+                picked. Group-specific catalogue. "Other" reveals a free-text
+                input below the dropdown. */}
+            {getEffectiveWorkflow(
+              formData.implant_procedure_type,
+              formData.num_implants
+            ) !== null &&
+              formData.loading_type.includes("Immediate Loading") &&
+              (() => {
+                const g = getEffectiveWorkflow(
+                  formData.implant_procedure_type,
+                  formData.num_implants
+                );
+                const groupsOptions =
+                  g === "SC"
+                    ? PROVISIONAL_GROUPED_OPTIONS
+                    : g === "A"
+                    ? GROUP_A_PROVISIONAL_OPTIONS
+                    : g === "B"
+                    ? GROUP_B_PROVISIONAL_OPTIONS
+                    : GROUP_C_PROVISIONAL_OPTIONS;
+                return (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>
+                      Type of Provisional{" "}
+                      <Text style={{ color: "#DC3545" }}>*</Text>
+                    </Text>
+                    <GroupedDescDropdown
+                      value={formData.type_of_provisional}
+                      onChange={(v) => {
+                        updateForm("type_of_provisional", v);
+                        if (v !== "Other")
+                          updateForm("type_of_provisional_other", "");
+                      }}
+                      groups={groupsOptions}
+                      placeholder="Select a provisional…"
+                      testID="type-of-provisional-dropdown"
+                    />
+                    {formData.type_of_provisional === "Other" && (
+                      <View style={styles.fieldContainer}>
+                        <Text style={styles.label}>
+                          Specify Provisional{" "}
+                          <Text style={{ color: "#DC3545" }}>*</Text>
+                        </Text>
+                        <TextInput
+                          style={styles.input}
+                          value={formData.type_of_provisional_other}
+                          onChangeText={(v) =>
+                            updateForm("type_of_provisional_other", v)
+                          }
+                          placeholder="Enter custom provisional description"
+                          multiline
+                          data-testid="type-of-provisional-other-input"
+                        />
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
 
             {/* Prosthetic Treatment Plan was moved up to immediately follow Procedure
           Information (iter-134). Empty placeholder retained intentionally. */}
@@ -7616,6 +8626,29 @@ const staticStyles = StyleSheet.create({
   clockNumberBoxSelected: { backgroundColor: "#1565C0" },
   clockNumberText: { fontSize: 14, fontWeight: "600", color: "#37474F" },
   clockNumberTextSelected: { color: "#FFFFFF", fontWeight: "800" },
+});
+
+// iter-Feb-2026 (v3): Local styles for Zygoma-specific UI additions
+// (locked Arch chip + Conventional Implant Location section header).
+const s_zyg_arch = StyleSheet.create({
+  lockedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#EDE7F6",
+    borderColor: "#B39DDB",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  lockedText: {
+    marginLeft: 8,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#4527A0",
+    flex: 1,
+  },
 });
 
 const styles = staticStyles;

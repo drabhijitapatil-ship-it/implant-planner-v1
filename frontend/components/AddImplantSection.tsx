@@ -103,9 +103,18 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
   const openModal = async () => {
     setModalOpen(true);
     try {
-      // iter-402: same 76-system implant library as Phase 1 / Survival Review
-      // (the /implant-catalog endpoint has a different shape → showed "undefined").
-      const res = await api.get('/implant-library/systems');
+      // iter-402: same 76-system implant library as Phase 1 / Survival Review.
+      // iter-Feb-2026 (v4): For Zygoma/Pterygoid cases, unlock the full
+      // catalog (advanced + conventional) so the operator can add a
+      // Refirm Z-Series / P-Series implant mid-treatment as well.
+      const isZygomaCase = [
+        'Quad Zygoma Implants',
+        'Zygoma and Pterygoid Implants',
+        'Pterygoid and Conventional Implants',
+        'Zygoma and Conventional Implants',
+        'Zygoma, Pterygoid and Conventional Implants',
+      ].includes(procedure?.implant_procedure_type || '');
+      const res = await api.get(`/implant-library/systems${isZygomaCase ? '?implant_type=all' : ''}`);
       setCatalog(Array.isArray(res.data) ? res.data : (res.data?.systems || []));
     } catch {}
   };

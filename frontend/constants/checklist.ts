@@ -160,12 +160,97 @@ export const PROCEDURE_TYPES = [
   'All on 4',
   'All on 6',
   'All on X',
+  // iter-Feb-2026: Advanced maxillary implants — Zygoma & Pterygoid
+  // protocols. Unlocks the Refirm Z-Series and P-Series systems and
+  // triggers the extended Zygoma/Pterygoid Phase 1 data-capture form.
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
   // iter-213: "Existing Implant" branch — patient already has implants
   // placed (elsewhere / earlier) and needs prosthetic continuation.
   // The form swaps the surgical sections for an existing-implant
   // wizard (FDI inventory, brand/system auto-fill, present prosthetic
   // component, prosthetic history, radiographs, phase-routing).
   'Existing Implant',
+];
+
+// iter-Feb-2026: Procedure types that unlock Zygoma/Pterygoid workflow.
+// Used across the app to (a) reveal the Zygoma-specific Phase 1 form
+// sections, (b) unlock Refirm Z-Series and P-Series in the implant picker,
+// (c) enforce supervisor/attending co-sign at Phase 2 submit, and (d) swap
+// the Phase 3 flow to "Immediate Loading & Post-Operative Monitoring".
+export const ZYGOMA_PTERYGOID_PROCEDURE_TYPES = [
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
+];
+
+export const isZygomaPterygoidProcedure = (t: string | undefined | null): boolean =>
+  !!t && ZYGOMA_PTERYGOID_PROCEDURE_TYPES.includes(t);
+
+// iter-Feb-2026: Pterygoid + Conventional cases are NOT treated as
+// advanced maxillary rehabilitation cases. The Phase 1 form skips the
+// zygomatic-specific sections (banner, medical-flags, anaesthesia,
+// pre-surgical, extraoral, existing-prosthesis, radiographic, zygomatic
+// region, Bedrossian, ZAGA, diagnostic summary, prosthetic planning,
+// design checks, team composition) and shows ONLY the two supplementary
+// sections relevant to a pterygoid workflow:
+//   • Section 6 — Intraoral Examination (Zygoma/Pterygoid Supplementary)
+//   • Section 10 — Pterygomaxillary Region Assessment
+export const isPterygoidOnlyProcedure = (t: string | undefined | null): boolean =>
+  t === 'Pterygoid and Conventional Implants';
+
+// Cases that mix advanced (Zygoma/Pterygoid) + conventional implants in the
+// same case — the implant picker must surface BOTH advanced AND conventional
+// systems so the operator can plan the whole case in a single view.
+export const MIXED_ADVANCED_AND_CONVENTIONAL_PROCEDURE_TYPES = [
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
+];
+
+export const isMixedAdvancedAndConventional = (t: string | undefined | null): boolean =>
+  !!t && MIXED_ADVANCED_AND_CONVENTIONAL_PROCEDURE_TYPES.includes(t);
+
+// iter-Feb-2026 (v3): Zygoma cases are always full-arch, maxillary-only
+// rehabilitations. The Phase 1 form hides the "Missing Teeth" FDI chart,
+// force-locks the Arch to "Maxillary Arch", and uses the full-arch
+// Clinical Examination workflow (except Atrophy assessment).
+export const ZYGOMA_FULL_ARCH_PROCEDURE_TYPES = [
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
+];
+
+export const isZygomaFullArchProcedure = (t: string | undefined | null): boolean =>
+  !!t && ZYGOMA_FULL_ARCH_PROCEDURE_TYPES.includes(t);
+
+// iter-Feb-2026 (v3): Cases that need a dedicated "Conventional Implant
+// Location" FDI chart (separate from the Missing Teeth chart). Operator
+// picks the FDI sites where conventional implants will be placed; those
+// sites are then surfaced during Implant Selection.
+export const CONVENTIONAL_IMPLANT_LOCATION_PROCEDURE_TYPES = [
+  'Pterygoid and Conventional Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
+];
+
+export const needsConventionalImplantLocation = (t: string | undefined | null): boolean =>
+  !!t && CONVENTIONAL_IMPLANT_LOCATION_PROCEDURE_TYPES.includes(t);
+
+// Configuration options presented when a Zygoma/Pterygoid procedure type
+// is selected (from user brochure — 5 configurations).
+export const ZYGOMA_PTERYGOID_CONFIGURATIONS = [
+  'Quad zygoma',
+  'Quad zygoma + 2 pterygoid',
+  '2 zygoma + anterior conventional',
+  '4 Pterygoid + conventional',
+  'Zygoma + pterygoid + conventional',
 ];
 
 // iter-387: Surgical-approach cascade (Phase 1 — Procedure Information)
@@ -254,6 +339,15 @@ export const FULL_ARCH_GROUP = new Set([
   'All on 4',
   'All on 6',
   'All on X',
+  // iter-Feb-2026 (v3): All Zygoma cases are full-arch maxillary rehabs.
+  // Membership here hides the "Missing Teeth" FDI chart, forces the
+  // full-arch Clinical Examination workflow, and locks the Arch dropdown
+  // to Maxillary. Note: "Pterygoid and Conventional Implants" is NOT
+  // included — it stays as a partial-arch case with pterygoid anchorage.
+  'Quad Zygoma Implants',
+  'Zygoma and Pterygoid Implants',
+  'Zygoma and Conventional Implants',
+  'Zygoma, Pterygoid and Conventional Implants',
 ]);
 
 // All non-full-arch procedures (for Occlusal Analysis + Aesthetic Risk)

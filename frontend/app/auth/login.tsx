@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ONBOARDING_VERSION } from "../../components/onboarding/content/onboardingContent";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import Constants from "expo-constants";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -39,6 +40,7 @@ export default function LoginScreen() {
 
   const { login, refreshUser } = useAuth();
   const router = useRouter();
+  const appVersion = Constants.expoConfig?.version || "1.2.9";
 
   const logoAnim = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
@@ -399,6 +401,10 @@ export default function LoginScreen() {
                   />
                   <Text style={styles.registerText}>Create Account</Text>
                 </TouchableOpacity>
+
+                <Text style={styles.versionText} data-testid="app-version">
+                  Version {appVersion}
+                </Text>
               </View>
             </View>
           </ScrollView>
@@ -468,7 +474,7 @@ const styles = StyleSheet.create({
   featureDot: { color: "rgba(0, 122, 255, 0.4)", fontSize: 14 },
   card: {
     width: "100%",
-    maxWidth:500,
+    maxWidth: 500,
     borderRadius: 28,
     padding: 24,
     backgroundColor: "#FFFFFF",
@@ -602,4 +608,13 @@ const styles = StyleSheet.create({
   },
   registerIcon: { marginRight: 8 },
   registerText: { color: "#007AFF", fontSize: 16, fontWeight: "700" },
+  versionText: {
+    textAlign: "center",
+    fontSize: 12,
+    color: "#94A3B8",
+    marginTop: 18,
+    fontWeight: "500",
+    letterSpacing: 0.5,
+  },
 });
+

@@ -93,7 +93,7 @@ type FailureEntry = {
     system_other_text: string;
     diameter: string;
     length: string;
-    lot_number: string;
+    lot_number: string; // retained in state shape for old drafts; input removed (iter-402)
     insertion_torque_ncm: string;
     isq: string;
     placement_date: string;
@@ -107,10 +107,15 @@ type FailureEntry = {
     healing_abutment_mm: string; // when Healing Abutment
     immediate_loading_prosthesis: string; // one of the options / 'Other'
     immediate_loading_prosthesis_other: string; // manual entry when Other
+    // iter-400: Bone & Soft Tissue Augmentation done with the replacement
+    // surgery — same capture as Phase 2 (AugStep2Form schema).
     aug_used: "" | "Yes" | "No";
     augmentation: any;
   };
 };
+
+// iter-350: Max allowable length for the free-text ending rationale.
+const END_TREATMENT_REASON_MAX_LEN = 500;
 
 function wordCount(s: string) {
   return s.trim() ? s.trim().split(/\s+/).length : 0;
@@ -122,15 +127,15 @@ function Dropdown({
   options,
   placeholder,
   onChange,
-  testID,
   disabled,
+  testID,
 }: {
   value: string;
   options: string[];
   placeholder: string;
-  onChange: (v: string) => void;
-  testID?: string;
+  onChange: (val: string) => void;
   disabled?: boolean;
+  testID?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -151,49 +156,56 @@ function Dropdown({
         <Ionicons name="chevron-down" size={16} color="#546E7A" />
       </TouchableOpacity>
       <Modal
-        transparent
         visible={open}
+        transparent
         animationType="fade"
         onRequestClose={() => setOpen(false)}
       >
         <Pressable style={s.mBackdrop} onPress={() => setOpen(false)}>
-          <View style={s.mSheet}>
+          <Pressable style={s.mSheet} onPress={(e) => e.stopPropagation()}>
             <Text style={s.mTitle}>{placeholder}</Text>
             <ScrollView style={{ maxHeight: 380 }}>
-              {options.map((opt) => (
-                <TouchableOpacity
-                  key={opt}
-                  style={[s.mItem, value === opt && s.mItemOn]}
-                  onPress={() => {
-                    onChange(opt);
-                    setOpen(false);
-                  }}
-                  data-testid={
-                    testID
-                      ? `${testID}-opt-${opt.replace(/\s+/g, "-")}`
-                      : undefined
-                  }
-                  testID={
-                    testID
-                      ? `${testID}-opt-${opt.replace(/\s+/g, "-")}`
-                      : undefined
-                  }
-                >
-                  <Text
-                    style={[
-                      s.mItemT,
-                      value === opt && { color: "#1565C0", fontWeight: "800" },
-                    ]}
+              {options.map((opt) => {
+                const sel = opt === value;
+                return (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[s.mItem, sel && s.mItemOn]}
+                    onPress={() => {
+                      onChange(opt);
+                      setOpen(false);
+                    }}
+                    data-testid={
+                      testID
+                        ? `${testID}-opt-${opt.replace(/\s+/g, "-")}`
+                        : undefined
+                    }
+                    testID={
+                      testID
+                        ? `${testID}-opt-${opt.replace(/\s+/g, "-")}`
+                        : undefined
+                    }
                   >
-                    {opt}
-                  </Text>
-                  {value === opt && (
-                    <Ionicons name="checkmark" size={16} color="#1565C0" />
-                  )}
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        s.mItemT,
+                        sel && { fontWeight: "800", color: "#1565C0" },
+                      ]}
+                    >
+                      {opt}
+                    </Text>
+                    {sel && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color="#1565C0"
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </>
@@ -203,6 +215,7 @@ function Dropdown({
 export default function SurvivalReview() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [implants, setImplants] = useState<any[]>([]);
@@ -211,6 +224,9 @@ export default function SurvivalReview() {
     number_of_implants?: number;
   }>({});
   const [catalog, setCatalog] = useState<CatalogSystem[]>([]);
+
+  // allSurvived = true when operator answers "Yes" to "Did ALL implants survive?"
+  // If false, operator is prompted per-implant: Survived / Failed.
   const [allSurvived, setAllSurvived] = useState<"yes" | "no" | null>(null);
   const [failures, setFailures] = useState<Record<number, FailureEntry>>({});
   // iter-350: Global End Implant Treatment modal state (Q1-b: entire case).
@@ -222,7 +238,7 @@ export default function SurvivalReview() {
     submitting: boolean;
   }>({
     open: false,
-    reason: "Peri-implantitis",
+    reason: "",
     decision_maker: "",
     end_reason: "",
     submitting: false,
@@ -235,26 +251,40 @@ export default function SurvivalReview() {
   useEffect(() => {
     (async () => {
       try {
-        const [impRes, procRes, catRes] = await Promise.all([
+        // iter-Feb-2026 (v4): For Zygoma/Pterygoid cases, the survival
+        // review must consider BOTH conventional AND advanced implants,
+        // so we fetch the full catalog (implant_type=all). Non-Zygoma
+        // cases keep the default (conventional-only) behaviour.
+        const [impRes, procRes] = await Promise.all([
           api.get(`/procedures/${id}/active-implants`),
           api.get(`/procedures/${id}`),
-          api.get("/implant-library/systems"),
         ]);
+        const proc = procRes.data;
+        const isZygomaCase = [
+          "Quad Zygoma Implants",
+          "Zygoma and Pterygoid Implants",
+          "Pterygoid and Conventional Implants",
+          "Zygoma and Conventional Implants",
+          "Zygoma, Pterygoid and Conventional Implants",
+        ].includes(proc?.implant_procedure_type || "");
+        const catRes = await api.get(
+          `/implant-library/systems${isZygomaCase ? "?implant_type=all" : ""}`,
+        );
         setImplants(impRes.data?.active || []);
         setProcedureMeta({
-          implant_procedure_type: procRes.data?.implant_procedure_type,
+          implant_procedure_type: proc?.implant_procedure_type,
           number_of_implants:
-            procRes.data?.number_of_implants ||
-            procRes.data?.implant_plans?.length ||
-            procRes.data?.implants?.length ||
-            procRes.data?.existing_implants?.length ||
+            proc?.number_of_implants ||
+            proc?.implant_plans?.length ||
+            proc?.implants?.length ||
+            proc?.existing_implants?.length ||
             0,
         });
         setCatalog(
           Array.isArray(catRes.data) ? catRes.data : catRes.data?.systems || [],
         );
         // iter-346: load prior review so history + multi-round submission works
-        setSurvivalReviewState(procRes.data?.phase2_survival_review || null);
+        setSurvivalReviewState(proc?.phase2_survival_review || null);
       } catch (e: any) {
         Alert.alert(
           "Error",
@@ -767,7 +797,10 @@ export default function SurvivalReview() {
               return (
                 <View key={i} style={s.card}>
                   <Text style={s.itH}>
-                    Implant {i + 1} · Tooth {failedTooth || "-"}
+                    Implant {i + 1} ·{" "}
+                    {/^[0-9]+$/.test(String(failedTooth || ""))
+                      ? `Implant ${failedTooth}`
+                      : `Implant ${failedTooth || "-"}`}
                   </Text>
                   <Text style={s.itSub}>
                     {imp.system || ""} {imp.diameter}×{imp.length}mm
@@ -1118,20 +1151,6 @@ export default function SurvivalReview() {
                             data-testid={`imp-${i}-repl-torque`}
                             testID={`imp-${i}-repl-torque`}
                           />
-
-                          {/* <Text style={[s.lbl, { marginTop: 6 }]}>
-                            Lot Number <Text style={s.lblOpt}>(optional)</Text>
-                          </Text>
-                          <TextInput
-                            style={s.input}
-                            placeholder="e.g. K12345"
-                            value={f.replacement.lot_number}
-                            onChangeText={(v) =>
-                              setReplField(i, { lot_number: v })
-                            }
-                            data-testid={`imp-${i}-repl-lot`}
-                            testID={`imp-${i}-repl-lot`}
-                          /> */}
 
                           <Text style={[s.lbl, { marginTop: 6 }]}>
                             ISQ Value <Text style={s.lblOpt}>(optional)</Text>

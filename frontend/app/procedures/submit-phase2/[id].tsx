@@ -20,11 +20,21 @@ import {
   FLAP_DESIGN_OPTIONS,
   DRILLING_TYPE_OPTIONS,
   PROSTHETIC_COMPONENT_OPTIONS,
-    GUIDED_SURGERY_TYPES, STATIC_GUIDE_TYPES, SLEEVE_TYPES, DYNAMIC_NAV_SYSTEMS,
+  GUIDED_SURGERY_TYPES, STATIC_GUIDE_TYPES, SLEEVE_TYPES, DYNAMIC_NAV_SYSTEMS,
   normalizeSurgeryApproach, isGuidedApproach,
+  getProstheticOptions, PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
 } from '../../../constants/checklist';
 import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
 import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
+import PhaseStep2TabbedView from '@/components/PhaseStep2TabbedView';
+import GroupedDescDropdown from '../../../components/GroupedDescDropdown';
+import { PROVISIONAL_GROUPED_OPTIONS } from '../../../constants/singleConventional';
+import {
+  GROUP_A_PROVISIONAL_OPTIONS,
+  GROUP_B_PROVISIONAL_OPTIONS,
+  GROUP_C_PROVISIONAL_OPTIONS,
+  getEffectiveWorkflow,
+} from '../../../constants/prosthesisWorkflows';
 
 export default function Phase2SubmissionScreen() {
   const { id } = useLocalSearchParams();
@@ -107,6 +117,20 @@ export default function Phase2SubmissionScreen() {
   // Phase-1 stores loading_type as a multi-select string[] (e.g. ['Immediate Loading']).
   // We keep the state as an array and gate the MUA UI via Array.includes below.
   const [loadingType, setLoadingType] = useState<string[]>([]);
+  // iter-Jun-2026 (v13, Chunk C): Phase-1 Prosthetic Plan surfaced in the
+  // purple reference banner + editable in Phase 2. Overrides Phase 1 with an
+  // audit-logged PATCH so downstream views stay in sync.
+  const [phase1ProstheticPlan, setPhase1ProstheticPlan] = useState<string>('');
+  const [phase1ProstheticPlanOther, setPhase1ProstheticPlanOther] = useState<string>('');
+  // iter-Feb-2026-D — Phase 1 Type of Provisional shown as a read-only
+  // reference above the Phase 2 Step 2 Prosthesis Type dropdown, so
+  // the surgeon can see what was planned before choosing the actual
+  // immediate provisional at surgery.
+  const [phase1TypeOfProvisional, setPhase1TypeOfProvisional] = useState<string>('');
+  const [phase1TypeOfProvisionalOther, setPhase1TypeOfProvisionalOther] = useState<string>('');
+  const [phase1NumImplants, setPhase1NumImplants] = useState<string>('');
+  const [prosthPlanPickerOpen, setProsthPlanPickerOpen] = useState<boolean>(false);
+  const [prosthPlanSaving, setProsthPlanSaving] = useState<boolean>(false);
   // '' = not yet chosen (forces explicit pick), 'yes' | 'no' once user picks.
   const [multiUnitPlaced, setMultiUnitPlaced] = useState<'' | 'yes' | 'no'>('');
   // Per-implant angulation (°) and cuff-height (mm) — same length as
@@ -119,6 +143,17 @@ export default function Phase2SubmissionScreen() {
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
   const [opgUploading, setOpgUploading] = useState(false);
   const [authToken, setAuthToken] = useState('');
+  const [implantPlans, setImplantPlans] = useState<any[]>([]);
+  const [initialPerImplant, setInitialPerImplant] = useState<Record<string, any>>({});
+  const [initialAdvanced, setInitialAdvanced] = useState<Record<string, any>>({});
+  // iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement — universal
+  // Phase 2 section, applies to every implant procedure type.
+  const [muaPlaced, setMuaPlaced] = useState<boolean | null>(null);
+  const [muaDetails, setMuaDetails] = useState<Record<string, { cuff_height: string; angulation: string; placed?: boolean }>>({});
+  // iter-413 fix: prevent loadImplantPlan re-runs (triggered by tabbed-view
+  // onSaved) from overwriting user's Yes/No toggle. Ref-guarded so hydration
+  // only happens once per component lifetime.
+  const muaHydratedRef = useRef(false);
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
@@ -162,6 +197,7 @@ export default function Phase2SubmissionScreen() {
     suturesPlaced, hemostasisAchieved, postOpChecklist,
     iopaFiles, opgFile, extraIopaCount, studentNotes,
     multiUnitPlaced, muaAngulation, muaCuffHeight,
+    muaPlaced, muaDetails,
   });
   const applyDraftSnapshot = (d: Record<string, any>) => {
     if (d.phase2ActualDoneDate !== undefined) setPhase2ActualDoneDate(d.phase2ActualDoneDate);
@@ -194,6 +230,8 @@ export default function Phase2SubmissionScreen() {
     if (d.multiUnitPlaced !== undefined) setMultiUnitPlaced(d.multiUnitPlaced);
     if (d.muaAngulation !== undefined) setMuaAngulation(d.muaAngulation);
     if (d.muaCuffHeight !== undefined) setMuaCuffHeight(d.muaCuffHeight);
+    if (d.muaPlaced !== undefined) setMuaPlaced(d.muaPlaced);
+    if (d.muaDetails && typeof d.muaDetails === 'object') setMuaDetails(d.muaDetails);
   };
   const { saveNow } = useDraftAutosave({
     enabled: screenLoaded,
@@ -211,7 +249,7 @@ export default function Phase2SubmissionScreen() {
 
   useEffect(() => { loadImplantPlan(); }, []);
 
-  const loadImplantPlan = async () => {
+ const loadImplantPlan = async () => {
     try {
       // Fetch implant plan and procedure data in parallel
       const [planRes, procRes] = await Promise.all([
@@ -221,6 +259,19 @@ export default function Phase2SubmissionScreen() {
       const count = planRes.data.number_of_implants || 1;
       const positions = (planRes.data.implant_plans || []).map((p: any) => p.position);
       setImplantPositions(positions);
+      // iter-Jun-2026 (v10, Chunk 3): keep full plan objects for the tabbed view.
+      setImplantPlans(planRes.data.implant_plans || []);
+      const p2 = (procRes.data.phase2_data || {}) as any;
+      setInitialPerImplant(p2.per_implant || {});
+      setInitialAdvanced(p2.advanced_clinical || {});
+      // iter-Jun-2026 (v11): hydrate MUA state from prior submission —
+      // ONCE only. Subsequent loadImplantPlan() calls (triggered when the
+      // tabbed view saves) must NOT override the user's local toggle.
+      if (!muaHydratedRef.current) {
+        muaHydratedRef.current = true;
+        if (typeof p2.mua_placed === 'boolean') setMuaPlaced(p2.mua_placed);
+        if (p2.mua_details && typeof p2.mua_details === 'object') setMuaDetails(p2.mua_details);
+      }
       setTorqueValues(new Array(count).fill(''));
       setHealingAbutmentCuffHeight(new Array(count).fill(''));
       setAccessChannelOpenings(new Array(count).fill(''));
@@ -232,7 +283,7 @@ export default function Phase2SubmissionScreen() {
 
       const pType = procRes.data.implant_procedure_type || '';
       setProcedureType(pType);
-       // iter-391: pre-fill the Drilling Type cascade from the Phase-1 surgical
+      // iter-391: pre-fill the Drilling Type cascade from the Phase-1 surgical
       // plan — the student only edits it when the protocol changed intra-op.
       const p1Plan = {
         approach: normalizeSurgeryApproach(procRes.data.procedure_surgery_type),
@@ -255,18 +306,31 @@ export default function Phase2SubmissionScreen() {
       // render a catalogue-constrained dropdown instead of free text.
       setAttachmentType(procRes.data.attachment_type || '');
       setLoadingType(Array.isArray(procRes.data.loading_type) ? procRes.data.loading_type : (procRes.data.loading_type ? [procRes.data.loading_type] : []));
+      // iter-Jun-2026 (v13, Chunk C): Phase-1 Prosthetic Plan hydration.
+      setPhase1ProstheticPlan(procRes.data.prosthetic_plan || '');
+      setPhase1ProstheticPlanOther(procRes.data.prosthetic_plan_other || '');
+      // iter-Feb-2026-D — Phase 1 Type of Provisional for Step 2 reference.
+      setPhase1TypeOfProvisional(procRes.data.type_of_provisional || '');
+      setPhase1TypeOfProvisionalOther(procRes.data.type_of_provisional_other || '');
+      setPhase1NumImplants(procRes.data.num_implants || '');
       // teeth_present drives the Group A (single) vs Group B (multiple) split
       // for Prosthesis Type options when one of the 4 overlapping procedure
       // types (Immediate Implant, PET, GBR, Guided Surgery) is chosen.
       const teeth = Array.isArray(procRes.data.teeth_present) ? procRes.data.teeth_present : [];
       setTeethCount(teeth.length);
 
-      // Determine IOPA slot count. Full-arch cases (All on 4/6/X) use a
-      // single OPG as the standard post-surgical radiograph — individual
-      // IOPAs are optional there, so no slots are pre-seeded; the student
-      // can still add them voluntarily via "Add IOPA Radiograph".
-      const FULL_ARCH_TYPES_LOCAL = new Set(['All on 4', 'All on 6', 'All on X']);
-      const iopaCount = FULL_ARCH_TYPES_LOCAL.has(pType) ? 0 : count;
+      // Determine IOPA slot count.
+      // iter-Jun-2026 (v13, Chunk F, Ask 2): Only Conventional implants
+      // get IOPA slots. Zygoma / Pterygoid implants are captured on the
+      // OPG instead. `positions` are already loaded from implant_plans;
+      // filter out ZR/ZL/PR/PL codes to get the Conventional set.
+      const _isZygPtr = (p: string) => p.startsWith('ZR') || p.startsWith('ZL') || p.startsWith('PR') || p.startsWith('PL');
+      const convPositions: string[] = positions.filter((p: string) => !_isZygPtr(String(p || '')));
+      let iopaCount: number;
+      if (pType === 'All on 4') iopaCount = 4;
+      else if (pType === 'All on 6') iopaCount = 6;
+      else if (pType === 'All on X') iopaCount = 5;
+      else iopaCount = convPositions.length; // 0 for pure Zygoma/Pterygoid cases
       setIopaFiles(new Array(iopaCount).fill(null));
 
       // iter-189: hydrate Pre-Op state if it was already completed.
@@ -280,21 +344,13 @@ export default function Phase2SubmissionScreen() {
       // Auto-collapse the checklist once it's signed off (saves real-estate
       // for the much-longer Surgical Procedure section).
       if (preopAt) setPreopExpanded(false);
-
-      // Overlay any locally-saved draft on top of the server prefill — the
-      // draft represents edits the user made after the last thing that
-      // actually reached the server (e.g. typed notes, uploaded IOPAs)
-      // before the app was backgrounded or they navigated away.
-      const draft = await loadDraft(draftKey);
-      if (draft) applyDraftSnapshot(draft);
     } catch {
       setTorqueValues(['']);
       setHealingAbutmentCuffHeight(['']);
       setIopaFiles([null]);
-    } finally {
-      setScreenLoaded(true);
     }
   };
+
 
   // iter-189: list of every mandatory item id, derived from the constants file.
   const PREOP_MANDATORY_IDS = (CHECKLIST_DATA.surgical.sections || [])
@@ -340,9 +396,42 @@ export default function Phase2SubmissionScreen() {
   };
 
   // ── IOPA / OPG Upload helpers ──
+  // iter-Jun-2026 (v12): Universal implant label — "Implant 15" for
+  // conventional (FDI), "Zygoma R1" / "Pterygoid L1" for advanced.
+  // Replaces earlier "Tooth #<n>" wording per user directive.
+  const implantDisplayLabel = (pos: string | undefined | null): string => {
+    if (!pos) return 'Implant —';
+    const p = String(pos);
+    if (p.startsWith('ZR') || p.startsWith('ZL')) return `Zygoma ${p.slice(1)}`;
+    if (p.startsWith('PR') || p.startsWith('PL')) return `Pterygoid ${p.slice(1)}`;
+    return `Implant ${p}`;
+  };
+
+  // iter-Jun-2026 (v13, Chunk F, Ask 2): Split Post Surgical Radiograph by
+  // implant modality — Conventional implants use IOPA (per-tooth), Zygoma
+  // and Pterygoid implants use a whole-arch OPG. When a case mixes both,
+  // we render two separate sections: OPG (for Zygoma/Pterygoid) + IOPA
+  // (only for Conventional implants, labelled by FDI).
+  const isZygPtrPosition = (pos: string | undefined | null): boolean => {
+    const p = String(pos || '');
+    return p.startsWith('ZR') || p.startsWith('ZL') || p.startsWith('PR') || p.startsWith('PL');
+  };
+  const iopaImplantPositions = React.useMemo(
+    () => implantPositions.filter(p => !isZygPtrPosition(p)),
+    [implantPositions],
+  );
+  const zygPtrImplantPositions = React.useMemo(
+    () => implantPositions.filter(p => isZygPtrPosition(p)),
+    [implantPositions],
+  );
+  const needsOpg = isFullArch || zygPtrImplantPositions.length > 0;
+  const needsIopa = iopaImplantPositions.length > 0;
+
   const getIopaLabel = (idx: number): string => {
-    if (isFullArch) return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
-    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—';
+    // With the Ask-2 split, iopaFiles indices align 1:1 with
+    // iopaImplantPositions (Conventional-only). Fall back to legacy behaviour
+    // if the split hasn't been re-seeded yet after a partial load.
+    return implantDisplayLabel(iopaImplantPositions[idx] || implantPositions[idx]);
   };
 
   const totalIopaSlots = iopaFiles.length + extraIopaCount;
@@ -477,7 +566,7 @@ export default function Phase2SubmissionScreen() {
       if (missingIdxs.length > 0) {
         Alert.alert(
           'Missing Prosthetic Component',
-          `Please select a Prosthetic Component for: ${missingIdxs.map(i => implantPositions[i] ? `Tooth #${implantPositions[i]}` : 'Tooth #—').join(', ')}.`,
+          `Please select a Prosthetic Component for: ${missingIdxs.map(i => implantDisplayLabel(implantPositions[i])).join(', ')}.`,
         );
         return;
       }
@@ -499,15 +588,10 @@ export default function Phase2SubmissionScreen() {
       }
     }
 
-    // Full-arch (All on 4/6/X) cases use a single OPG as the standard
-    // post-surgical radiograph — individual per-tooth IOPAs are optional
-    // there. Every other case still requires all IOPA slots filled.
-    if (isFullArch) {
-      if (!opgFile) {
-        Alert.alert('Missing OPG', 'Please upload the OPG Radiograph before submitting.');
-        return;
-      }
-    } else {
+    // Validate mandatory IOPA uploads (only for Conventional implants).
+    // iter-Jun-2026 (v13, Chunk F, Ask 2): Pure Zygoma/Pterygoid cases have
+    // no IOPA slots — skip this block entirely for them.
+    if (needsIopa) {
       const allIopaSlots = [...iopaFiles, ...new Array(extraIopaCount).fill(null)];
       const baseIopaCount = iopaFiles.length;
       const missingIopa = allIopaSlots.slice(0, baseIopaCount).filter(f => f === null);
@@ -515,6 +599,18 @@ export default function Phase2SubmissionScreen() {
         Alert.alert('Missing IOPA', `Please upload all ${baseIopaCount} IOPA Radiographs before submitting.`);
         return;
       }
+    }
+    // iter-Jun-2026 (v13, Chunk F, Ask 2): OPG required for any case with
+    // Zygoma/Pterygoid implants (whole-arch imaging) as well as full-arch
+    // Conventional cases (existing behaviour).
+    if (needsOpg && !opgFile) {
+      Alert.alert(
+        'Missing OPG',
+        zygPtrImplantPositions.length > 0
+          ? 'Please upload the OPG for Zygoma / Pterygoid implants before submitting.'
+          : 'Please upload the OPG before submitting.',
+      );
+      return;
     }
 
     setLoading(true);
@@ -563,6 +659,11 @@ export default function Phase2SubmissionScreen() {
         implant_seated_correctly: implantSeated,
         implant_seated_comment: implantSeatedComment || null,
         torque_values: torqueValues.map(v => parseFloat(v)),
+        // iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement — universal
+        // Phase 2 field. `mua_placed` is nullable; if user hasn't chosen
+        // Yes/No we send null. Details only sent when Yes.
+        mua_placed: muaPlaced,
+        mua_details: muaPlaced ? muaDetails : null,
         bone_graft_used: boneGraftUsed,
         bone_graft_details: null,
         augmentation: boneGraftUsed ? augData : null,
@@ -738,15 +839,22 @@ export default function Phase2SubmissionScreen() {
     }
 
     const missRadiographs: string[] = [];
-    if (isFullArch) {
-      // Full-arch cases use a single OPG as the standard post-surgical
-      // radiograph — individual IOPAs are optional here.
-      if (!opgFile) missRadiographs.push('OPG Radiograph (full-arch case)');
-    } else {
-      const baseIopaCount = iopaFiles.length;
-      const missingIopa = iopaFiles.slice(0, baseIopaCount).filter(f => f === null).length;
-      if (baseIopaCount === 0) missRadiographs.push('At least one IOPA Radiograph');
+    const baseIopaCount = iopaFiles.length;
+    const missingIopa = iopaFiles.slice(0, baseIopaCount).filter(f => f === null).length;
+    // iter-Jun-2026 (v13, Chunk F, Ask 2): IOPA missing only counts against
+    // cases that HAVE Conventional implants. Zygoma/Pterygoid-only cases skip
+    // this rung entirely. OPG becomes mandatory whenever any Zygoma/Pterygoid
+    // implant is present OR the case is a Conventional full-arch.
+    if (needsIopa) {
+      if (baseIopaCount === 0) missRadiographs.push('At least one IOPA Radiograph (Conventional implants)');
       if (missingIopa > 0) missRadiographs.push(`${missingIopa} IOPA upload${missingIopa > 1 ? 's' : ''} pending`);
+    }
+    if (needsOpg && !opgFile) {
+      missRadiographs.push(
+        zygPtrImplantPositions.length > 0
+          ? 'Post Surgical Radiograph - OPG (Zygoma/Pterygoid implants)'
+          : 'OPG Radiograph (full-arch case)',
+      );
     }
 
     const missPostOp: string[] = [];
@@ -764,7 +872,8 @@ export default function Phase2SubmissionScreen() {
     // Notes pill is informational — never "missing" (notes are optional).
 return [missPreop, missSurgery, missRadiographs, missPostOp, []];
   }, [isPreopUnlocked, flapDesign, drillingType, guidedSurgeryType, staticGuideType, sleeveType, dynamicNavSystem, torqueValues, prostheticComponent, prostheticComponents, usePerImplantProsthetic, implantPositions,
-      prosthesisType, prosthesisTypeOther, iopaFiles, isFullArch, opgFile, postOpChecklist]);
+      prosthesisType, prosthesisTypeOther, iopaFiles, isFullArch, opgFile, postOpChecklist,
+      needsOpg, needsIopa, zygPtrImplantPositions]);
   const stepDone = stepMissing.map(arr => arr.length === 0);
 
   return (
@@ -871,6 +980,13 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
               })}
             </View>
           </View>
+
+          {/* iter-Jun-2026 (v13, Chunk A, Ask 2): PhaseStep2TabbedView was
+              removed from Phase 2 — the same per-implant data (torque,
+              insertion date, timing, complications, notes) is already
+              captured in the Surgical Procedure section below. Kept in
+              Phase 3/4/5 screens for continuity. Advanced Clinical (Zygoma)
+              will be re-added in Chunk B with the new approval workflow. */}
 
           {/* ── Pre-Surgical Checklist (iter-189) ── */}
           <View style={s.section} testID="phase2-preop-checklist" onLayout={onStepLayout(0)}>
@@ -1080,7 +1196,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                 <View key={idx} style={s.torqueRow}>
                   <View style={s.torqueLabel}>
                     <Text style={s.torqueLabelText}>
-                      {implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}
+                      Implant {idx + 1}{implantPositions[idx] ? ` — ${implantDisplayLabel(implantPositions[idx])}` : ''}
                     </Text>
                   </View>
                   <TextInput style={s.torqueInput} value={val}
@@ -1089,6 +1205,108 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                   <Text style={s.torqueUnit}>Ncm</Text>
                 </View>
               ))}
+            </View>
+
+            {/* iter-Jun-2026 (v11): Multiunit Abutments (MUA) Placed — universal
+                Phase 2 section, applies to every implant procedure type.
+                Yes/No toggle; when Yes, reveals a cyan-themed per-implant
+                block for Cuff Height + Angulation, mirroring the Torque
+                Achieved layout. */}
+            <View style={s.field}>
+              <Text style={[s.label, { fontSize: 15, fontWeight: '700', color: '#1A1A2E' }]}>Multiunit Abutments (MUA) Placed</Text>
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <TouchableOpacity
+                  style={[s.toggleBtn, muaPlaced === true && s.toggleBtnActive]}
+                  onPress={() => setMuaPlaced(true)}
+                  testID="mua-placed-yes"
+                >
+                  <Text style={[s.toggleBtnText, muaPlaced === true && s.toggleBtnTextActive]}>Yes</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.toggleBtn, muaPlaced === false && s.toggleBtnActive]}
+                  onPress={() => { setMuaPlaced(false); setMuaDetails({}); }}
+                  testID="mua-placed-no"
+                >
+                  <Text style={[s.toggleBtnText, muaPlaced === false && s.toggleBtnTextActive]}>No</Text>
+                </TouchableOpacity>
+              </View>
+              {muaPlaced === true ? (
+                <View style={muaStyles.section} testID="mua-details-section">
+                  <Text style={muaStyles.title}>Multiunit Abutment (MUA) Details</Text>
+                  {/* iter-Jun-2026 (v12): 4-column responsive table — Implant |
+                      Placed | Cuff (mm) | Angulation (°). Per-implant Yes/No
+                      toggle; when Yes, Cuff + Angulation inputs are enabled. */}
+                  <View style={muaStyles.tableHeader}>
+                    <Text style={[muaStyles.thText, muaStyles.colImplant]}>Implant</Text>
+                    <Text style={[muaStyles.thText, muaStyles.colYesNo]}>Placed</Text>
+                    <Text style={[muaStyles.thText, muaStyles.colCuff]}>Cuff (mm)</Text>
+                    <Text style={[muaStyles.thText, muaStyles.colAng]}>Angulation (°)</Text>
+                  </View>
+                  {(implantPositions.length ? implantPositions : ['—']).map((pos, idx) => {
+                    const key = pos || `idx${idx}`;
+                    const val = muaDetails[key] || { cuff_height: '', angulation: '', placed: false } as any;
+                    const isPlaced = val.placed === true;
+                    return (
+                      <View key={key} style={muaStyles.tableRow}>
+                        <View style={muaStyles.colImplant}>
+                          <Text style={muaStyles.rowLabel} numberOfLines={2}>{implantDisplayLabel(pos)}</Text>
+                        </View>
+                        <View style={muaStyles.colYesNo}>
+                          <View style={muaStyles.yesNoRow}>
+                            <TouchableOpacity
+                              style={[muaStyles.miniChip, isPlaced && muaStyles.miniChipOn]}
+                              onPress={() => setMuaDetails(prev => ({ ...prev, [key]: { ...val, placed: true } }))}
+                              testID={`mua-row-yes-${key}`}
+                            >
+                              <Text style={[muaStyles.miniChipText, isPlaced && muaStyles.miniChipTextOn]}>Yes</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[muaStyles.miniChip, val.placed === false && muaStyles.miniChipOn]}
+                              onPress={() => setMuaDetails(prev => ({ ...prev, [key]: { placed: false, cuff_height: '', angulation: '' } }))}
+                              testID={`mua-row-no-${key}`}
+                            >
+                              <Text style={[muaStyles.miniChipText, val.placed === false && muaStyles.miniChipTextOn]}>No</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <View style={muaStyles.colCuff}>
+                          <TextInput
+                            style={[muaStyles.cellInput, !isPlaced && muaStyles.cellDisabled]}
+                            value={isPlaced ? val.cuff_height : ''}
+                            editable={isPlaced}
+                            onChangeText={v => setMuaDetails(prev => ({ ...prev, [key]: { ...val, cuff_height: v } }))}
+                            keyboardType="decimal-pad"
+                            maxLength={5}
+                            placeholder={isPlaced ? 'mm' : '—'}
+                            placeholderTextColor="#B0BEC5"
+                            testID={`mua-cuff-${key}`}
+                          />
+                        </View>
+                        <View style={muaStyles.colAng}>
+                          <View style={muaStyles.angInputWrap}>
+                            <TextInput
+                              style={[muaStyles.cellInput, muaStyles.angInput, !isPlaced && muaStyles.cellDisabled]}
+                              value={isPlaced ? String(val.angulation ?? '') : ''}
+                              editable={isPlaced}
+                              onChangeText={v => {
+                                // Accept numeric with decimal (e.g. 17.5); allow empty.
+                                const cleaned = v.replace(/[^0-9.]/g, '');
+                                setMuaDetails(prev => ({ ...prev, [key]: { ...val, angulation: cleaned } }));
+                              }}
+                              keyboardType="decimal-pad"
+                              maxLength={5}
+                              placeholder={isPlaced ? '' : '—'}
+                              placeholderTextColor="#B0BEC5"
+                              testID={`mua-angulation-${key}`}
+                            />
+                            <Text style={[muaStyles.angSuffix, !isPlaced && { color: '#B0BEC5' }]}>°</Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
             </View>
 
             {/* Bone and Soft Tissue Augmentation (iter-395; legacy label:
@@ -1124,6 +1342,70 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
               <TextInput style={s.input} value={implantOtherNotes} onChangeText={setImplantOtherNotes}
                 placeholder="Additional surgical observations..." multiline data-testid="implant-other-notes" />
             </View>
+
+            {/* iter-Jun-2026 (v13, Chunk B, Ask 5 + Chunk C): Read-only reference banner
+                showing Phase 1 Prosthetic Treatment Plan / Loading Type selections
+                so the operator has the plan context when picking Phase 2's
+                Prosthetic Component with the same option set.
+                Chunk C: The Prosthetic Plan row is now EDITABLE — clicking the pencil
+                opens a modal with all options valid for the Phase-1 procedure type
+                and loading, and PATCHes the case with an audit-log entry. */}
+            {((loadingType && loadingType.length > 0) || phase1ProstheticPlan) && (
+              <View style={{
+                marginBottom: 10, padding: 10, borderRadius: 8,
+                backgroundColor: '#EDE7F6', borderWidth: 1, borderColor: '#B39DDB',
+              }} testID="phase1-treatment-plan-ref">
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#4527A0', letterSpacing: 0.4, marginBottom: 4 }}>
+                  PHASE 1 PROSTHETIC TREATMENT PLAN (REFERENCE)
+                </Text>
+                {loadingType && loadingType.length > 0 && (
+                  <>
+                    <Text style={{ fontSize: 10, color: '#4527A0', fontWeight: '700', marginTop: 4, marginBottom: 4 }}>Type of Loading</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                      {loadingType.map((lt: string) => (
+                        <View key={lt} style={{
+                          paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+                          backgroundColor: '#5E35B1',
+                        }}>
+                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '700' }}>{lt}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                )}
+
+                {/* Prosthetic Plan row (editable) */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 6 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 10, color: '#4527A0', fontWeight: '700', marginBottom: 4 }}>Prosthetic Plan</Text>
+                    {phase1ProstheticPlan ? (
+                      <View style={{ alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: '#7E57C2' }} testID="phase1-prosthetic-plan-chip">
+                        <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>
+                          {phase1ProstheticPlan}
+                          {phase1ProstheticPlan === 'Other' && phase1ProstheticPlanOther ? ` — ${phase1ProstheticPlanOther}` : ''}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={{ fontSize: 11, color: '#78909C', fontStyle: 'italic' }}>Not selected in Phase 1</Text>
+                    )}
+                  </View>
+                  {['student', 'supervisor', 'implant_incharge', 'administrator'].includes(String(user?.role || '').toLowerCase()) && (
+                    <TouchableOpacity
+                      onPress={() => setProsthPlanPickerOpen(true)}
+                      testID="phase2-edit-prosthetic-plan"
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#5E35B1' }}
+                    >
+                      <Ionicons name="pencil" size={12} color="#FFF" />
+                      <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>Edit</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <Text style={{ fontSize: 10, color: '#5E35B1', fontStyle: 'italic', marginTop: 6 }}>
+                  Pick your Phase 2 Prosthetic Component below against the same option set. You can also change the Prosthetic Plan above if it needs correcting; the change will be audit-logged.
+                </Text>
+              </View>
+            )}
 
             {/* Prosthetic Component
                 iter-310: if Phase 1 declared "Immediate Loading" in
@@ -1187,7 +1469,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                     if (phase1ImmediateLoading && conflicting) {
                       Alert.alert(
                         'Immediate Loading selected in Phase 1, Please check',
-                        `${implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}: you picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
+                        `${implantDisplayLabel(implantPositions[idx])}: you picked "${next}" in Phase 2, but Phase 1 plans for Immediate Loading. Confirm if this is intentional.`,
                         [
                           { text: 'Cancel', style: 'cancel' },
                           { text: 'Confirm', onPress: () => setVal(next), style: 'destructive' },
@@ -1200,7 +1482,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                   return (
                     <View key={idx} style={{ marginBottom: 10 }} testID={`per-implant-prosthetic-row-${idx}`}>
                       <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474F', marginBottom: 6 }}>
-                        {pos ? `Tooth #${pos}` : 'Tooth #—'}
+                        Implant {idx + 1}{pos ? ` (#${pos})` : ''}
                       </Text>
                       <TouchableOpacity
                         style={{
@@ -1269,7 +1551,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                   <View key={idx} style={[s.torqueRow, { flexWrap: 'wrap' }]}>
                     <View style={s.torqueLabel}>
                       <Text style={s.torqueLabelText}>
-                        {implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : 'Tooth #—'}
+                        Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
                       </Text>
                     </View>
                     {catalogue ? (
@@ -1332,8 +1614,8 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                   <TouchableOpacity
                     style={[s.muaPill, multiUnitPlaced === 'yes' && s.muaPillActive]}
                     onPress={() => setMultiUnitPlaced('yes')}
-                    testID="mua-placed-yes"
-                    /* @ts-ignore */ data-testid="mua-placed-yes"
+                    testID="mua-placed-yes-legacy"
+                    /* @ts-ignore */ data-testid="mua-placed-yes-legacy"
                   >
                     <Text style={[s.muaPillText, multiUnitPlaced === 'yes' && s.muaPillTextActive]}>Yes</Text>
                   </TouchableOpacity>
@@ -1345,8 +1627,8 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                       setMuaAngulation(new Array(implantPositions.length || 1).fill(''));
                       setMuaCuffHeight(new Array(implantPositions.length || 1).fill(''));
                     }}
-                    testID="mua-placed-no"
-                    /* @ts-ignore */ data-testid="mua-placed-no"
+                    testID="mua-placed-no-legacy"
+                    /* @ts-ignore */ data-testid="mua-placed-no-legacy"
                   >
                     <Text style={[s.muaPillText, multiUnitPlaced === 'no' && s.muaPillTextActive]}>No</Text>
                   </TouchableOpacity>
@@ -1356,7 +1638,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                     <Text style={s.muaSubTitle}>Multi-unit Abutment Details</Text>
                     {implantPositions.map((pos, idx) => (
                       <View key={idx} style={s.muaToothCard}>
-                        <Text style={s.muaToothHeader}>{pos ? `Tooth #${pos}` : 'Tooth #—'}</Text>
+                        <Text style={s.muaToothHeader}>Implant {idx + 1} (#{pos})</Text>
                         <View style={s.muaParamRow}>
                           <View style={s.muaParamLabelPill}>
                             <Text style={s.muaParamLabelText}>Angulation</Text>
@@ -1366,8 +1648,8 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                             value={muaAngulation[idx] || ''}
                             onChangeText={v => { const u = [...muaAngulation]; u[idx] = v; setMuaAngulation(u); }}
                             keyboardType="decimal-pad" placeholder="°" maxLength={2}
-                            testID={`mua-angulation-${idx}`}
-                            /* @ts-ignore */ data-testid={`mua-angulation-${idx}`}
+                            testID={`mua-angulation-${idx}-legacy`}
+                            /* @ts-ignore */ data-testid={`mua-angulation-${idx}-legacy`}
                           />
                           <Text style={s.muaUnit}>°</Text>
                         </View>
@@ -1380,8 +1662,8 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                             value={muaCuffHeight[idx] || ''}
                             onChangeText={v => { const u = [...muaCuffHeight]; u[idx] = v; setMuaCuffHeight(u); }}
                             keyboardType="decimal-pad" placeholder="mm" maxLength={2}
-                            testID={`mua-cuff-${idx}`}
-                            /* @ts-ignore */ data-testid={`mua-cuff-${idx}`}
+                            testID={`mua-cuff-${idx}-legacy`}
+                            /* @ts-ignore */ data-testid={`mua-cuff-${idx}-legacy`}
                           />
                           <Text style={s.muaUnit}>mm</Text>
                         </View>
@@ -1393,8 +1675,98 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
             )}
 
             {/* Prosthesis Type — only when Prosthetic Component === Immediate Loading Done.
+                iter-Feb-2026: For pure Single Conventional Implant cases, use the
+                new grouped Provisional catalogue (matches Phase 1 Type of Provisional).
                 Options depend on Phase 1 procedure_type + teeth count per product spec. */}
             {prostheticComponent === 'Immediate Loading Done' && (() => {
+              // iter-Feb-2026 / -B / -C — Group-aware provisional dropdown.
+              // Uses `getEffectiveWorkflow` so overlap procedure types
+              // (Immediate Implant / Sinus Lift / PET / GBR / Guided Surgery)
+              // pick SC or Group A based on Phase 1's num_implants answer.
+              const g = getEffectiveWorkflow(procedureType, phase1NumImplants);
+              // iter-Feb-2026-D — Amber reference banner showing what was
+              // planned as Type of Provisional in Phase 1. Rendered above
+              // the actual "Prosthesis Type" dropdown so the surgeon can
+              // easily compare intent vs what is actually delivered.
+              const phase1ProvisionalRef = phase1TypeOfProvisional
+                ? (phase1TypeOfProvisional === 'Other' && phase1TypeOfProvisionalOther
+                    ? `Other — ${phase1TypeOfProvisionalOther}`
+                    : phase1TypeOfProvisional)
+                : '';
+              const referenceBanner = phase1ProvisionalRef ? (
+                <View
+                  testID="phase2-phase1-provisional-ref"
+                  style={{
+                    backgroundColor: '#FFF8E1',
+                    borderRadius: 10,
+                    padding: 12,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: '#FFE082',
+                  }}>
+                  <Text style={{ fontSize: 11, color: '#8D6E63', fontWeight: '800', letterSpacing: 0.5, marginBottom: 4 }}>
+                    PHASE 1 TYPE OF PROVISIONAL (REFERENCE)
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#3E2723' }}>{phase1ProvisionalRef}</Text>
+                  <Text style={{ fontSize: 11, color: '#8D6E63', marginTop: 6, fontStyle: 'italic' }}>
+                    Pick the actual provisional delivered at surgery below.
+                  </Text>
+                </View>
+              ) : null;
+              if (g === 'SC') {
+                return (
+                  <View style={s.section}>
+                    {referenceBanner}
+                    <Text style={s.torqueTitle}>Prosthesis Type</Text>
+                    <GroupedDescDropdown
+                      value={prosthesisType}
+                      onChange={setProsthesisType}
+                      groups={PROVISIONAL_GROUPED_OPTIONS}
+                      placeholder="Select a provisional…"
+                      testID="phase2-sc-provisional-dropdown"
+                    />
+                    {prosthesisType === 'Other' && (
+                      <TextInput
+                        style={[s.textArea, { marginTop: 8 }]}
+                        value={prosthesisTypeOther}
+                        onChangeText={setProsthesisTypeOther}
+                        placeholder="Describe the prosthesis type..."
+                        multiline
+                        data-testid="prosthesis-type-other-input"
+                      />
+                    )}
+                  </View>
+                );
+              }
+              if (g === 'A' || g === 'B' || g === 'C') {
+                const groups =
+                  g === 'A' ? GROUP_A_PROVISIONAL_OPTIONS
+                  : g === 'B' ? GROUP_B_PROVISIONAL_OPTIONS
+                  : GROUP_C_PROVISIONAL_OPTIONS;
+                return (
+                  <View style={s.section}>
+                    {referenceBanner}
+                    <Text style={s.torqueTitle}>Prosthesis Type</Text>
+                    <GroupedDescDropdown
+                      value={prosthesisType}
+                      onChange={setProsthesisType}
+                      groups={groups}
+                      placeholder="Select a provisional…"
+                      testID={`phase2-group-${g.toLowerCase()}-provisional-dropdown`}
+                    />
+                    {prosthesisType === 'Other' && (
+                      <TextInput
+                        style={[s.textArea, { marginTop: 8 }]}
+                        value={prosthesisTypeOther}
+                        onChangeText={setProsthesisTypeOther}
+                        placeholder="Describe the prosthesis type..."
+                        multiline
+                        data-testid="prosthesis-type-other-input"
+                      />
+                    )}
+                  </View>
+                );
+              }
               // Overlapping modifier procedure types — Group A/B decided by teeth count.
               const OVERLAP = new Set(['Immediate Implant','Partial Extraction Therapy','Implant Placement with Guided Bone Regeneration','Guided Surgery']);
               const FULL_ARCH = new Set(['All on 4','All on 6','All on X']);
@@ -1417,6 +1789,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
               }
               return (
                 <View style={s.section}>
+                  {referenceBanner}
                   <Text style={s.torqueTitle}>Prosthesis Type</Text>
                   {renderDropdown('Select prosthesis type', prosthesisType, options,
                     prosthesisTypeOpen, setProsthesisTypeOpen, setProsthesisType)}
@@ -1448,16 +1821,24 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                   const anteriorTeeth = new Set([11,12,13,21,22,23,31,32,33,41,42,43]);
                   const upperPosterior = new Set([14,15,16,17,24,25,26,27]);
                   const lowerPosterior = new Set([34,35,36,37,44,45,46,47]);
-                  const options: string[] = ['Facial'];
-                  if (upperPosterior.has(toothNum) || lowerPosterior.has(toothNum)) options.push('Occlusal');
-                  if (anteriorTeeth.has(toothNum)) options.push('Incisal/Cingulum');
-                  if (lowerPosterior.has(toothNum)) options.push('Lingual');
-                  if (upperPosterior.has(toothNum)) options.push('Palatal');
+                  // iter-Jun-2026 (v13, Chunk A): Zygoma/Pterygoid Access
+                  // Channel options — Buccal / Occlusal / Palatal.
+                  const isZygPter = /^(ZR|ZL|PR|PL)/i.test(String(pos || ''));
+                  let options: string[];
+                  if (isZygPter) {
+                    options = ['Buccal', 'Occlusal', 'Palatal'];
+                  } else {
+                    options = ['Facial'];
+                    if (upperPosterior.has(toothNum) || lowerPosterior.has(toothNum)) options.push('Occlusal');
+                    if (anteriorTeeth.has(toothNum)) options.push('Incisal/Cingulum');
+                    if (lowerPosterior.has(toothNum)) options.push('Lingual');
+                    if (upperPosterior.has(toothNum)) options.push('Palatal');
+                  }
                   const selected = accessChannelOpenings[idx] || '';
                   return (
                     <View key={idx} style={{ marginBottom: 12 }}>
                       <Text style={{ fontSize: 13, fontWeight: '600', color: '#BF360C', marginBottom: 6 }}>
-                        {pos ? `Tooth #${pos}` : 'Tooth #—'} <Text style={{ color: '#DC3545' }}>*</Text>
+                        {implantDisplayLabel(pos)} <Text style={{ color: '#DC3545' }}>*</Text>
                       </Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                         {options.map(opt => (
@@ -1495,20 +1876,30 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
           </View>
 
           {/* ── Post Surgical Radiograph(s) ── */}
+          {/* iter-Jun-2026 (v13, Chunk F, Ask 2): section title reflects
+              which modalities are required. Pure Zygoma/Pterygoid cases
+              show only "Post Surgical Radiographs - OPG"; mixed cases
+              show OPG (for Zygoma/Pterygoid implants) + IOPA (only for
+              Conventional implants, labelled by FDI tooth number). */}
           <View style={s.section} onLayout={onStepLayout(2)}>
             <View style={s.sectionHeader}>
               <Ionicons name="images-outline" size={20} color="#1565C0" />
               <Text style={s.sectionTitle}>
-                {isSingleImplant ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs'}
+                {needsOpg && !needsIopa
+                  ? 'Post Surgical Radiographs - OPG'
+                  : !needsOpg && needsIopa
+                    ? (isSingleImplant ? 'Post Surgical Radiograph - IOPA' : 'Post Surgical Radiographs - IOPA')
+                    : (isSingleImplant ? 'Post Surgical Radiograph' : 'Post Surgical Radiographs')}
               </Text>
             </View>
 
-            {/* IOPA upload slots */}
-            <View style={s.uploadSection}>
-              <Text style={s.uploadTitle}>
-                Upload IOPA Radiograph{isFullArch ? ' (optional)' : ''}
-              </Text>
-              {Array.from({ length: totalIopaSlots }).map((_, idx) => {
+            {/* IOPA upload slots — Conventional implants only */}
+            {needsIopa && (
+              <View style={s.uploadSection}>
+                <Text style={s.uploadTitle}>
+                  {needsOpg ? 'Post Surgical Radiograph - IOPA (Conventional Implants)' : 'Upload IOPA Radiograph'}
+                </Text>
+                {Array.from({ length: totalIopaSlots }).map((_, idx) => {
                 const baseCount = iopaFiles.length;
                 const isExtra = idx >= baseCount;
                 const file = isExtra ? null : iopaFiles[idx];
@@ -1568,21 +1959,24 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                   </View>
                 );
               })}
-              {/* Add extra (optional) IOPA button for full-arch cases */}
-              {isFullArch && (
+              {/* Add extra IOPA button for All on X */}
+              {procedureType === 'All on X' && (
                 <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
                   onPress={addExtraIopa} data-testid="add-extra-iopa-btn">
                   <Ionicons name="add-circle" size={26} color="#4CAF50" />
                   <Text style={{ color: '#4CAF50', fontWeight: '700', fontSize: 14 }}>Add IOPA Radiograph</Text>
                 </TouchableOpacity>
               )}
-            </View>
+              </View>
+            )}
 
-            {/* OPG upload for Full Arch cases */}
-            {isFullArch && (
+            {/* OPG upload — full-arch OR any Zygoma/Pterygoid case (Ask 2). */}
+            {needsOpg && (
               <View style={[s.uploadSection, { marginTop: 12 }]}>
                 <Text style={s.uploadTitle}>
-                  Upload OPG <Text style={{ color: '#DC3545' }}>*</Text>
+                  {needsIopa
+                    ? 'Post Surgical Radiographs - OPG (Zygoma / Pterygoid Implants)'
+                    : 'Upload OPG'}
                 </Text>
                 <View style={{ paddingHorizontal: 12, paddingBottom: 12 }}>
                   {opgFile ? (
@@ -1771,6 +2165,98 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
+
+    {/* iter-Jun-2026 (v13, Chunk C): Phase-2 Prosthetic Plan editor modal.
+        Options are derived from Phase 1 procedure type + loading + num_implants
+        via getProstheticOptions(). Selection triggers a confirm dialog then
+        PATCHes the case with an audit-log entry (see backend endpoint
+        PATCH /api/procedures/{id}/prosthetic-plan). */}
+    <Modal
+      visible={prosthPlanPickerOpen}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setProsthPlanPickerOpen(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 20 }}>
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, maxHeight: '85%' }} testID="phase2-prosthetic-plan-modal">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Ionicons name="build" size={18} color="#4527A0" />
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#4527A0', flex: 1 }}>Change Prosthetic Plan</Text>
+            <TouchableOpacity onPress={() => setProsthPlanPickerOpen(false)} testID="phase2-prosthetic-plan-close">
+              <Ionicons name="close" size={22} color="#78909C" />
+            </TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 11, color: '#5E35B1', fontStyle: 'italic', marginBottom: 10 }}>
+            Options auto-derived from the Phase 1 Procedure Type
+            {procedureType ? ` (${procedureType})` : ''}
+            {loadingType && loadingType.length ? ` + Loading (${loadingType.join(', ')})` : ''}
+            {PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(procedureType) && phase1NumImplants ? ` + Number of Implants (${phase1NumImplants})` : ''}
+            . Change will overwrite Phase 1 and be audit-logged.
+          </Text>
+          <ScrollView style={{ maxHeight: 380 }}>
+            {(() => {
+              const opts: string[] = getProstheticOptions(procedureType, loadingType || [], phase1NumImplants || '') || [];
+              if (opts.length === 0) {
+                return <Text style={{ fontSize: 12, color: '#78909C', fontStyle: 'italic', padding: 12 }}>No options available for the current Phase 1 selections. Please set Procedure Type / Number of Implants in Phase 1 first.</Text>;
+              }
+              return opts.map((opt) => {
+                const isSelected = opt === phase1ProstheticPlan;
+                return (
+                  <TouchableOpacity
+                    key={opt}
+                    style={{
+                      paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8,
+                      borderWidth: 1, borderColor: isSelected ? '#5E35B1' : '#E1BEE7',
+                      backgroundColor: isSelected ? '#F3E5F5' : '#FFFFFF',
+                      marginBottom: 6, flexDirection: 'row', alignItems: 'center', gap: 8,
+                    }}
+                    testID={`phase2-prosthetic-plan-option-${opt.replace(/\s+/g, '-').toLowerCase()}`}
+                    disabled={prosthPlanSaving}
+                    onPress={async () => {
+                      if (opt === phase1ProstheticPlan) { setProsthPlanPickerOpen(false); return; }
+                      const proceed = async () => {
+                        setProsthPlanSaving(true);
+                        try {
+                          const res = await api.patch(`/procedures/${id}/prosthetic-plan`, {
+                            prosthetic_plan: opt,
+                            prosthetic_plan_other: opt === 'Other' ? phase1ProstheticPlanOther : '',
+                          });
+                          setPhase1ProstheticPlan(res.data?.prosthetic_plan || opt);
+                          if (opt !== 'Other') setPhase1ProstheticPlanOther('');
+                          setProsthPlanPickerOpen(false);
+                          Alert.alert('Updated', 'Prosthetic Plan updated. Change has been logged.');
+                        } catch (e: any) {
+                          Alert.alert('Failed', e?.response?.data?.detail || e?.message || 'Unable to update Prosthetic Plan');
+                        } finally {
+                          setProsthPlanSaving(false);
+                        }
+                      };
+                      Alert.alert(
+                        'Change Prosthetic Plan?',
+                        `Replace “${phase1ProstheticPlan || '—'}” with “${opt}”? This overrides Phase 1 and is logged in the audit trail.`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Change', onPress: proceed, style: 'destructive' },
+                        ],
+                      );
+                    }}
+                  >
+                    <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={16} color={isSelected ? '#5E35B1' : '#B39DDB'} />
+                    <Text style={{ flex: 1, fontSize: 13, color: '#37474F', fontWeight: isSelected ? '700' : '500' }}>{opt}</Text>
+                  </TouchableOpacity>
+                );
+              });
+            })()}
+          </ScrollView>
+          {prosthPlanSaving && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <ActivityIndicator size="small" color="#5E35B1" />
+              <Text style={{ fontSize: 11, color: '#5E35B1' }}>Saving…</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
     </>
   );
 }
@@ -1858,4 +2344,95 @@ const s = StyleSheet.create({
   stepPillTextActive: { color: '#FFFFFF' },
   stepPillTextDone: { color: '#2E7D32' },
   stepPillTextLocked: { color: '#90A4AE' },
+});
+
+// iter-Jun-2026 (v11): Multiunit Abutment (MUA) Details — cyan/light-blue
+// palette, distinct from Torque Achieved (blue). Applies to every
+// implant procedure type in Phase 2 Step 2 → Surgical Procedure.
+const muaStyles = StyleSheet.create({
+  section: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#E1F5FE',
+    borderWidth: 1,
+    borderColor: '#0288D1',
+  },
+  title: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#01579B',
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  // iter-Jun-2026 (v12): 4-column responsive table layout for MUA details.
+  tableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderBottomWidth: 2,
+    borderBottomColor: '#0288D1',
+    marginBottom: 4,
+  },
+  thText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#01579B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#B3E5FC',
+    minHeight: 44,
+  },
+  colImplant: { flex: 1.9, paddingRight: 4, minWidth: 0, overflow: 'hidden' },
+  colYesNo:   { flex: 1.6, paddingHorizontal: 2, minWidth: 0 },
+  colCuff:    { flex: 1.2, paddingHorizontal: 2, minWidth: 0 },
+  colAng:     { flex: 1.4, paddingLeft: 2, minWidth: 0 },
+  rowLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#01579B',
+  },
+  yesNoRow: { flexDirection: 'row', gap: 3 },
+  miniChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#0288D1',
+    backgroundColor: '#FFF',
+    minWidth: 26,
+    alignItems: 'center',
+  },
+  miniChipOn: { backgroundColor: '#0288D1', borderColor: '#0277BD' },
+  miniChipText: { fontSize: 10, fontWeight: '700', color: '#01579B' },
+  miniChipTextOn: { color: '#FFF' },
+  cellInput: {
+    backgroundColor: '#FFF',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0288D1',
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    fontSize: 11,
+    color: '#01579B',
+    textAlign: 'center',
+    flex: 1,
+    minWidth: 0,
+    width: '100%',
+  },
+  cellDisabled: {
+    backgroundColor: '#ECEFF1',
+    borderColor: '#CFD8DC',
+  },
+  angInputWrap: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  angInput: { flex: 1, minWidth: 0 },
+  angSuffix: { fontSize: 11, fontWeight: '700', color: '#01579B', marginLeft: 2 },
 });

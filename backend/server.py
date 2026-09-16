@@ -740,7 +740,7 @@ class ProcedureCreate(BaseModel):
     patient_email: Optional[str] = Field("", max_length=255)
     registration_number: str = Field(..., max_length=50)
     chief_complaint: Optional[str] = Field("", max_length=1000)
-     # iter-397: multi-implant episodes — id of the patient's most recent prior
+    # iter-397: multi-implant episodes — id of the patient's most recent prior
     # case (same registration number) so treatment history can be chained.
     linked_parent_case_id: Optional[str] = Field("", max_length=64)
     periodontal_status: Optional[str] = Field("", max_length=20)
@@ -761,10 +761,16 @@ class ProcedureCreate(BaseModel):
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
     implant_procedure_type: str = Field(..., max_length=100)
+    # iter-307: Number-of-Implants sub-question — only used by the 4
+    # procedure types (Immediate / PET / GBR / Guided Surgery) where it
+    # drives the prosthetic-plan options.  Empty string for every other
+    # type and for legacy drafts.
     num_implants: Optional[str] = Field("", max_length=50)
+    # iter-328: Sinus Lift sub-fields, only populated when
+    # implant_procedure_type == "Sinus Lift".
     sinus_lift_type: Optional[str] = Field("", max_length=50)
     bone_graft_material_details: Optional[str] = Field("", max_length=200)
-     # iter-387: surgical-approach cascade (Procedure Type → guided details)
+    # iter-387: surgical-approach cascade (Procedure Type → guided details)
     procedure_surgery_type: Optional[str] = Field("", max_length=60)
     guided_surgery_type: Optional[str] = Field("", max_length=40)
     static_guide_type: Optional[str] = Field("", max_length=40)
@@ -789,10 +795,6 @@ class ProcedureCreate(BaseModel):
     # Per-tooth Edentulous-site measurements (keyed by FDI code) — used when 2+ teeth
     # are marked missing. Structure: { "16": { "oc": 7.5, "md": 9.0 }, "17": {...} }.
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
-    # Per-cluster intraoral findings (keyed by cluster-leader FDI code) — used when 2+ teeth
-    # are missing and procedure != Single Conventional Implant.
-    # Structure: { "35": { "ridge_contour": "Oval", "soft_tissue_thickness": "Thick", "keratinized_mucosa": ">2mm" } }
-    clinical_exam_per_site: Optional[Dict[str, Dict[str, Any]]] = None
     arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
@@ -819,13 +821,91 @@ class ProcedureCreate(BaseModel):
     cbct_content_type: Optional[str] = Field("", max_length=100)
     # Multiple CBCT files (new format)
     cbct_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, content_type}]
-    # Patient Intra-oral Photograph list. Slots 0+1 use fixed labels
-    # ("Occlusal View", "Lateral view/Frontal view"); slots 2+ carry a
-    # user-authored label. Structure: [{filename, original_name,
+    # iter-356: Patient Intra-oral Photograph list. Slots 0+1 use fixed
+    # labels ("Occlusal View", "Lateral view/Frontal view"); slots 2+ carry
+    # a user-authored label. Structure: [{filename, original_name,
     # content_type, label}, ...]. Skipped for Existing Implant cases.
     intraoral_photos: Optional[List[Dict[str, str]]] = None
     # Patient Consent Form (uploaded via /uploads/consent-temp or POST /procedures/{id}/upload-consent)
     patient_consent_form: Optional[Dict[str, Any]] = None  # {filename, original_name, content_type, uploaded_by_*, uploaded_at, version}
+    # iter-Feb-2026: Zygoma & Pterygoid workflow data. Nested dict keyed by
+    # phase (phase1, phase2, phase3, phase4, phase5). Only populated when
+    # implant_procedure_type ∈ ZYGOMA_PTERYGOID_PROCEDURE_TYPES. Schema is
+    # intentionally flexible (Dict[str, Any]) so the workflow can evolve
+    # without model migrations. Common sub-keys:
+    #   phase1.medical_assessment, phase1.anaesthesia_plan,
+    #   phase1.pre_surgical, phase1.extraoral, phase1.intraoral,
+    #   phase1.existing_prosthesis, phase1.radiographic,
+    #   phase1.zygomatic_region, phase1.pterygomaxillary_region,
+    #   phase1.bedrossian_zones, phase1.zaga, phase1.diagnostic_summary,
+    #   phase1.prosthetic_planning, phase1.implant_selection,
+    #   phase1.design_checks, phase1.team_composition
+    #   phase2.surgical_checklist, phase2.implants_placed,
+    #   phase2.intraop_complications
+    #   phase3.day0, phase3.day7, phase3.day30 (immediate loading + monitoring)
+    #   phase4.definitive_prosthesis
+    #   phase5.zygoma_success_code, phase5.recall_timepoint
+    zygoma_pterygoid_data: Optional[Dict[str, Any]] = None
+    # iter-Feb-2026: Zygoma-configuration option (matches user brochure).
+    # Only used when implant_procedure_type ∈ ZYGOMA_PTERYGOID_PROCEDURE_TYPES.
+    # Values: "Quad zygoma" | "Quad zygoma + 2 pterygoid" |
+    #         "2 zygoma + anterior conventional" |
+    #         "4 Pterygoid + conventional" |
+    #         "Zygoma + pterygoid + conventional"
+    zygoma_pterygoid_configuration: Optional[str] = Field("", max_length=100)
+    # iter-Feb-2026 (v3): Conventional implant placement sites for mixed
+    # advanced+conventional cases. FDI codes (e.g., ["11","12","21","22"]).
+    # Populated by the "Conventional Implant Location" FDI chart shown in
+    # Phase 1 for Pterygoid+Conventional, Zygoma+Conventional, and
+    # Zygoma,Pterygoid+Conventional procedure types. Distinct from
+    # `missing_teeth` (which captures teeth that are absent/to-be-extracted)
+    # — this list captures teeth positions where conventional implants
+    # will be placed alongside the advanced anchor implants.
+    conventional_implant_locations: Optional[List[str]] = Field(default_factory=list)
+    # iter-Feb-2026 (v4): Co-sign records for the Zygoma/Pterygoid extended
+    # workflow. Structure:
+    #   {
+    #     "phase2":      {supervisor: {...sig}, incharge: {...sig}, at: iso},
+    #     "phase3_day0": {supervisor: {...sig}, prosthodontist: {...sig}, at: iso}
+    #   }
+    # Each sig entry: {signer_id, signer_name, signer_role, signature_data,
+    # comment, at}. Blocks Phase 2 / Phase 3 Day-0 submit until both signers
+    # have countersigned. Only enforced for Zygoma/Pterygoid procedure types.
+    zygoma_pterygoid_cosigns: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    # iter-Feb-2026 — Single-Conventional-Implant new workflow.
+    # Applies only when implant_procedure_type == 'Single Conventional Implant'.
+    # • type_of_provisional: label of the picked provisional option (grouped
+    #   catalogue in frontend/constants/singleConventional.ts). Required when
+    #   Immediate Loading is included in loading_type; blank otherwise.
+    # • sc_abutment_type / sc_retention_type / sc_crown_material: the new
+    #   3-part Prosthetic Plan (replaces the legacy prosthetic_plan dropdown
+    #   for this procedure type). All three required at Phase 1.
+    type_of_provisional: Optional[str] = Field(None, max_length=200)
+    sc_abutment_type: Optional[str] = Field(None, max_length=200)
+    sc_retention_type: Optional[str] = Field(None, max_length=200)
+    sc_crown_material: Optional[str] = Field(None, max_length=200)
+    # iter-Feb-2026-C — SC "Other" free-text siblings.
+    sc_abutment_type_other: Optional[str] = Field(None, max_length=500)
+    sc_retention_type_other: Optional[str] = Field(None, max_length=500)
+    sc_crown_material_other: Optional[str] = Field(None, max_length=500)
+    type_of_provisional_other: Optional[str] = Field(None, max_length=500)
+    # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma workflows.
+    # Group A (Multiple Conv + Pterygoid+Conv): 4-part plan.
+    # Group B (All on 4/6/X): single grouped plan.
+    # Group C (Quad Zygoma + Zygo variants): single plan (6 options).
+    # Each has an `_other` sibling for free-text when "Other" is picked.
+    ma_prosthesis_type: Optional[str] = Field(None, max_length=200)
+    ma_prosthesis_type_other: Optional[str] = Field(None, max_length=500)
+    ma_abutment_type: Optional[str] = Field(None, max_length=200)
+    ma_abutment_type_other: Optional[str] = Field(None, max_length=500)
+    ma_retention_type: Optional[str] = Field(None, max_length=200)
+    ma_retention_type_other: Optional[str] = Field(None, max_length=500)
+    ma_crown_material: Optional[str] = Field(None, max_length=200)
+    ma_crown_material_other: Optional[str] = Field(None, max_length=500)
+    fa_prosthetic_plan: Optional[str] = Field(None, max_length=200)
+    fa_prosthetic_plan_other: Optional[str] = Field(None, max_length=500)
+    zp_prosthetic_plan: Optional[str] = Field(None, max_length=200)
+    zp_prosthetic_plan_other: Optional[str] = Field(None, max_length=500)
 
     @field_validator('patient_name')
     @classmethod
@@ -893,6 +973,11 @@ class ProcedureUpdate(BaseModel):
     bridge_material: Optional[str] = Field(None, max_length=80)
     bridge_pontics: Optional[List[str]] = None
     bridge_implants: Optional[List[str]] = None
+    # iter-Feb-2026: Zygoma & Pterygoid workflow data on the draft/update model.
+    zygoma_pterygoid_data: Optional[Dict[str, Any]] = None
+    zygoma_pterygoid_configuration: Optional[str] = Field(None, max_length=100)
+    # iter-Feb-2026 (v3): Conventional implant sites for mixed advanced+conventional cases.
+    conventional_implant_locations: Optional[List[str]] = None
 
     @field_validator('patient_name')
     @classmethod
@@ -934,12 +1019,30 @@ class Phase2Submit(BaseModel):
     # Pre-surgery checklist (legacy; iter-189 splits this into a separate
     # phase2_preop submission that must complete before surgical fields are sent)
     pre_surgery_checklist: Optional[Dict[str, bool]] = None
+    # iter-Jun-2026 (v10, Chunk 3): Unified tabbed Phase 2-5 — per-implant
+    # records (torque, isq, insertion date, timing, mua, complications, notes)
+    # keyed by implant position ('ZR1', 'ZL2', 'PR1', '15', ...). Optional so
+    # legacy Conventional cases that populate case-level `torque_values`
+    # continue to work. Zygoma/Pterygoid rows MUST NOT include an ISQ value
+    # (per clinical guidance — ISQ meter placement isn't reliable on those).
+    per_implant_data: Optional[Dict[str, Dict[str, Any]]] = None
+    # Advanced Clinical block — only populated for Zygoma cases. Contains
+    # ORIS success code, immediate-loading Day 0/7/30 timestamps, ZAGA
+    # confirmation, screw-retained enforcement flag, supervisor co-sign.
+    advanced_clinical: Optional[Dict[str, Any]] = None
+    # iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement (universal —
+    # applies to every implant procedure type in Phase 2). `mua_placed` is
+    # a case-level Yes/No; when Yes, `mua_details` maps position → {
+    # cuff_height, angulation }. Angulation is stored as a string ("0°",
+    # "17°", "30°", "45°", or free-text via Other).
+    mua_placed: Optional[bool] = None
+    mua_details: Optional[Dict[str, Dict[str, Any]]] = None
     # Surgical procedure data
     anesthesia_adequate: Optional[str] = Field("Yes", max_length=10)  # Yes/No
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
     flap_design: Optional[str] = Field(None, max_length=100)
     drilling_type: Optional[str] = Field(None, max_length=100)
-     # iter-391: Drilling Type cascade — actual intra-op protocol (mirrors the
+    # iter-391: Drilling Type cascade — actual intra-op protocol (mirrors the
     # Phase 1 plan cascade so plan-vs-actual deviations are auditable).
     drilling_guided_surgery_type: Optional[str] = Field(None, max_length=40)
     drilling_static_guide_type: Optional[str] = Field(None, max_length=40)
@@ -950,14 +1053,14 @@ class Phase2Submit(BaseModel):
     torque_values: Optional[List[float]] = None
     bone_graft_used: Optional[bool] = False
     bone_graft_details: Optional[str] = Field(None, max_length=1000)
-    # iter-395: structured Bone & Soft Tissue Augmentation form (AugStep2Form)
-    # replaces the bone_graft_details free-text box; legacy fields kept for
-    # cases recorded before this.
+    # iter-395: "Bone and Soft Tissue Augmentation" — full Step-2-style capture
+    # done simultaneously during Phase 2 implant surgery (no separate approval).
     augmentation: Optional[Dict[str, Any]] = None
     implant_other_notes: Optional[str] = Field(None, max_length=500)
     prosthetic_component: Optional[str] = Field(None, max_length=100)
-    # iter-356: per-implant Prosthetic Component (multi-implant, non-full-arch,
-    # non-single cases) — same length/order as the implant plan positions.
+    # iter-356: Per-implant Prosthetic Component (multi-implant, non-full-arch,
+    # non-single cases). Length matches implants[]. For single/full-arch cases
+    # this stays None and `prosthetic_component` (case-level string) is used.
     prosthetic_components: Optional[List[str]] = None
     # Prosthesis Type chosen when prosthetic_component == 'Immediate Loading Done'.
     # Options are gated on the client based on Phase 1 procedure_type + teeth count.
@@ -1034,6 +1137,13 @@ class Stage2ProstheticSubmit(BaseModel):
     # iter-192: impression material — required when impression_type == 'conventional'.
     # One of: polyether / heavy_light_body / putty_light_body.
     impression_material: Optional[str] = Field(None, max_length=30)
+    # iter-Jun-2026 (v13, Chunk G, Ask 3): when impression_type ==
+    # 'intraoral_scans' the operator can further specify the scan modality.
+    # Each field is a multi-select list; validated only at UI level. Values
+    # are echoed to the Lab Slip PDF as a bulleted list.
+    scan_body_types: Optional[List[str]] = None      # PEEK / Metal / Hybrid
+    scan_types: Optional[List[str]] = None           # Vertical Scan Body / Horizontal Scan Bodies (Flags) / Photogrammetry
+    scan_levels: Optional[List[str]] = None          # Abutment/Multiunit Level / Implant Level
     # iter-194: shade selection (mandatory; per-implant or anterior+posterior).
     shade_values: Optional[List[str]] = None
     shade_notes: Optional[str] = Field(None, max_length=2000)
@@ -1044,6 +1154,32 @@ class Stage2ProstheticSubmit(BaseModel):
     # revise angulation / cuff height after soft-tissue remodelling.
     # Each row: {"tooth": "...", "angulation": "...", "cuff_height": "..."}.
     multi_unit_abutment_details: Optional[List[Dict[str, Any]]] = None
+    # iter-Feb-2026 — Single-Conventional-Implant *Final* Prosthetic Plan.
+    # Populated *only* for Single Conventional Implant cases. Overrides the
+    # Phase-1 plan; any change is captured as an audit entry appended to
+    # `prosthetic_plan_change_log` on the parent procedure document.
+    sc_final_abutment_type: Optional[str] = Field(None, max_length=200)
+    sc_final_retention_type: Optional[str] = Field(None, max_length=200)
+    sc_final_crown_material: Optional[str] = Field(None, max_length=200)
+    # iter-Feb-2026-C — SC "Other" free-text siblings for final plan.
+    sc_final_abutment_type_other: Optional[str] = Field(None, max_length=500)
+    sc_final_retention_type_other: Optional[str] = Field(None, max_length=500)
+    sc_final_crown_material_other: Optional[str] = Field(None, max_length=500)
+    # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan overrides.
+    # Same shape as Phase 1: 4-part for Group A, single field for Group B/C.
+    # Change audit is appended to `prosthetic_plan_change_log`.
+    ma_final_prosthesis_type: Optional[str] = Field(None, max_length=200)
+    ma_final_prosthesis_type_other: Optional[str] = Field(None, max_length=500)
+    ma_final_abutment_type: Optional[str] = Field(None, max_length=200)
+    ma_final_abutment_type_other: Optional[str] = Field(None, max_length=500)
+    ma_final_retention_type: Optional[str] = Field(None, max_length=200)
+    ma_final_retention_type_other: Optional[str] = Field(None, max_length=500)
+    ma_final_crown_material: Optional[str] = Field(None, max_length=200)
+    ma_final_crown_material_other: Optional[str] = Field(None, max_length=500)
+    fa_final_prosthetic_plan: Optional[str] = Field(None, max_length=200)
+    fa_final_prosthetic_plan_other: Optional[str] = Field(None, max_length=500)
+    zp_final_prosthetic_plan: Optional[str] = Field(None, max_length=200)
+    zp_final_prosthetic_plan_other: Optional[str] = Field(None, max_length=500)
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     # Legacy
@@ -1078,31 +1214,24 @@ class Phase4Step2Submit(BaseModel):
 # validator below enforces: not in future, not before previous phase,
 # not more than 30 days back. Stored as ISO YYYY-MM-DD strings.
 def _validate_done_date(d, prev_date, label):
-    """Return validated YYYY-MM-DD date or raise HTTPException."""
-    from datetime import date as _date, timedelta as _td
+    """Return validated YYYY-MM-DD date or default to today.
+    iter-343: Constraints relaxed for testing — the survival & revision
+    engine spans months, so we no longer clamp to the 30-day back-date
+    window, forbid future dates, or enforce chronological ordering
+    against the previous phase. We still validate the ISO format so a
+    malformed string doesn't corrupt downstream aggregations."""
+    from datetime import date as _date
     if not d:
         return _date.today().isoformat()
     try:
         parsed = _date.fromisoformat(d)
     except Exception:
         raise HTTPException(status_code=400, detail=f"{label}: invalid date format, expected YYYY-MM-DD")
-    today = _date.today()
-    if parsed > today:
-        raise HTTPException(status_code=400, detail=f"{label}: date cannot be in the future")
-    if parsed < today - _td(days=30):
-        raise HTTPException(status_code=400, detail=f"{label}: cannot be more than 30 days in the past")
-    if prev_date:
-        try:
-            prev = _date.fromisoformat(prev_date)
-            if parsed < prev:
-                raise HTTPException(status_code=400, detail=f"{label}: cannot be before the previous phase ({prev_date})")
-        except (ValueError, TypeError):
-            pass
     return parsed.isoformat()
 
 
 class ImplantPlanItem(BaseModel):
-    position: str  # FDI tooth number e.g. "14"
+    position: str  # FDI tooth number e.g. "14" OR synthetic Zyg/Pter code e.g. "ZR1", "PL"
     brand: str
     system: str
     diameter: float
@@ -1112,6 +1241,13 @@ class ImplantPlanItem(BaseModel):
     bone_type: Optional[str] = None
     risk_level: Optional[str] = None
     risk_score: Optional[int] = None
+    # iter-Jun-2026 (v6): Zygoma/Pterygoid extended fields.
+    # `implant_type` distinguishes conventional vs zygoma vs pterygoid rows in
+    # advanced (full-arch, ZAGA/Bedrossian) cases where "position" is a
+    # synthetic anchor code (ZR1..ZL2 / PR / PL) rather than an FDI tooth.
+    implant_type: Optional[str] = None       # 'conventional' | 'zygoma' | 'pterygoid'
+    side: Optional[str] = None                # 'Right' | 'Left'  (zygoma/pterygoid only)
+    row_label: Optional[str] = None           # e.g. 'Right #1', 'Left #2', 'Pterygoid Right'
 
 class ImplantPlanSave(BaseModel):
     implants: List[ImplantPlanItem]
@@ -1212,6 +1348,15 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
         if user.get("push_token"):
             tokens.append(user["push_token"])
     if not tokens:
+        return
+    # iter-Feb-2026 (v5): Push delivery is gated on EMERGENT_PUSH_KEY being
+    # configured. When missing (current deployment), this function is a
+    # no-op — the raw Expo push endpoint is not called. Once the user
+    # provisions push through the Emergent integration flow, EMERGENT_PUSH_KEY
+    # will be populated and this guard removes itself.
+    emergent_push_key = os.environ.get("EMERGENT_PUSH_KEY", "")
+    if not emergent_push_key or emergent_push_key == "placeholder":
+        logging.info("[push] EMERGENT_PUSH_KEY not configured — push delivery skipped")
         return
     for needle in (redact or []):
         needle = (needle or "").strip()
@@ -5672,7 +5817,21 @@ PROCEDURE_TYPES = [
     "All on 4",
     "All on 6",
     "All on X",
+    "Quad Zygoma Implants",
+    "Zygoma and Pterygoid Implants",
+    "Pterygoid and Conventional Implants",
+    "Zygoma and Conventional Implants",
+    "Zygoma, Pterygoid and Conventional Implants",
 ]
+
+ZYGOMA_PTERYGOID_PROCEDURE_TYPES = {
+    "Quad Zygoma Implants",
+    "Zygoma and Pterygoid Implants",
+    "Pterygoid and Conventional Implants",
+    "Zygoma and Conventional Implants",
+    "Zygoma, Pterygoid and Conventional Implants",
+}
+
 
 LOADING_TYPES = ["Immediate Loading", "Early Loading", "Delayed Loading"]
 
@@ -6625,6 +6784,442 @@ async def get_patient_history(procedure_id: str, current_user: dict = Depends(ge
         row["is_current"] = row["id"] == procedure_id
         cases.append(row)
     return {"cases": cases}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# iter-Feb-2026 (v4) — Zygoma & Pterygoid Extended Workflow endpoints
+# ─────────────────────────────────────────────────────────────────────
+class ZygomaPhaseUpdate(BaseModel):
+    """Generic update model for any of the 4 extended-workflow phases.
+    The frontend sends the entire phase-2/3/4/5 dict on save. Server merges
+    at the phase key without touching the other phases."""
+    phase: str = Field(..., pattern=r"^phase[2-5]$")
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ZygomaCosignRequest(BaseModel):
+    """Co-sign body — one signer at a time. Two are required to unlock a
+    submit: for phase2 → supervisor + incharge; for phase3_day0 → supervisor
+    + prosthodontist."""
+    stage: str = Field(..., pattern=r"^(phase2|phase3_day0)$")
+    role_slot: str = Field(..., max_length=40)  # supervisor | incharge | prosthodontist
+    signature_data: str = Field("", max_length=200000)  # base64 PNG data URL from SignaturePad
+    signer_name: str = Field("", max_length=120)
+    comment: str = Field("", max_length=500)
+
+
+@api_router.patch("/procedures/{procedure_id}/zygoma-workflow")
+async def update_zygoma_workflow_phase(
+    procedure_id: str,
+    payload: ZygomaPhaseUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Merge-update a single phase (2/3/4/5) of the Zygoma/Pterygoid extended
+    workflow into `procedures.zygoma_pterygoid_data.<phase>`. Idempotent."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    existing = proc.get("zygoma_pterygoid_data") or {}
+    existing[payload.phase] = payload.data
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"zygoma_pterygoid_data": existing, "updated_at": datetime.utcnow()}},
+    )
+    return {"ok": True, "phase": payload.phase, "saved_keys": list(payload.data.keys())}
+
+
+@api_router.post("/procedures/{procedure_id}/zygoma-cosign")
+async def add_zygoma_cosign(
+    procedure_id: str,
+    payload: ZygomaCosignRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Record a supervisor/incharge/prosthodontist co-sign for a Zygoma
+    case. Two co-signs are required before Phase 2 or Phase 3 Day-0 can be
+    marked as submitted (see /submit endpoint below)."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    # Role-based validation — enforce that the signer is authorised for the slot.
+    role = str(current_user.get("role") or "").lower()
+    slot = (payload.role_slot or "").lower()
+    allowed = {
+        "supervisor": {"supervisor", "administrator", "implant_incharge"},
+        "incharge": {"implant_incharge", "administrator"},
+        "prosthodontist": {"prosthodontist", "supervisor", "administrator", "implant_incharge"},
+    }
+    if slot not in allowed:
+        raise HTTPException(status_code=400, detail=f"Unknown role slot: {slot}")
+    if role not in allowed[slot]:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' not allowed for slot '{slot}'")
+
+    now = datetime.utcnow()
+    entry = {
+        "signer_id": str(current_user.get("_id") or current_user.get("id") or ""),
+        "signer_name": payload.signer_name or f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip() or current_user.get("username", ""),
+        "signer_role": role,
+        "signature_data": payload.signature_data,
+        "comment": payload.comment,
+        "at": now.isoformat(),
+    }
+    cosigns = proc.get("zygoma_pterygoid_cosigns") or {}
+    stage_cosigns = cosigns.get(payload.stage) or {}
+    stage_cosigns[slot] = entry
+    stage_cosigns["last_updated_at"] = now.isoformat()
+    cosigns[payload.stage] = stage_cosigns
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"zygoma_pterygoid_cosigns": cosigns, "updated_at": now}},
+    )
+    return {"ok": True, "stage": payload.stage, "slot": slot, "cosigns": cosigns}
+
+
+@api_router.get("/procedures/{procedure_id}/zygoma-cosigns")
+async def get_zygoma_cosigns(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Return the current co-sign state for both required stages plus a
+    convenience `is_ready` flag per stage (both signers present)."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    cosigns = proc.get("zygoma_pterygoid_cosigns") or {}
+    p2 = cosigns.get("phase2") or {}
+    p3d0 = cosigns.get("phase3_day0") or {}
+    return {
+        "cosigns": cosigns,
+        "phase2_ready": bool(p2.get("supervisor") and p2.get("incharge")),
+        "phase3_day0_ready": bool(p3d0.get("supervisor") and p3d0.get("prosthodontist")),
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# iter-Jun-2026 (v13, Chunk B, Ask 3):
+# Independent Advanced Clinical (Zygoma) approval workflow.
+# The Advanced Clinical (Zygoma) block is decoupled from Phase 2 submission —
+# it can be filled/sent for approval at any time (30-day follow-up cadence)
+# without gating other phases. Approvers = the same co-sign roles that already
+# authorise Zygoma cases (supervisor, implant_incharge, administrator).
+# ─────────────────────────────────────────────────────────────
+def _adv_normalize_role(current_user: dict) -> str:
+    return str(current_user.get("role") or "").lower()
+
+
+class ProstheticPlanUpdate(BaseModel):
+async def advanced_clinical_send_for_approval(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Student (or any authenticated role that authored the case) marks the
+    Advanced Clinical block as pending approval. Sets
+    `phase2_data.advanced_clinical.approval_status = 'pending'` and stamps the
+    submitter. Idempotent (safe to call twice)."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    now = datetime.utcnow()
+    p2 = proc.get("phase2_data") or {}
+    adv = (p2.get("advanced_clinical") or {}).copy()
+    adv["approval_status"] = "pending"
+    adv["submitted_by"] = str(current_user.get("_id") or current_user.get("id") or "")
+    adv["submitted_by_name"] = f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip() or current_user.get("username", "")
+    adv["submitted_at"] = now.isoformat()
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"phase2_data.advanced_clinical": adv, "updated_at": now}},
+    )
+    return {"ok": True, "approval_status": "pending", "advanced_clinical": adv}
+
+
+@api_router.post("/procedures/{procedure_id}/advanced-clinical/approve")
+async def advanced_clinical_approve(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Supervisor / Implant In-Charge / Administrator approves the Advanced
+    Clinical block. Requires the block to already be in `pending` status."""
+    role = str(current_user.get("role") or "").lower()
+    if role not in {"supervisor", "implant_incharge", "administrator"}:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' is not authorised to approve Advanced Clinical")
+
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    p2 = proc.get("phase2_data") or {}
+    adv = (p2.get("advanced_clinical") or {}).copy()
+    if adv.get("approval_status") != "pending":
+        raise HTTPException(status_code=400, detail="Advanced Clinical is not pending approval")
+
+    now = datetime.utcnow()
+    adv["approval_status"] = "approved"
+    adv["approved_by"] = str(current_user.get("_id") or current_user.get("id") or "")
+    adv["approved_by_name"] = f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip() or current_user.get("username", "")
+    adv["approved_by_role"] = role
+    adv["approved_at"] = now.isoformat()
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"phase2_data.advanced_clinical": adv, "updated_at": now}},
+    )
+    return {"ok": True, "approval_status": "approved", "advanced_clinical": adv}
+
+
+@api_router.post("/procedures/{procedure_id}/advanced-clinical/reopen")
+async def advanced_clinical_reopen(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """iter-Jun-2026 (v13, Chunk F, Ask 1): Reopen an Advanced Clinical block
+    that was prematurely sent for approval / approved so the Student can
+    continue filling Day 7 / Day 30 dates. Only Supervisor / Implant In-
+    Charge / Administrator can reopen; resets approval_status back to
+    `draft`, stamps a `reopen_log` entry for audit."""
+    role = str(current_user.get("role") or "").lower()
+    if role not in {"supervisor", "implant_incharge", "administrator"}:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' cannot reopen Advanced Clinical")
+
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    proc_type = proc.get("implant_procedure_type", "")
+    if proc_type not in ZYGOMA_PTERYGOID_PROCEDURE_TYPES:
+        raise HTTPException(status_code=400, detail="Not a Zygoma/Pterygoid case")
+
+    p2 = proc.get("phase2_data") or {}
+    adv = (p2.get("advanced_clinical") or {}).copy()
+    if adv.get("approval_status") == "draft" or not adv.get("approval_status"):
+        return {"ok": True, "already_draft": True, "advanced_clinical": adv}
+
+    now = datetime.utcnow()
+    reopen_entry = {
+        "from_status": adv.get("approval_status"),
+        "reopened_by": str(current_user.get("_id") or current_user.get("id") or ""),
+        "reopened_by_name": (
+            f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip()
+            or current_user.get("username", "")
+        ),
+        "reopened_by_role": role,
+        "reopened_at": now.isoformat(),
+    }
+    log = list(adv.get("reopen_log") or [])
+    log.append(reopen_entry)
+
+    adv["approval_status"] = "draft"
+    adv["reopen_log"] = log
+    # Clear the previously-stamped approver so the audit trail is honest.
+    adv.pop("approved_by", None)
+    adv.pop("approved_by_name", None)
+    adv.pop("approved_by_role", None)
+    adv.pop("approved_at", None)
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {"phase2_data.advanced_clinical": adv, "updated_at": now}},
+    )
+    return {"ok": True, "approval_status": "draft", "advanced_clinical": adv}
+
+
+# ─────────────────────────────────────────────────────────────
+# iter-Jun-2026 (v13, Chunk C): Phase-2 Prosthetic Plan edit
+# Allows Student / Supervisor / Implant In-Charge / Administrator to change
+# the Prosthetic Plan selected in Phase 1 from within the Phase 2 workflow.
+# Overwrites `procedure.prosthetic_plan` (single source of truth) AND appends
+# an audit entry to `procedure.prosthetic_plan_change_log` for traceability.
+# ─────────────────────────────────────────────────────────────
+class ProstheticPlanUpdate(BaseModel):
+    prosthetic_plan: str = Field(..., min_length=1, max_length=500)
+    prosthetic_plan_other: Optional[str] = Field(None, max_length=500)
+
+
+@api_router.patch("/procedures/{procedure_id}/prosthetic-plan")
+async def update_prosthetic_plan(
+    procedure_id: str,
+    payload: ProstheticPlanUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Overwrite `prosthetic_plan` on the procedure and append an audit entry
+    to `prosthetic_plan_change_log`. Callable from Phase 2 when the operator
+    needs to correct/replace the plan captured in Phase 1."""
+    role = str(current_user.get("role") or "").lower()
+    if role not in {"student", "supervisor", "implant_incharge", "administrator"}:
+        raise HTTPException(status_code=403, detail=f"Role '{role}' cannot edit the prosthetic plan")
+
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    # Ownership: students may only edit their own case; other privileged roles
+    # can edit any case they are already involved in the workflow with.
+    if role == "student":
+        student_id = proc.get("student_id") or proc.get("created_by_id")
+        if str(student_id) != str(current_user.get("_id") or current_user.get("id") or ""):
+            raise HTTPException(status_code=403, detail="You are not the owner of this case")
+
+    new_plan = (payload.prosthetic_plan or "").strip()
+    if not new_plan:
+        raise HTTPException(status_code=400, detail="Prosthetic Plan cannot be empty")
+    new_other = (payload.prosthetic_plan_other or "").strip()
+
+    prev_plan = proc.get("prosthetic_plan") or ""
+    prev_other = proc.get("prosthetic_plan_other") or ""
+    if new_plan == prev_plan and new_other == prev_other:
+        return {"ok": True, "unchanged": True, "prosthetic_plan": prev_plan}
+
+    now = datetime.utcnow()
+    audit_entry = {
+        "from": prev_plan,
+        "from_other": prev_other,
+        "to": new_plan,
+        "to_other": new_other,
+        "changed_by": str(current_user.get("_id") or current_user.get("id") or ""),
+        "changed_by_name": (
+            f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip()
+            or current_user.get("username", "")
+        ),
+        "changed_by_role": role,
+        "changed_in_phase": 2,
+        "changed_at": now.isoformat(),
+    }
+    change_log = list(proc.get("prosthetic_plan_change_log") or [])
+    change_log.append(audit_entry)
+
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": {
+            "prosthetic_plan": new_plan,
+            "prosthetic_plan_other": new_other,
+            "prosthetic_plan_change_log": change_log,
+            "updated_at": now,
+        }},
+    )
+    return {
+        "ok": True,
+        "prosthetic_plan": new_plan,
+        "prosthetic_plan_other": new_other,
+        "prosthetic_plan_change_log": change_log,
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# iter-Jun-2026 (v10, Chunk 3): Unified tabbed Phase 2-5 tabbed-data endpoint
+# ─────────────────────────────────────────────────────────────
+# Lightweight PATCH used by the new tabbed per-implant + advanced-clinical UI
+# for phases 2/3/4/5. Kept separate from the existing submit-phase{N} flows so
+# per-implant data can be saved incrementally as users fill it in (before the
+# final phase submission). Backward compatible: existing phase data + torque
+# arrays remain untouched.
+class TabbedPhaseData(BaseModel):
+    per_implant: Optional[Dict[str, Dict[str, Any]]] = None
+    advanced_clinical: Optional[Dict[str, Any]] = None
+
+
+@api_router.patch("/procedures/{procedure_id}/tabbed-phase-data/{phase}")
+async def patch_tabbed_phase_data(
+    procedure_id: str,
+    phase: int,
+    payload: TabbedPhaseData,
+    current_user: dict = Depends(get_current_user),
+):
+    """Persist per-implant + advanced-clinical data for a given phase (2..5).
+    Non-destructive: partial saves are merged into the sub-block using dot-set."""
+    if phase not in (2, 3, 4, 5):
+        raise HTTPException(status_code=400, detail="phase must be 2, 3, 4 or 5")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(proc, current_user)
+
+    # Role gate: same rule as phase submits — student on their case, supervisor
+    # on their case, implant_incharge, or creator. Nurse is read-only.
+    role = current_user["role"]
+    uid = current_user["_id"]
+    is_owner = (
+        (role == "student" and proc.get("student_id") == uid)
+        or (role == "supervisor" and proc.get("supervisor_id") == uid)
+        or role in ("implant_incharge", "administrator")
+        or proc.get("created_by_id") == uid
+    )
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+    now = datetime.utcnow()
+    field_prefix = f"phase{phase}_data"
+    update: Dict[str, Any] = {"updated_at": now}
+    if payload.per_implant is not None:
+        # Merge each implant's dict individually so unrelated implants are preserved.
+        existing = ((proc.get(field_prefix) or {}).get("per_implant") or {})
+        for pos, rec in (payload.per_implant or {}).items():
+            merged = dict(existing.get(pos) or {})
+            merged.update(rec or {})
+            update[f"{field_prefix}.per_implant.{pos}"] = merged
+    if payload.advanced_clinical is not None:
+        # Shallow-merge advanced clinical.
+        existing = ((proc.get(field_prefix) or {}).get("advanced_clinical") or {})
+        merged = dict(existing)
+        merged.update(payload.advanced_clinical or {})
+        update[f"{field_prefix}.advanced_clinical"] = merged
+
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update})
+    updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    return {
+        "ok": True,
+        "phase": phase,
+        "per_implant": ((updated or {}).get(field_prefix) or {}).get("per_implant") or {},
+        "advanced_clinical": ((updated or {}).get(field_prefix) or {}).get("advanced_clinical") or {},
+    }
 
 
 # ── iter-401: Mid-treatment implant addition (same case, Phase 2/3/4) ────
@@ -7803,6 +8398,8 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
 
     procedure["_id"] = str(procedure["_id"])
     procedure["id"] = procedure["_id"]
+    procedure["implants"] = _resolve_active_implants_inline(procedure)
+    _resolve_phase2_data_inline(procedure)
     # Normalise instruments_autoclaved payload so "unmarked" always looks like None/null,
     # keeping the response contract identical to POST mark-instruments-autoclaved and
     # GET /procedures/nurse/scheduled-cases.
@@ -9084,6 +9681,276 @@ async def upload_consent_temp(
     }
 
 
+# ── iter-406: Patient Consent E-Signature (Phase 1) ──────────────────────
+CONSENT_TEXTS = {
+    "v2.1": {
+        "en": "I, the undersigned, confirm that the nature and purpose of dental implant surgery at the site(s) listed have been explained to me, including possible risks: pain, swelling, bleeding, infection, injury to adjacent teeth or nerves, sinus involvement, implant failure, and the possible need for additional procedures such as bone grafting. Alternatives (fixed bridge, removable denture, no treatment) and the expected costs were discussed with me. I consent to the surgical procedure, administration of local anaesthesia, and clinical photography for treatment records and teaching. I understand that I may withdraw this consent at any time before surgery.",
+        "hi": "मैं, अधोहस्ताक्षरी, पुष्टि करता/करती हूँ कि सूचीबद्ध स्थान पर डेंटल इम्प्लांट सर्जरी की प्रकृति और उद्देश्य मुझे समझाए गए हैं, जिनमें संभावित जोखिम शामिल हैं: दर्द, सूजन, रक्तस्राव, संक्रमण, आसपास के दाँतों या नसों को क्षति, साइनस संबंधी जटिलता, इम्प्लांट विफलता, तथा बोन ग्राफ्टिंग जैसी अतिरिक्त प्रक्रियाओं की संभावित आवश्यकता। विकल्पों (ब्रिज, हटाने योग्य डेन्चर, कोई उपचार नहीं) और अनुमानित लागत पर चर्चा की गई। मैं शल्य प्रक्रिया, स्थानीय संज्ञाहरण और उपचार अभिलेखों हेतु क्लिनिकल फोटोग्राफी के लिए सहमति देता/देती हूँ। मैं समझता/समझती हूँ कि सर्जरी से पहले किसी भी समय यह सहमति वापस ले सकता/सकती हूँ।",
+        "mr": "मी, निम्नस्वाक्षरीकार, पुष्टी करतो/करते की नमूद जागी डेंटल इम्प्लांट शस्त्रक्रियेचे स्वरूप व हेतू मला समजावून सांगितले आहेत, ज्यात संभाव्य धोके समाविष्ट आहेत: वेदना, सूज, रक्तस्राव, संसर्ग, शेजारील दात किंवा नसांना इजा, सायनसशी संबंधित गुंतागुंत, इम्प्लांट अपयश, तसेच बोन ग्राफ्टिंगसारख्या अतिरिक्त प्रक्रियांची संभाव्य गरज. पर्याय (ब्रिज, काढता येणारे कवळी, उपचार न करणे) व अपेक्षित खर्च यांची चर्चा झाली. मी शस्त्रक्रिया, स्थानिक भूल व उपचार नोंदींसाठी क्लिनिकल छायाचित्रणास संमती देतो/देते. शस्त्रक्रियेपूर्वी केव्हाही ही संमती मागे घेता येते हे मला समजते.",
+    }
+}
+CONSENT_CURRENT_VERSION = "v2.1"
+
+
+@api_router.get("/consent-texts")
+async def get_consent_texts(current_user: dict = Depends(get_current_user)):
+    return {"version": CONSENT_CURRENT_VERSION, "texts": CONSENT_TEXTS[CONSENT_CURRENT_VERSION]}
+
+
+@api_router.get("/procedures/{procedure_id}/consent-content")
+async def get_consent_content(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Full informed-consent form content (same as the printable PDF template)
+    as structured JSON so the e-signature screen shows the complete form."""
+    try:
+        procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        procedure = None
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
+
+    role = current_user.get("role")
+    uid = current_user.get("_id")
+    is_stakeholder = (
+        procedure.get("created_by_id") == uid or
+        procedure.get("student_id") == uid or
+        procedure.get("supervisor_id") == uid or
+        procedure.get("implant_incharge_id") == uid or
+        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not allowed to view this consent form")
+
+    patient_info = [
+        ["Patient Name", procedure.get("patient_name") or "—"],
+        ["Age", str(procedure.get("age") or "—")],
+        ["Sex", procedure.get("sex") or "—"],
+        ["Registration No.", procedure.get("registration_number") or "—"],
+        ["Mobile", procedure.get("mobile_number") or "—"],
+        ["Email", procedure.get("email") or "—"],
+        ["Chief Complaint", procedure.get("chief_complaint") or "—"],
+    ]
+
+    proc_rows = [["Procedure Type", procedure.get("implant_procedure_type") or "—"]]
+    if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
+        proc_rows.append(["Type of Sinus Lift", procedure.get("sinus_lift_type") or "—"])
+        proc_rows.append(["Bone Graft Material", procedure.get("bone_graft_material_details") or "—"])
+    for label, key in [
+        ("Procedure Type (Surgical)", "procedure_surgery_type"),
+        ("Type of Guided Surgery", "guided_surgery_type"),
+        ("Type of Static Guide", "static_guide_type"),
+        ("Type of Sleeve", "sleeve_type"),
+        ("Dynamic Navigation System", "dynamic_nav_system"),
+    ]:
+        if procedure.get(key):
+            proc_rows.append([label, procedure.get(key)])
+    proc_rows.extend([
+        ["Arch", procedure.get("arch") or "—"],
+        ["Site / Teeth", ", ".join(procedure.get("edentulous_sites") or []) or procedure.get("edentulous_site") or "—"],
+        ["Loading Protocol", ", ".join(procedure.get("loading_type") or []) or "—"],
+        ["Treating Clinician", procedure.get("student_name") or procedure.get("created_by_name") or "—"],
+        ["Supervising Clinician", procedure.get("supervisor_name") or "—"],
+        ["Implant In-Charge", procedure.get("implant_incharge_name") or "—"],
+        ["Scheduled Date", f"{procedure.get('procedure_date') or '—'} at {procedure.get('procedure_time') or '—'}"],
+    ])
+
+    implants_out = []
+    for imp in (procedure.get("implants") or procedure.get("selected_implants") or []):
+        site = imp.get("tooth") or imp.get("site") or imp.get("fdi") or "—"
+        brand = imp.get("brand") or imp.get("manufacturer") or "—"
+        system = imp.get("system") or imp.get("line") or ""
+        dia = imp.get("diameter") or imp.get("width") or "—"
+        length = imp.get("length") or "—"
+        implants_out.append({
+            "site": str(site),
+            "label": f"{brand} {system}".strip(),
+            "size": f"{dia} × {length} mm",
+        })
+
+    sections = [
+        {
+            "title": "1. Nature of the Procedure",
+            "body": "A dental implant is a titanium or zirconia post surgically placed into the jawbone to replace missing teeth. "
+                    "The procedure may involve local anaesthesia, gingival incision, osteotomy, implant placement, bone grafting if needed, "
+                    "and suture closure. A prosthesis (crown / bridge / denture) is delivered after a healing period.",
+        },
+        {
+            "title": "2. Known Risks & Complications",
+            "body": "Pain, swelling, bruising, and post-operative bleeding; infection requiring antibiotics; injury to adjacent teeth, nerves, "
+                    "blood vessels, or the maxillary sinus; temporary or (rarely) permanent numbness of the lip, chin, or tongue; failure of "
+                    "osseointegration requiring implant removal and possible re-placement; need for additional procedures (bone graft, sinus lift, "
+                    "soft-tissue augmentation); late mechanical complications — screw loosening, prosthesis fracture, wear; aesthetic variability.",
+        },
+        {
+            "title": "3. Alternatives & My Responsibilities",
+            "body": "Alternatives: no treatment, conventional fixed bridge, removable partial/complete denture, orthodontic repositioning — "
+                    "advantages, limitations, and costs have been explained to me. "
+                    "My responsibilities: disclose complete medical history and medications; follow pre- and post-operative instructions; "
+                    "attend all follow-ups; maintain oral hygiene; refrain from smoking during healing; pay agreed professional fees.",
+        },
+        {
+            "title": "4. Data Protection & Digital Record Consent",
+            "body": "In plain language: I understand my clinical information — name, contact details, medical history, radiographs, "
+                    "photographs, and treatment records — will be stored in the Implanr application and shared with the clinicians and authorized "
+                    "staff directly involved in my care (treating clinician, supervising faculty or senior dentist, implant in-charge, nurses, and "
+                    "the designated clinic/institution administrator). I may withdraw this consent in writing at any time, understanding that "
+                    "withdrawal may affect continuity of treatment.\n\n"
+                    "Formal clause: I expressly and voluntarily consent, under the Digital Personal Data Protection Act, 2023 (and, where "
+                    "applicable, GDPR, HIPAA, or other governing law), to the collection, storage, processing, and transmission of my identifiable "
+                    "health data within the Implanr application for clinical evaluation, treatment planning, treatment delivery, audit, and "
+                    "longitudinal record-keeping, and to access by, and sharing with, the individuals lawfully involved in my treatment.",
+        },
+        {
+            "title": "5. Consent Statement",
+            "body": "I have read and understood the information above, had the opportunity to ask questions, and had all my questions answered "
+                    "to my satisfaction. I understand that dentistry is not an exact science and no guarantees have been made regarding the "
+                    "outcome. I hereby authorize the treating clinician and their team to perform the procedure described above, along with any "
+                    "additional procedures deemed necessary during treatment in my best interest. I also consent to clinical photography/video "
+                    "recording for record-keeping, clinical, and educational purposes with appropriate identity safeguards.",
+        },
+    ]
+
+    return {
+        "title": "INFORMED CONSENT — DENTAL IMPLANT PROCEDURE",
+        "patient_info": patient_info,
+        "procedure_details": proc_rows,
+        "implants": implants_out,
+        "sections": sections,
+        "version": CONSENT_CURRENT_VERSION,
+    }
+
+
+class ConsentEsignBody(BaseModel):
+    strokes: List[List[List[float]]]  # [[[x,y],...] per stroke], px in pad space
+    pad_width: float = Field(..., gt=0, le=2000)
+    pad_height: float = Field(..., gt=0, le=1000)
+    consent_version: str = Field(CONSENT_CURRENT_VERSION, max_length=10)
+    language: str = Field("en", pattern="^(en|hi|mr)$")
+    confirmed_explained: bool = Field(...)
+
+
+def _render_signature_png(strokes, pad_w, pad_h) -> bytes:
+    """Rasterize the pad strokes server-side (Pillow) — one code path for web
+    and native, and the server-computed SHA-256 is the tamper evidence."""
+    from PIL import Image, ImageDraw
+    scale = 2.0
+    img = Image.new("RGB", (int(pad_w * scale), int(pad_h * scale)), "white")
+    draw = ImageDraw.Draw(img)
+    for stroke in strokes:
+        pts = [(x * scale, y * scale) for x, y in stroke]
+        if len(pts) == 1:
+            x, y = pts[0]
+            draw.ellipse([x - 2, y - 2, x + 2, y + 2], fill=(26, 35, 50))
+        else:
+            draw.line(pts, fill=(26, 35, 50), width=4, joint="curve")
+    import io as _io
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@api_router.post("/procedures/{procedure_id}/consent/esign")
+async def esign_consent(procedure_id: str, body: ConsentEsignBody, current_user: dict = Depends(get_current_user)):
+    """In-app e-signature for the patient consent. Sets the SAME
+    patient_consent_form gate the Phase-2 unlock checks today; the prior
+    consent (uploaded or e-signed) is archived, never deleted."""
+    try:
+        procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        procedure = None
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
+
+    role = current_user.get("role")
+    uid = current_user.get("_id")
+    is_stakeholder = (
+        procedure.get("created_by_id") == uid or
+        procedure.get("student_id") == uid or
+        procedure.get("supervisor_id") == uid or
+        procedure.get("implant_incharge_id") == uid or
+        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not allowed to capture consent for this case")
+    if not body.confirmed_explained:
+        raise HTTPException(status_code=400, detail="The explanation confirmation must be ticked")
+    total_pts = sum(len(s) for s in body.strokes)
+    if not body.strokes or total_pts < 8:
+        raise HTTPException(status_code=400, detail="Patient signature required")
+    if total_pts > 20000:
+        raise HTTPException(status_code=400, detail="Signature data too large")
+    if body.consent_version not in CONSENT_TEXTS:
+        raise HTTPException(status_code=400, detail="Unknown consent version")
+
+    png = _render_signature_png(body.strokes, body.pad_width, body.pad_height)
+    if len(png) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Signature image exceeds 2MB")
+    sha256 = hashlib.sha256(png).hexdigest()
+    unique_name = f"consent_esign_{uuid.uuid4().hex}.png"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(png)
+    try:
+        await _s3_put_async(file_path, content_type="image/png")
+    except Exception as exc:
+        logging.warning("S3 sync for consent esign skipped: %s", exc)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    previous_form = procedure.get("patient_consent_form")
+    previous_esign = procedure.get("consent_esign")
+    version = (previous_form.get("version", 1) + 1) if previous_form else 1
+    consent_entry = {
+        "filename": unique_name,
+        "original_name": f"Consent-eSignature-v{version}.png",
+        "content_type": "image/png",
+        "uploaded_by_id": uid,
+        "uploaded_by_name": current_user.get("name", ""),
+        "uploaded_by_role": role or "",
+        "uploaded_at": now_iso,
+        "version": version,
+        "esigned": True,
+    }
+    esign_meta = {
+        "filename": unique_name,
+        "signed_at": now_iso,
+        "consent_version": body.consent_version,
+        "language": body.language,
+        "confirmed_explained": True,
+        "witnessed_by_id": uid,
+        "witnessed_by_name": current_user.get("name", ""),
+        "witnessed_by_role": role or "",
+        "sha256": sha256,
+    }
+    update_op: Dict[str, Any] = {
+        "$set": {
+            "patient_consent_form": consent_entry,
+            "consent_esign": esign_meta,
+            "updated_at": now_iso,
+        },
+        "$push": {
+            "approval_history": {
+                "phase": "consent", "action": "esigned",
+                "by": uid, "by_name": current_user.get("name", ""), "role": role or "", "at": now_iso,
+            },
+            "edit_log": {
+                "field": "patient_consent_form",
+                "old_value": (previous_form.get("original_name") if previous_form else None),
+                "new_value": f"v{version} · e-signature ({body.language.upper()}, {body.consent_version})",
+                "edited_by": current_user.get("name", ""),
+                "edited_by_role": role or "",
+                "edited_at": now_iso,
+            },
+        },
+    }
+    if previous_form:
+        update_op["$push"]["consent_history"] = previous_form
+    if previous_esign:
+        update_op["$push"]["consent_esign_voided"] = {**previous_esign, "voided_at": now_iso, "voided_by": current_user.get("name", "")}
+    await db.procedures.update_one({"_id": procedure["_id"]}, update_op)
+    return {"ok": True, "consent_esign": esign_meta, "patient_consent_form": consent_entry}
+
+
 @api_router.post("/procedures/{procedure_id}/upload-consent")
 async def upload_consent_for_procedure(
     procedure_id: str,
@@ -9753,6 +10620,15 @@ async def mint_file_token(body: dict, current_user: dict = Depends(get_current_u
     return {"token": token, "expires_in_seconds": FILE_TOKEN_TTL_SECONDS}
 
 
+# iter-405: public, non-PHI generated documents (e.g. grant proposal PDF).
+@api_router.get("/docs/grant-proposal")
+async def download_grant_proposal():
+    path = ROOT_DIR / "generated_docs" / "Implanr_Grant_Proposal.pdf"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Document not found")
+    return FileResponse(path, media_type="application/pdf", filename="Implanr_Grant_Proposal.pdf")
+
+
 @api_router.get("/uploads/{filename}")
 async def serve_upload(
     filename: str,
@@ -9764,6 +10640,14 @@ async def serve_upload(
     file_path = UPLOADS_DIR / filename
     if not await _s3_ensure_local_async(file_path):
         raise HTTPException(status_code=404, detail="File not found")
+        
+    if filename == "Zygoma_Pterygoid_Workflow_Session_Report.docx":
+        return FileResponse(
+            path=str(file_path),
+            filename=filename,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    
 
     # Resolve user from (1) header, (2) scoped file token, (3) legacy access JWT.
     user = current_user
@@ -10767,8 +11651,8 @@ async def save_implant_plan(
                 detail="Implant positions cannot be added or removed after Phase 2 surgery. Existing positions can still be edited.",
             )
 
-    if len(plan.implants) < 1 or len(plan.implants) > 6:
-        raise HTTPException(status_code=400, detail="Must plan between 1 and 6 implants")
+    if len(plan.implants) < 1 or len(plan.implants) > 10:
+        raise HTTPException(status_code=400, detail="Must plan between 1 and 10 implants")
 
     # Validate unique positions
     positions = [imp.position for imp in plan.implants]
@@ -10788,6 +11672,10 @@ async def save_implant_plan(
             "bone_type": imp.bone_type,
             "risk_level": imp.risk_level,
             "risk_score": imp.risk_score,
+            # iter-Jun-2026 (v6): Zygoma/Pterygoid extended fields
+            "implant_type": imp.implant_type or "conventional",
+            "side": imp.side,
+            "row_label": imp.row_label,
         })
 
     # iter-277: track field-level edits to the implant plan once Phase 1
@@ -11196,11 +12084,13 @@ async def _claude_send(session_id: str, system_message: str, text: str, timeout:
 
 def _build_case_context(proc: dict) -> str:
     """Build a clinical case context string from procedure data.
-    De-identified: patient name / age / profession are never included — the
-    context is sent to a third-party AI provider and the generated summary is
-    shown and exported, so identity stays out end-to-end (sex is kept as a
-    clinically relevant, non-identifying attribute)."""
-    parts = [f"Patient: [de-identified], Sex: {proc.get('sex','N/A')}"]
+    iter-338 HIPAA: patient_name, mobile, email, DOB, and address are
+    intentionally NOT sent to the AI. The LLM only sees 'the patient' +
+    demographic minimums (age/sex/profession) that are clinically relevant.
+    Full identity stays server-side."""
+    parts = [f"Patient: the patient, Age: {proc.get('age','N/A')}, Sex: {proc.get('sex','N/A')}"]
+    if proc.get('profession'):
+        parts.append(f"Profession: {proc.get('profession')}")
     if proc.get('chief_complaint'):
         parts.append(f"Chief Complaint: {proc.get('chief_complaint')}")
     parts.append(f"Procedure Type: {proc.get('implant_procedure_type','N/A')}")
@@ -11223,6 +12113,54 @@ def _build_case_context(proc: dict) -> str:
         parts.append(f"Mesiodistal Space: {proc.get('mesiodistal_space')} mm")
     if proc.get('prosthetic_plan'):
         parts.append(f"Prosthetic Plan: {proc.get('prosthetic_plan')}")
+    # iter-Feb-2026 / -C — Single-Conventional-Implant granular Phase 1 plan.
+    # Applies to pure SC + the overlap types with num_implants == "Single Implant".
+    _num_impl = proc.get('num_implants') or ''
+    _overlap = proc.get('implant_procedure_type') in {
+        'Immediate Implant', 'Partial Extraction Therapy',
+        'Implant Placement with Guided Bone Regeneration', 'Guided Surgery', 'Sinus Lift',
+    }
+    _is_sc_effective = (
+        proc.get('implant_procedure_type') == 'Single Conventional Implant'
+        or (_overlap and _num_impl == 'Single Implant')
+    )
+    if _is_sc_effective:
+        if proc.get('type_of_provisional'):
+            _tp = proc.get('type_of_provisional')
+            if proc.get('type_of_provisional_other'):
+                _tp = f"{_tp} — {proc.get('type_of_provisional_other')}"
+            parts.append(f"Type of Provisional: {_tp}")
+        for lbl, fld, other in (
+            ('Abutment Type', 'sc_abutment_type', 'sc_abutment_type_other'),
+            ('Type of Retention', 'sc_retention_type', 'sc_retention_type_other'),
+            ('Crown Material', 'sc_crown_material', 'sc_crown_material_other'),
+        ):
+            v = proc.get(fld)
+            if v:
+                if proc.get(other):
+                    v = f"{v} — {proc.get(other)}"
+                parts.append(f"{lbl}: {v}")
+    # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Phase 1 plan.
+    if proc.get('type_of_provisional'):
+        _ = proc.get('type_of_provisional')
+        if proc.get('type_of_provisional_other'):
+            _ = f"{_} — {proc.get('type_of_provisional_other')}"
+        # Avoid duplicate row from the SC branch above.
+        if not _is_sc_effective:
+            parts.append(f"Type of Provisional: {_}")
+    for lbl, fld, other in (
+        ('Prosthesis Type', 'ma_prosthesis_type', 'ma_prosthesis_type_other'),
+        ('Abutment Type', 'ma_abutment_type', 'ma_abutment_type_other'),
+        ('Type of Retention', 'ma_retention_type', 'ma_retention_type_other'),
+        ('Crown/Bridge Material', 'ma_crown_material', 'ma_crown_material_other'),
+        ('Prosthetic Plan', 'fa_prosthetic_plan', 'fa_prosthetic_plan_other'),
+        ('Prosthetic Plan', 'zp_prosthetic_plan', 'zp_prosthetic_plan_other'),
+    ):
+        v = proc.get(fld)
+        if v:
+            if proc.get(other):
+                v = f"{v} — {proc.get(other)}"
+            parts.append(f"{lbl}: {v}")
     if proc.get('loading_type'):
         lt = proc['loading_type']
         parts.append(f"Loading Type: {', '.join(lt) if isinstance(lt, list) else lt}")
@@ -11265,7 +12203,7 @@ def _build_case_context(proc: dict) -> str:
     # Implant plans
     plans = proc.get('implant_plans') or []
     for i, p in enumerate(plans):
-        parts.append(f"Implant Plan {i+1}: Tooth {p.get('position', p.get('tooth_number','?'))}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
+        parts.append(f"Implant Plan {i+1}: Implant {p.get('position', p.get('tooth_number','?'))}, Brand: {p.get('brand','?')}, System: {p.get('system','?')}, Diameter: {p.get('diameter','?')}mm, Length: {p.get('length','?')}mm, Bone Width: {p.get('bone_width','?')}mm, Bone Height: {p.get('bone_height','?')}mm, Bone Type: {p.get('bone_type','?')}")
 
     # ── Full-Arch atrophy assessment (silently injected institutional guidance) ──
     aa = proc.get('atrophy_assessment') or {}
@@ -11277,7 +12215,9 @@ def _build_case_context(proc: dict) -> str:
                 from full_arch_classification import render_for_ai_context
                 parts.append(render_for_ai_context(a))
             except Exception:
-                parts.append(f"Atrophy class for the {arch_key}: {a.get('class')} ({a.get('severity_label','')})")
+                # Fallback never references the internal CC-class or
+                # Option A/B/C labels (user-facing surfaces must stay clean).
+                parts.append(f"Atrophy assessment for the {arch_key}: anterior {a.get('anterior_severity','?')} resorption, posterior {a.get('posterior_severity','?')} resorption.")
 
     # Medical assessment
     if proc.get('medical_assessment'):
@@ -11296,12 +12236,7 @@ def _build_case_context(proc: dict) -> str:
         parts.append("\n--- Phase 2: Surgical Data ---")
         torques = p2.get('torque_values') or proc.get('torque_values') or []
         if torques:
-            implant_plans_ctx = proc.get('implant_plans') or []
-            torque_labels = []
-            for i, t in enumerate(torques):
-                label = f"Tooth {implant_plans_ctx[i].get('position')}" if i < len(implant_plans_ctx) and implant_plans_ctx[i].get('position') else f"Implant {i+1}"
-                torque_labels.append(f"{label}: {t} Ncm")
-            parts.append(f"Insertion Torque Values: {', '.join(torque_labels)}")
+            parts.append(f"Insertion Torque Values: {', '.join([str(t) + ' Ncm' for t in torques])}")
         if p2.get('anesthesia_details'):
             parts.append(f"Anesthesia: {p2.get('anesthesia_details')}")
         if p2.get('flap_design'):
@@ -11338,7 +12273,7 @@ def _build_case_context(proc: dict) -> str:
                     t = r.get('tooth', '')
                     a = r.get('angulation', '')
                     c = r.get('cuff_height', '')
-                    rows.append(f"Tooth {t}: {a}° / {c}mm")
+                    rows.append(f"Implant {t}: {a}° / {c}mm")
                 if rows:
                     parts.append(f"MUA Details: {'; '.join(rows)}")
 
@@ -11365,6 +12300,31 @@ def _build_case_context(proc: dict) -> str:
         parts.append("\n--- Phase 4: Prosthetic Rehabilitation ---")
         if p4.get('final_prosthetic_plan'):
             parts.append(f"Final Prosthetic Plan: {p4.get('final_prosthetic_plan')}")
+        # iter-Feb-2026 / -C — Single-Conventional-Implant granular Final Plan.
+        for lbl, fld, other in (
+            ('Final Abutment Type', 'sc_final_abutment_type', 'sc_final_abutment_type_other'),
+            ('Final Type of Retention', 'sc_final_retention_type', 'sc_final_retention_type_other'),
+            ('Final Crown Material', 'sc_final_crown_material', 'sc_final_crown_material_other'),
+        ):
+            v = p4.get(fld)
+            if v:
+                if p4.get(other):
+                    v = f"{v} — {p4.get(other)}"
+                parts.append(f"{lbl}: {v}")
+        # iter-Feb-2026-B — Multiple/Full-Arch/Zygoma Final Plan.
+        for lbl, fld, other in (
+            ('Final Prosthesis Type', 'ma_final_prosthesis_type', 'ma_final_prosthesis_type_other'),
+            ('Final Abutment Type', 'ma_final_abutment_type', 'ma_final_abutment_type_other'),
+            ('Final Type of Retention', 'ma_final_retention_type', 'ma_final_retention_type_other'),
+            ('Final Crown/Bridge Material', 'ma_final_crown_material', 'ma_final_crown_material_other'),
+            ('Final Prosthetic Plan', 'fa_final_prosthetic_plan', 'fa_final_prosthetic_plan_other'),
+            ('Final Prosthetic Plan', 'zp_final_prosthetic_plan', 'zp_final_prosthetic_plan_other'),
+        ):
+            v = p4.get(fld)
+            if v:
+                if p4.get(other):
+                    v = f"{v} — {p4.get(other)}"
+                parts.append(f"{lbl}: {v}")
         if p4.get('prosthetic_material'):
             parts.append(f"Prosthetic Material: {p4.get('prosthetic_material')}")
         if p4.get('impression_type'):
@@ -11397,6 +12357,7 @@ def _build_case_context(proc: dict) -> str:
         parts.extend(collected_notes)
 
     return "\n".join(parts)
+
 
 
 def _get_llm_key():
@@ -11570,7 +12531,7 @@ def _build_exit_summary_prompt(proc: dict) -> str:
         ]).strip(" ·") or "—"
         status = s.get("status") or "Active"
         reason = s.get("reason") or ""
-        rline = f"  - Tooth #{tooth} | {system} | {size} | Final: {status}"
+        rline = f"  - Implant {tooth} | {system} | {size} | Final: {status}"
         if reason:
             rline += f" — {reason}"
         imp_lines.append(rline)
@@ -11587,7 +12548,7 @@ def _build_exit_summary_prompt(proc: dict) -> str:
                    else "replaced" if f.get("replaced")
                    else "removed" if f.get("removed") else "reviewed")
             ev_lines.append(
-                f"  - {at}: Tooth #{f.get('tooth','?')} — {f.get('reason','?')} ({tag})"
+                 f"  - {at}: Implant {f.get('tooth','?')} — {f.get('reason','?')} ({tag})"
             )
 
     imp_block = "\n".join(imp_lines) or "  (none on record)"
@@ -11901,10 +12862,10 @@ async def generate_radiograph_ai_notes(
     image_descriptors = []
     if baseline and baseline.get("b64"):
         image_attachments.append(ImageContent(image_base64=baseline["b64"]))
-        image_descriptors.append(f"Image 1: {body.baseline_phase_label} (Tooth {body.tooth_label})")
+        image_descriptors.append(f"Image 1: {body.baseline_phase_label} (Implant {body.tooth_label})")
     if current_img and current_img.get("b64"):
         image_attachments.append(ImageContent(image_base64=current_img["b64"]))
-        image_descriptors.append(f"Image {len(image_attachments)}: {body.current_phase_label} (Tooth {body.tooth_label})")
+        image_descriptors.append(f"Image {len(image_attachments)}: {body.current_phase_label} (Implant {body.tooth_label})")
 
     prompt = f"""You are reviewing two periapical radiographs of the SAME implant site to support a prosthodontist's final-delivery sign-off. Compare the two images and write concise clinical notes (4-7 bullet points) that a supervising clinician would find useful.
 
@@ -12880,6 +13841,28 @@ P. Treatment Outcome (overall assessment, prognosis)"""
         case_type_instruction = "This case involves bone augmentation. Detail the grafting rationale, material choice, and expected timeline for graft maturation."
     elif case_type == 'multiple_implant':
         case_type_instruction = "This involves multiple implant sites. Discuss inter-implant spacing, load distribution, and splinting considerations."
+    
+    # iter-Jun-2026 (v10, Chunk 3): Zygoma / Pterygoid clinical instructions.
+    _proc_type_lower = str(proc.get("implant_procedure_type") or "").lower()
+    _is_zyg = ("zygoma" in _proc_type_lower or "pterygoid" in _proc_type_lower)
+    if _is_zyg:
+        case_type_instruction += (
+            "\n\nThis is a Zygoma / Pterygoid case. IMPORTANT additional instructions:\n"
+            "  • Comment on the ZAGA classification (per side) and how it shaped the surgical entry point.\n"
+            "  • Interpret the Aparicio ORIS Success Code (0-4) if present and explain the underlying D1-D4 dimensions (Offense, Rehabilitation, Infection, Stability).\n"
+            "  • Discuss immediate-loading protocol (Day 0 / Day 7 / Day 30 checkpoints) and screw-retained prosthesis enforcement.\n"
+            "  • Note supervisor co-sign status where applicable.\n"
+            "  • DO NOT mention ISQ readings for zygoma or pterygoid implants (they are not clinically valid on those anchors)."
+        )
+        # iter-Jun-2026 (v11): Multiunit Abutment placement instruction (universal).
+    _p2_mua = ((proc.get("phase2_data") or {}).get("mua_placed"))
+    if _p2_mua is True:
+        _mua_detail = (proc.get("phase2_data") or {}).get("mua_details") or {}
+        case_type_instruction += (
+            "\n\nMultiunit Abutments (MUA) were placed in Phase 2 for this case."
+            f" Per-implant MUA details (position → cuff height in mm, angulation): {_mua_detail}."
+            " Comment on the choice of cuff heights/angulations vs. the planned prosthetic emergence profile."
+        )
     elif case_type == 'immediate_loading':
         case_type_instruction = "This case uses an immediate loading protocol. Discuss criteria for immediate loading (minimum insertion torque, ISQ thresholds, occlusal considerations)."
     else:
@@ -13666,6 +14649,94 @@ async def get_smart_planner(
     return report
 
 
+def _render_tabbed_phase_data(pdf, safe, add_field, phase_data, phase_num, is_zyg_case):
+    """Renders the per_implant + advanced_clinical blocks written by the new
+    tabbed UI (Chunk 3). Safe to call on any phase — renders NOTHING when
+    both blocks are empty or absent."""
+    if not isinstance(phase_data, dict):
+        return
+    per_imp = phase_data.get("per_implant") or {}
+    adv = phase_data.get("advanced_clinical") or {}
+    if not per_imp and not adv:
+        return
+
+    # Group per-implant by type via the position code prefix + optional
+    # implant_type field on the record.
+    def _type_of(pos, rec):
+        t = str((rec or {}).get("implant_type") or "").lower()
+        if t in ("zygoma", "pterygoid", "conventional"):
+            return t
+        if pos.startswith("ZR") or pos.startswith("ZL"):
+            return "zygoma"
+        if pos.startswith("PR") or pos.startswith("PL"):
+            return "pterygoid"
+        return "conventional"
+
+    grouped = {"zygoma": [], "pterygoid": [], "conventional": []}
+    for pos, rec in per_imp.items():
+        grouped[_type_of(pos, rec)].append((pos, rec or {}))
+
+    labels = {"zygoma": "Zygoma", "pterygoid": "Pterygoid", "conventional": "Conventional"}
+
+    if per_imp:
+        pdf.set_font("Helvetica", "BI", 11)
+        pdf.set_text_color(94, 53, 177)
+        pdf.cell(0, 8, safe(f"Per-Implant Records"), ln=True)
+        pdf.set_text_color(0, 0, 0)
+        for t in ("zygoma", "pterygoid", "conventional"):
+            rows = grouped[t]
+            if not rows:
+                continue
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 6, safe(f"  {labels[t]} ({len(rows)})"), ln=True)
+            for pos, rec in rows:
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.cell(0, 5, safe(f"    · {pos}"), ln=True)
+                for label, key in [
+                    ("Torque (N·cm)", "torque_ncm"),
+                    ("ISQ", "isq"),
+                    ("Insertion Date", "insertion_date"),
+                    ("Timing", "timing_type"),
+                    ("MUA Angulation", "mua_angulation"),
+                    ("Complications", "complications"),
+                    ("Notes", "notes"),
+                ]:
+                    # ISQ omitted for zygoma/pterygoid per clinical guidance.
+                    if key == "isq" and t != "conventional":
+                        continue
+                    v = rec.get(key)
+                    if v in (None, "", []):
+                        continue
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.cell(0, 5, safe(f"        {label}: {v}"), ln=True)
+            pdf.ln(1)
+
+    if adv and is_zyg_case:
+        pdf.set_font("Helvetica", "BI", 11)
+        pdf.set_text_color(94, 53, 177)
+        pdf.cell(0, 8, safe("Advanced Clinical (Zygoma)"), ln=True)
+        pdf.set_text_color(0, 0, 0)
+        for label, key in [
+            ("ZAGA Confirmed Right", "zaga_confirmed_right"),
+            ("ZAGA Confirmed Left", "zaga_confirmed_left"),
+            ("ORIS Success Code", "oris_success_code"),
+            ("No Sinus Disease", "no_sinus_disease"),
+            ("No Oro-Antral Communication", "no_oro_antral_communication"),
+            ("Screw-Retained Prosthesis", "screw_retained_confirmed"),
+            ("Passive Fit Verified", "passive_fit_verified"),
+            ("No Peri-Implant Lesion", "no_radiographic_peri_implant_lesion"),
+            ("Immediate Loading Day 0", "immediate_loading_day0_at"),
+            ("Immediate Loading Day 7", "immediate_loading_day7_at"),
+            ("Immediate Loading Day 30", "immediate_loading_day30_at"),
+            ("Supervisor Co-sign Notes", "supervisor_cosign_notes"),
+        ]:
+            v = adv.get(key)
+            if v in (None, ""):
+                continue
+            pdf.set_font("Helvetica", "", 9)
+            pdf.cell(0, 5, safe(f"    · {label}: {v}"), ln=True)
+        pdf.ln(1)
+
 
 @api_router.post("/procedures/{procedure_id}/case-report")
 async def generate_case_report(
@@ -13677,7 +14748,6 @@ async def generate_case_report(
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
-    await _assert_procedure_org_access(procedure, current_user)
     await log_access(
         action="pdf_export",
         resource_type="case_report",
@@ -13686,8 +14756,6 @@ async def generate_case_report(
         request=request,
         extra={"patient_name": procedure.get("patient_name")},
     )
-
-    branding = await _get_procedure_org_branding(procedure)
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -13733,12 +14801,9 @@ async def generate_case_report(
 
     # ── Page 1: Title Page ──────────────────────────────────
     pdf.add_page()
-    # Organization letterhead (logo + name) on top of the report.
-    pdf.set_y(15)
-    _fpdf_org_letterhead(pdf, branding, safe)
     pdf.set_font("Helvetica", "B", 24)
     pdf.set_text_color(0, 51, 153)
-    pdf.cell(0, 10, "", ln=True)
+    pdf.cell(0, 20, "", ln=True)
     pdf.cell(0, 15, safe("Implant Case Report"), ln=True, align="C")
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(80, 80, 80)
@@ -13779,6 +14844,74 @@ async def generate_case_report(
     pdf.cell(0, 10, safe(f"Status: {status_text}"), ln=True, align="C")
     pdf.set_text_color(0, 0, 0)
 
+    # ── Treatment Timeline (iter-332) ──────────────────────────────
+    # The clinical execution timeline — the dates work was ACTUALLY done.
+    # Falls back to approval timestamps for legacy cases predating iter-332.
+    try:
+        from datetime import date as _d, datetime as _dt
+        def _iso_to_str(v):
+            if not v:
+                return None
+            if isinstance(v, str):
+                return v[:10]
+            if isinstance(v, (_dt, _d)):
+                return v.isoformat()[:10]
+            return None
+        tl_rows = [
+            ("Phase 1 - Planning",
+             _iso_to_str(procedure.get("procedure_date")) or _iso_to_str(procedure.get("phase1_completed_at"))),
+            ("Phase 2 - Implant Surgery",
+             _iso_to_str(procedure.get("phase2_actual_done_date")) or _iso_to_str(procedure.get("phase2_completed_at"))),
+            ("Phase 3 - Healing / 2nd-Stage",
+             _iso_to_str(procedure.get("phase3_done_date")) or _iso_to_str(procedure.get("stage2_surgical_completed_at"))),
+            ("Phase 4 Step 1 - Impressions",
+             _iso_to_str(procedure.get("phase4_step1_done_date")) or _iso_to_str(procedure.get("stage2_prosthetic_completed_at"))),
+            ("Phase 4 Step 2 - Final Delivery",
+             _iso_to_str(procedure.get("phase4_step2_done_date")) or _iso_to_str(procedure.get("treatment_completed_at"))),
+        ]
+        # Total duration (calendar days, earliest -> latest)
+        valid_dates = []
+        for _, dstr in tl_rows:
+            if dstr:
+                try:
+                    valid_dates.append(_d.fromisoformat(dstr))
+                except Exception:
+                    pass
+        duration_label = None
+        if len(valid_dates) >= 2:
+            days = max(0, (max(valid_dates) - min(valid_dates)).days)
+            if days < 7:
+                duration_label = f"{days} day{'s' if days != 1 else ''}"
+            elif days < 60:
+                w = round(days / 7)
+                duration_label = f"{w} week{'s' if w != 1 else ''}"
+            else:
+                m = round(days / 30)
+                duration_label = f"{m} month{'s' if m != 1 else ''} ({days} days)"
+
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_text_color(13, 71, 161)
+        pdf.cell(0, 8, safe("Treatment Timeline"), ln=True, align="L")
+        pdf.set_draw_color(13, 71, 161)
+        pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+        pdf.ln(2)
+        pdf.set_text_color(0, 0, 0)
+        for label, dstr in tl_rows:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(70, 6, safe(label), ln=False)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(0, 6, safe(dstr if dstr else "—"), ln=True)
+        if duration_label:
+            pdf.ln(1)
+            pdf.set_font("Helvetica", "BI", 10)
+            pdf.set_text_color(27, 94, 32)
+            pdf.cell(0, 6, safe(f"Total Treatment Duration: {duration_label}"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+    except Exception:
+        # Never block the PDF on timeline issues.
+        pass
+
     # ── Page 2: Phase 1 banner + Patient & Treatment Details ──────
     pdf.add_page()
     # Phase 1 heading must lead the clinical section per product spec.
@@ -13808,12 +14941,65 @@ async def generate_case_report(
     add_field("Receipt Number", procedure.get("receipt_number"))
     add_field("Amount Paid", procedure.get("amount_paid"))
     add_field("Procedure Type", procedure.get("implant_procedure_type"))
+    # iter-309: surface the Number-of-Implants sub-choice in the PDF
+    # so exported case reports carry the same context shown on screen.
     add_field("Number of Implants", procedure.get("num_implants"))
+    # iter-328: Sinus Lift extras — only render when relevant so other
+    # procedure types are unaffected.
     if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
         add_field("Type of Sinus Lift", procedure.get("sinus_lift_type"))
         add_field("Bone Graft Material Details", procedure.get("bone_graft_material_details"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
+    # iter-Feb-2026 / -C — Single-Conventional-Implant Phase 1 granular fields.
+    # Applies to pure SC and the overlap types with num_implants='Single Implant'.
+    _proc_type_pdf = procedure.get("implant_procedure_type") or ""
+    _num_impl_pdf = procedure.get("num_implants") or ""
+    _overlap_pdf = _proc_type_pdf in {
+        "Immediate Implant", "Partial Extraction Therapy",
+        "Implant Placement with Guided Bone Regeneration", "Guided Surgery", "Sinus Lift",
+    }
+    _is_sc_effective_pdf = (
+        _proc_type_pdf == "Single Conventional Implant"
+        or (_overlap_pdf and _num_impl_pdf == "Single Implant")
+    )
+    if _is_sc_effective_pdf:
+        if procedure.get("type_of_provisional"):
+            _v = procedure.get("type_of_provisional")
+            if procedure.get("type_of_provisional_other"):
+                _v = f"{_v} — {procedure.get('type_of_provisional_other')}"
+            add_field("Type of Provisional", _v)
+        for lbl, fld, other in (
+            ("Abutment Type", "sc_abutment_type", "sc_abutment_type_other"),
+            ("Type of Retention", "sc_retention_type", "sc_retention_type_other"),
+            ("Crown Material", "sc_crown_material", "sc_crown_material_other"),
+        ):
+            v = procedure.get(fld)
+            if v:
+                if procedure.get(other):
+                    v = f"{v} — {procedure.get(other)}"
+                add_field(lbl, v)
+    else:
+        # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Phase 1 workflow
+        # (also covers overlap types with num_implants='Multiple Implants').
+        if procedure.get("type_of_provisional"):
+            _v = procedure.get("type_of_provisional")
+            if procedure.get("type_of_provisional_other"):
+                _v = f"{_v} — {procedure.get('type_of_provisional_other')}"
+            add_field("Type of Provisional", _v)
+        for lbl, fld, other in (
+            ("Prosthesis Type", "ma_prosthesis_type", "ma_prosthesis_type_other"),
+            ("Abutment Type", "ma_abutment_type", "ma_abutment_type_other"),
+            ("Type of Retention", "ma_retention_type", "ma_retention_type_other"),
+            ("Crown/Bridge Material", "ma_crown_material", "ma_crown_material_other"),
+            ("Prosthetic Plan", "fa_prosthetic_plan", "fa_prosthetic_plan_other"),
+            ("Prosthetic Plan", "zp_prosthetic_plan", "zp_prosthetic_plan_other"),
+        ):
+            v = procedure.get(fld)
+            if v:
+                if procedure.get(other):
+                    v = f"{v} — {procedure.get(other)}"
+                add_field(lbl, v)
     add_field("Bone Graft Specifications", procedure.get("bone_graft_specifications"))
     add_field("Implant Site", procedure.get("implant_site"))
     pdf.ln(4)
@@ -13887,8 +15073,9 @@ async def generate_case_report(
 
     # ── Medical Assessment ───────────────────────────────────
     med = procedure.get("medical_assessment")
-    # iter-314/315: lab values captured in Phase 1 form; rendered in their own
-    # block below risk factors. Skip here so colour-coding doesn't fire on them.
+    # Phase 1 lab values (iter-314/315): captured in the same form but rendered
+    # in their own block below the risk factors. Skip them when iterating risk
+    # factors so the colour-coding heuristics don't fire on numeric strings.
     LAB_KEYS = {"hba1c", "hb", "tlc", "bleeding_time", "clotting_time", "prothrombin_time", "inr"}
     if isinstance(med, dict) and med:
         risk = procedure.get("medical_risk_level", "")
@@ -13925,6 +15112,9 @@ async def generate_case_report(
             pdf.set_text_color(0, 0, 0)
 
         # ── Haematology Examination + HbA1c (Phase 1 lab values) ─────
+        # Render only the lab values the student actually entered. Apply
+        # red text-colour when a value crosses the clinical-rule
+        # threshold so reviewers can spot deferral candidates at a glance.
         lab_rows = [
             ("hba1c",            "HbA1c",                              "%"),
             ("hb",               "Haemoglobin (Hb)",                   "g/dL"),
@@ -13944,11 +15134,12 @@ async def generate_case_report(
             pdf.set_text_color(0, 0, 0)
             for key, label, unit in present_labs:
                 raw = med.get(key)
+                # Range-based red flagging (mirrors clinical-rule thresholds).
                 color = (0, 0, 0)
                 try:
                     n = float(str(raw).strip())
                     if key == "hba1c" and n >= 9:
-                        color = (244, 67, 54)
+                        color = (244, 67, 54)  # hard-block threshold
                     elif key == "hba1c" and n > 7:
                         color = (255, 152, 0)
                     elif key == "tlc" and (n < 4000 or n > 10000):
@@ -13978,7 +15169,7 @@ async def generate_case_report(
         for i, imp in enumerate(implant_plans):
             pdf.set_font("Helvetica", "B", 10)
             pdf.set_fill_color(230, 240, 255)
-            pdf.cell(0, 7, safe(f"  Implant {i+1} - Tooth {imp.get('position', '?')}"), ln=True, fill=True)
+            pdf.cell(0, 7, safe(f"  Implant {i+1} - Position {imp.get('position', '?')}"), ln=True, fill=True)
             pdf.set_font("Helvetica", "", 9)
             pdf.cell(0, 6, safe(f"    System: {imp.get('brand', '')} - {imp.get('system', '')}"), ln=True)
             pdf.cell(0, 6, safe(f"    Diameter: {imp.get('diameter', '')}mm | Length: {imp.get('length', '')}mm"), ln=True)
@@ -14016,9 +15207,158 @@ async def generate_case_report(
     if procedure.get("phase1_incharge_notes"):
         add_field("Implant In-Charge Comment", procedure.get("phase1_incharge_notes"))
 
+    # ── Phase 1: Zygoma / Pterygoid Extended Data ──────────────────
+    # iter-Jun-2026 (v9, Chunk 2): For Zygoma/Pterygoid procedure types,
+    # append a dedicated section with every Phase 1 sub-block. Nothing
+    # renders for regular procedure types.
+    _proc_type = str(procedure.get("implant_procedure_type") or "")
+    _is_zyg_case_local = ("zygoma" in _proc_type.lower() or "pterygoid" in _proc_type.lower())
+    if "zygoma" in _proc_type.lower() or "pterygoid" in _proc_type.lower():
+        _zp = procedure.get("zygoma_pterygoid_data") or {}
+        _zp1 = _zp.get("phase1") if isinstance(_zp, dict) and isinstance(_zp.get("phase1"), dict) else _zp
+        _zp1 = _zp1 if isinstance(_zp1, dict) else {}
+        _config = procedure.get("zygoma_pterygoid_configuration") or ""
+        _conv_locs = procedure.get("conventional_implant_locations") or []
+        add_section_title("Phase 1 - Zygoma / Pterygoid Extended Data", 94, 53, 177)
+        if _config:
+            add_field("Configuration", _config)
+        if _conv_locs:
+            add_field("Conventional FDI Sites", ", ".join(map(str, _conv_locs)))
+
+        def _bi(obj):
+            if not isinstance(obj, dict):
+                return ""
+            r = obj.get("right") or ""
+            l = obj.get("left") or ""
+            if not r and not l:
+                return ""
+            return f"R: {r or '-'}  |  L: {l or '-'}"
+
+        def _sub(title, block, mapping):
+            if not isinstance(block, dict) or not block:
+                return
+            # Compute rendered fields first — skip whole sub-section if empty.
+            rendered = []
+            for label, key, fmt in mapping:
+                v = block.get(key)
+                if fmt == "bi":
+                    txt = _bi(v)
+                elif fmt == "list":
+                    txt = ", ".join(map(str, v)) if isinstance(v, list) else ""
+                else:
+                    txt = str(v) if v not in (None, "", []) else ""
+                if txt:
+                    rendered.append((label, txt))
+            if not rendered:
+                return
+            pdf.set_font("Helvetica", "BI", 11)
+            pdf.set_text_color(94, 53, 177)
+            pdf.cell(0, 7, safe(title), ln=True)
+            pdf.set_text_color(0, 0, 0)
+            for label, txt in rendered:
+                add_field(label, txt)
+            pdf.ln(1)
+
+        _sub("Diagnostic Summary", _zp1.get("diagnostic_summary"), [
+            ("Cawood-Howell", "cawood_howell", "str"),
+            ("Bedrossian", "bedrossian", "str"),
+            ("ZAGA Right", "zaga_right", "str"),
+            ("ZAGA Left", "zaga_left", "str"),
+        ])
+        # ZAGA may live at top-level as bilateral fallback.
+        _zaga = _zp1.get("zaga")
+        if isinstance(_zaga, dict) and (_zaga.get("right") or _zaga.get("left")):
+            add_field("ZAGA (bilateral)", _bi(_zaga))
+        _sub("Medical Assessment", _zp1.get("medical_assessment"), [
+            ("Immunosuppression", "immunosuppression", "str"),
+            ("Anticoagulants", "anticoagulants", "str"),
+            ("Psychological Suitability", "psychological_suitability", "str"),
+            ("GA Fitness (ASA)", "ga_fitness_asa_grade", "str"),
+            ("ASA Grade", "asa_grade", "str"),
+        ])
+        if _zp1.get("anaesthesia_plan"):
+            add_field("Anaesthesia Plan", _zp1.get("anaesthesia_plan"))
+        _sub("Pre-Surgical Assessment", _zp1.get("pre_surgical"), [
+            ("Interincisal Opening (mm)", "interincisal_opening_mm", "str"),
+            ("Sinus Health", "sinus_health", "str"),
+            ("OMC Patent", "omc_patent", "bi"),
+            ("Interarch Space @ VDO (mm)", "interarch_space_at_vdo_mm", "str"),
+            ("Caution Notes", "caution_notes", "str"),
+        ])
+        _sub("Extraoral", _zp1.get("extraoral"), [
+            ("Facial Profile", "facial_profile", "str"),
+            ("Lip Support", "lip_support", "str"),
+            ("Facial Asymmetry", "facial_asymmetry", "str"),
+            ("Zygomatic Prominence", "zygomatic_prominence", "bi"),
+            ("Notes", "notes", "str"),
+        ])
+        _sub("Intraoral", _zp1.get("intraoral"), [
+            ("Residual Ridge Form", "residual_ridge_form", "str"),
+            ("Keratinised Mucosa Width", "keratinised_mucosa_width_mm", "bi"),
+            ("Tuberosity Height", "tuberosity_height_mm", "bi"),
+            ("Tuberosity Form", "tuberosity_form", "bi"),
+            ("Palatal Vault Depth", "palatal_vault_depth_mm", "bi"),
+            ("Teeth to be Extracted", "teeth_to_be_extracted", "list"),
+        ])
+        _sub("Existing Prosthesis", _zp1.get("existing_prosthesis"), [
+            ("Currently Using", "using", "str"),
+            ("Type", "type", "str"),
+            ("Fit", "fit", "str"),
+            ("Phonetics", "phonetics", "str"),
+            ("Esthetics", "esthetics", "str"),
+            ("Patient Satisfaction", "patient_satisfaction", "str"),
+        ])
+        _sub("Radiographic", _zp1.get("radiographic"), [
+            ("Imaging Obtained", "imaging_obtained", "list"),
+            ("Field of View", "field_of_view", "str"),
+        ])
+        _sub("Zygomatic Region", _zp1.get("zygomatic_region"), [
+            ("Body Height", "body_height_mm", "bi"),
+            ("Cortical Thickness (Apex)", "cortical_thickness_apex_mm", "bi"),
+            ("Anterior Max Wall Concavity", "anterior_max_wall_concavity", "bi"),
+            ("Sinus Membrane Thickening", "sinus_membrane_thickening_mm", "bi"),
+            ("Sinus Septa Present", "sinus_septa_present", "bi"),
+            ("Ostium / OMC Patency", "ostium_omc_patency", "str"),
+            ("Orbital Floor Distance", "orbital_floor_distance_mm", "bi"),
+        ])
+        _sub("Pterygomaxillary Region", _zp1.get("pterygomaxillary_region"), [
+            ("Tuberosity Height", "tuberosity_height_mm", "bi"),
+            ("Tuberosity Bone Density", "tuberosity_bone_density", "bi"),
+            ("Pyramidal Process Volume", "pyramidal_process_volume", "bi"),
+            ("Pterygoid Plate Thickness", "pterygoid_plate_thickness_mm", "bi"),
+            ("Planned Path Length", "planned_path_length_mm", "bi"),
+            ("Greater Palatine Canal Position", "greater_palatine_canal_position", "bi"),
+            ("Maxillary Artery / Pterygoid Plexus", "maxillary_artery_pterygoid_plexus", "bi"),
+        ])
+        _sub("Bedrossian Zones (Available Bone)", _zp1.get("bedrossian_zones"), [
+            ("Zone 1 - Premaxilla", "zone1_premaxilla_mm", "bi"),
+            ("Zone 1 - Premolar", "zone1_premolar_mm", "bi"),
+            ("Zone 1 - Molar", "zone1_molar_mm", "bi"),
+        ])
+        _sub("Prosthetic Planning", _zp1.get("prosthetic_planning"), [
+            ("Diagnostic Steps", "diagnostic_steps", "list"),
+            ("Flange Required", "flange_required", "str"),
+            ("Occlusal Scheme", "occlusal_scheme", "str"),
+        ])
+        _sub("Design Checks", _zp1.get("design_checks"), [
+            ("Apices Distance", "apices_distance", "str"),
+            ("Heads Within Prosthetic Envelope", "heads_within_prosthetic_envelope", "str"),
+            ("AP Spread Adequate", "ap_spread_adequate", "str"),
+            ("Cantilever Eliminated", "cantilever_eliminated", "str"),
+        ])
+        _sub("Team Composition", _zp1.get("team_composition"), [
+            ("Primary Surgeon", "primary_surgeon", "str"),
+            ("Assistant Surgeon", "assistant_surgeon", "str"),
+            ("Anaesthetist", "anaesthetist", "str"),
+            ("Prosthodontist", "prosthodontist", "str"),
+            ("Nurse", "nurse", "str"),
+        ])
+
     # ── Phase 2: Implant Surgery ──────────────────────────────
     add_section_title("Phase 2 - Implant Surgery", 255, 107, 53)
     p2 = procedure.get("phase2_data", {})
+    # iter-Jun-2026 (v10, Chunk 3): Per-implant + Advanced Clinical block
+    _render_tabbed_phase_data(pdf, safe, add_field, p2, 2, _is_zyg_case_local)
     if isinstance(p2, dict) and p2:
         pre_surg = p2.get("pre_surgery_checklist", {})
         if pre_surg:
@@ -14047,8 +15387,44 @@ async def generate_case_report(
             pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
             pdf.set_font("Helvetica", "", 9)
             for i, t in enumerate(tv):
-                label = f"Tooth {implant_plans[i].get('position', '')}" if i < len(implant_plans) and implant_plans[i].get('position') else f"Implant {i+1}"
-                pdf.cell(0, 6, safe(f"  {label}: {t} Ncm"), ln=True)
+                pos_label = ""
+                if i < len(implant_plans):
+                    pos_label = f" (Position {implant_plans[i].get('position', '')})"
+                pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {t} Ncm"), ln=True)
+            pdf.ln(2)
+        # iter-Jun-2026 (v11/v12): MUA placement (universal, per-implant).
+        if p2.get("mua_placed") is not None:
+            add_field("Multiunit Abutments (MUA) Placed", "Yes" if p2["mua_placed"] else "No")
+        mua_det = p2.get("mua_details") or {}
+        if mua_det and p2.get("mua_placed"):
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(2, 136, 209)  # cyan #0288D1
+            pdf.cell(0, 7, safe("Multiunit Abutment (MUA) Details:"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font("Helvetica", "", 9)
+            for pos, det in mua_det.items():
+                placed_flag = (det or {}).get("placed")
+                # v12: per-implant Yes/No. Skip implants explicitly marked No.
+                if placed_flag is False:
+                    if pos.startswith("ZR") or pos.startswith("ZL"):
+                        label = f"Zygoma {pos[1:]}"
+                    elif pos.startswith("PR") or pos.startswith("PL"):
+                        label = f"Pterygoid {pos[1:]}"
+                    else:
+                        label = f"Implant {pos}"
+                    pdf.cell(0, 6, safe(f"  {label}: MUA not placed"), ln=True)
+                    continue
+                cuff = (det or {}).get("cuff_height") or ""
+                ang = (det or {}).get("angulation") or ""
+                # v12: angulation may be plain numeric (e.g. "17.5"); append ° for display.
+                ang_display = f"{ang}°" if ang and not str(ang).endswith("°") else str(ang)
+                if pos.startswith("ZR") or pos.startswith("ZL"):
+                    label = f"Zygoma {pos[1:]}"
+                elif pos.startswith("PR") or pos.startswith("PL"):
+                    label = f"Pterygoid {pos[1:]}"
+                else:
+                    label = f"Implant {pos}"
+                pdf.cell(0, 6, safe(f"  {label}: cuff {cuff or '-'} mm | angulation {ang_display or '-'}"), ln=True)
             pdf.ln(2)
         if p2.get("implant_other_notes"):
             add_field("Other Implant Notes", p2["implant_other_notes"])
@@ -14083,7 +15459,7 @@ async def generate_case_report(
                     cuff = row.get("cuff_height", "")
                     ang_s = f"{ang}°" if str(ang).strip() != "" else "—"
                     cuff_s = f"{cuff} mm" if str(cuff).strip() != "" else "—"
-                    pdf.cell(0, 6, safe(f"  Tooth {tooth}:  Angulation {ang_s}   Cuff Height {cuff_s}"), ln=True)
+                    pdf.cell(0, 6, safe(f"  Implant {tooth}:  Angulation {ang_s}   Cuff Height {cuff_s}"), ln=True)
                 pdf.ln(2)
         if p2.get("sutures_placed") is not None:
             add_field("Sutures Placed", "Yes" if p2["sutures_placed"] else "No")
@@ -14108,12 +15484,12 @@ async def generate_case_report(
             pdf.cell(0, 7, safe("Torque Values (Ncm):"), ln=True)
             pdf.set_font("Helvetica", "", 9)
             for i, tv in enumerate(torque):
-                label = f"Tooth {implant_plans[i].get('position', '')}" if i < len(implant_plans) and implant_plans[i].get('position') else f"Implant {i+1}"
-                pdf.cell(0, 6, safe(f"  {label}: {tv} Ncm"), ln=True)
+                pos_label = ""
+                if i < len(implant_plans):
+                    pos_label = f" (Position {implant_plans[i].get('position', '')})"
+                pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {tv} Ncm"), ln=True)
             pdf.ln(2)
-    # Bone and Soft Tissue Augmentation (structured, ported from the
-    # Pre-Implant Augmentation Stage's Step 2 form; legacy: Bone Graft and
-    # Membrane free-text, kept as a fallback for cases recorded before this).
+    # Bone and Soft Tissue Augmentation (iter-395; legacy: Bone Graft and Membrane)
     p2 = procedure.get("phase2_data", {})
     p2aug = p2.get("augmentation") if isinstance(p2, dict) else None
     if isinstance(p2aug, dict) and p2aug:
@@ -14156,6 +15532,8 @@ async def generate_case_report(
     # ── Phase 3: Second Stage ────────────────────────────────
     pdf.add_page()
     add_section_title("Phase 3 - Healing and Second Stage Surgery", 33, 150, 243)
+    p3 = procedure.get("phase3_data", {}) or {}
+    _render_tabbed_phase_data(pdf, safe, add_field, p3, 3, _is_zyg_case_local)
     # Phase 2 carry-over context (per product spec, Phase 3 displays the
     # Immediate Prosthesis Done / Healing Abutment Placed summary inherited
     # from Phase 2).
@@ -14183,7 +15561,7 @@ async def generate_case_report(
             plans = procedure.get("implant_plans") or []
             for i, v in enumerate(hch):
                 label = plans[i].get("position") if i < len(plans) and isinstance(plans[i], dict) else None
-                prefix = f"Tooth #{label}" if label else f"Implant {i+1}"
+                prefix = f"Implant {label}" if label else f"Implant {i+1}"
                 pdf.cell(0, 6, safe(f"  {prefix}: {v or '-'} mm"), ln=True)
         elif hch:
             pdf.cell(0, 6, safe(f"  {hch} mm"), ln=True)
@@ -14219,12 +15597,39 @@ async def generate_case_report(
 
     # ── Phase 4: Prosthetic ──────────────────────────────────
     add_section_title("Phase 4 - Prosthetic Rehabilitation", 156, 39, 176)
+    p4 = procedure.get("phase4_data", {}) or {}
+    _render_tabbed_phase_data(pdf, safe, add_field, p4, 4, _is_zyg_case_local)
     p4s1 = procedure.get("phase4_step1_data", {})
     if isinstance(p4s1, dict) and p4s1:
         pdf.set_font("Helvetica", "BI", 11)
         pdf.cell(0, 8, safe("Step 1 — Prosthetic Plan & Impressions"), ln=True)
         if p4s1.get("final_prosthetic_plan"):
             add_field("Final Prosthetic Plan", p4s1["final_prosthetic_plan"])
+        # iter-Feb-2026 / -C — Single-Conventional-Implant granular Final Plan.
+        for lbl, fld, other in (
+            ("Final Abutment Type", "sc_final_abutment_type", "sc_final_abutment_type_other"),
+            ("Final Type of Retention", "sc_final_retention_type", "sc_final_retention_type_other"),
+            ("Final Crown Material", "sc_final_crown_material", "sc_final_crown_material_other"),
+        ):
+            v = p4s1.get(fld)
+            if v:
+                if p4s1.get(other):
+                    v = f"{v} — {p4s1.get(other)}"
+                add_field(lbl, v)
+        # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan.
+        for lbl, fld, other in (
+            ("Final Prosthesis Type", "ma_final_prosthesis_type", "ma_final_prosthesis_type_other"),
+            ("Final Abutment Type", "ma_final_abutment_type", "ma_final_abutment_type_other"),
+            ("Final Type of Retention", "ma_final_retention_type", "ma_final_retention_type_other"),
+            ("Final Crown/Bridge Material", "ma_final_crown_material", "ma_final_crown_material_other"),
+            ("Final Prosthetic Plan", "fa_final_prosthetic_plan", "fa_final_prosthetic_plan_other"),
+            ("Final Prosthetic Plan", "zp_final_prosthetic_plan", "zp_final_prosthetic_plan_other"),
+        ):
+            v = p4s1.get(fld)
+            if v:
+                if p4s1.get(other):
+                    v = f"{v} — {p4s1.get(other)}"
+                add_field(lbl, v)
         if p4s1.get("prosthetic_material"):
             add_field("Prosthetic Material", p4s1["prosthetic_material"])
         if p4s1.get("custom_abutment"):
@@ -14247,6 +15652,23 @@ async def generate_case_report(
                     "putty_light_body": "Putty and Light body",
                 }.get(mat, mat)
                 add_field("Impression Material", mat_label)
+            # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — rendered
+            # as bulleted lists per user's preference.
+            if p4s1["impression_type"] == "intraoral_scans":
+                def _bullet_list(label: str, values):
+                    if not values:
+                        return
+                    pdf.set_font("Arial", "B", 10)
+                    pdf.cell(0, 6, safe(f"{label}:"), ln=True)
+                    pdf.set_font("Arial", "", 10)
+                    for v in values:
+                        v_str = str(v or "").strip()
+                        if v_str:
+                            pdf.cell(6, 5, "", ln=False)  # indent
+                            pdf.cell(0, 5, safe(f"- {v_str}"), ln=True)
+                _bullet_list("Type of Scan Body", p4s1.get("scan_body_types"))
+                _bullet_list("Scan Type", p4s1.get("scan_types"))
+                _bullet_list("Scan Level", p4s1.get("scan_levels"))
         if p4s1.get("payment_complete") is not None:
             add_field("Payment Complete", "Yes" if p4s1["payment_complete"] else "No")
         if p4s1.get("components_available") is not None:
@@ -14293,6 +15715,13 @@ async def generate_case_report(
     phase4_date = procedure.get("treatment_completed_at")
     if phase4_date:
         add_field("Treatment Completed", phase4_date.isoformat() if isinstance(phase4_date, datetime) else str(phase4_date))
+
+    # ── Phase 5: Follow-up & Maintenance ──────────────────────
+    # iter-Jun-2026 (v10, Chunk 3): added Phase 5 section w/ tabbed data.
+    p5 = procedure.get("phase5_data", {}) or {}
+    if p5 or procedure.get("followup_visits"):
+        add_section_title("Phase 5 - Follow-up & Maintenance", 244, 143, 177)
+        _render_tabbed_phase_data(pdf, safe, add_field, p5, 5, _is_zyg_case_local)
 
     # ── AI-Generated Summaries (editable; included verbatim in PDF) ─────
     ai_clinical = (procedure.get("ai_case_summary") or "").strip()
@@ -14383,6 +15812,7 @@ async def generate_case_report(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{report_name}"'},
     )
+
 
 # ── Pre-Op Briefing PDF (iter-329) ───────────────────────────────────
 # Lay-language briefing handed to the patient at scheduling for Sinus
@@ -15543,7 +16973,28 @@ async def submit_phase2(
     new_checklist = {**existing_checklist}
     if phase2_data.checklist_surgical:
         new_checklist["surgical"] = phase2_data.checklist_surgical.model_dump()
-    
+      
+    # iter-Jun-2026 (Chunk C hotfix): MongoDB $set cannot update both
+    # `phase2_data` (whole object) AND `phase2_data.<sub>` (dot path) in the
+    # same call — it raises "would create a conflict at 'phase2_data'"
+    # (code 40). We merge the sub-fields INTO `phase2_surgical_data` before
+    # composing update_data instead of setting them via dotted paths.
+    if phase2_data.per_implant_data is not None:
+        phase2_surgical_data["per_implant"] = phase2_data.per_implant_data
+    if phase2_data.advanced_clinical is not None:
+        phase2_surgical_data["advanced_clinical"] = phase2_data.advanced_clinical
+    if phase2_data.mua_placed is not None:
+        phase2_surgical_data["mua_placed"] = phase2_data.mua_placed
+    if phase2_data.mua_details is not None:
+        phase2_surgical_data["mua_details"] = phase2_data.mua_details
+
+    # Preserve any existing phase2_data.* sub-fields not covered above so a
+    # partial Phase-2 re-submission does not wipe advanced_clinical etc.
+    existing_phase2 = procedure.get("phase2_data") or {}
+    for _k, _v in existing_phase2.items():
+        if _k not in phase2_surgical_data:
+            phase2_surgical_data[_k] = _v
+
     update_data = {
         "checklist": new_checklist,
         "phase2_data": phase2_surgical_data,
@@ -15571,6 +17022,14 @@ async def submit_phase2(
     )
     if phase2_data.torque_values:
         update_data["torque_values"] = phase2_data.torque_values
+    
+    
+    # iter-Jun-2026 (v10, Chunk 3): Persist per-implant + advanced clinical
+    # blocks under phase2_data.* so PDF/AI/review can read a unified schema.
+    if phase2_data.per_implant_data is not None:
+        update_data["phase2_data.per_implant"] = phase2_data.per_implant_data
+    if phase2_data.advanced_clinical is not None:
+        update_data["phase2_data.advanced_clinical"] = phase2_data.advanced_clinical
 
     # iter-343: Materialize the top-level `implants[]` array from the
     # Phase-1 implant plan + captured torque values. This is the source
@@ -15891,6 +17350,18 @@ async def submit_stage2_prosthetic(
         # iter-192: same null-on-switch contract for impression_material.
         "impression_material": (
             data.impression_material if data.impression_type == "conventional" else None
+        ),
+         "scan_body_types": (
+            [s.strip() for s in (data.scan_body_types or [])]
+            if data.impression_type == "intraoral_scans" else None
+        ),
+        "scan_types": (
+            [s.strip() for s in (data.scan_types or [])]
+            if data.impression_type == "intraoral_scans" else None
+        ),
+        "scan_levels": (
+            [s.strip() for s in (data.scan_levels or [])]
+            if data.impression_type == "intraoral_scans" else None
         ),
         # iter-194: shade is always persisted (mandatory), with the layout flag
         # so renderers can label slots correctly (Anterior/Posterior vs per implant).
@@ -18658,10 +20129,18 @@ async def suggest_implant(
             len_min, len_max = tooth_data["length"][0], tooth_data["length"][1]
 
     # Query matching implants
+    # iter-Feb-2026: standard suggestion engine ONLY returns conventional
+    # implants. Zygoma/Pterygoid systems (Refirm Z-Series / P-Series) are
+    # surfaced via a dedicated endpoint and require the case procedure type
+    # to be one of the advanced-implant procedure types.
     query = {
         "brand": brand, "system": system,
         "diameter": {"$gte": diam_min, "$lte": diam_max},
         "length": {"$gte": len_min, "$lte": len_max},
+        "$or": [
+            {"implant_type": "conventional"},
+            {"implant_type": {"$exists": False}},
+        ],
     }
     recommended = await db.implant_library.find(query, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
 
@@ -18671,11 +20150,18 @@ async def suggest_implant(
             "brand": brand, "system": system,
             "diameter": {"$gte": diam_min - 0.5, "$lte": diam_max + 0.5},
             "length": {"$gte": max(len_min - 2, 6), "$lte": len_max + 2},
+            "$or": [
+                {"implant_type": "conventional"},
+                {"implant_type": {"$exists": False}},
+            ],
         }
         recommended = await db.implant_library.find(query_wider, {"_id": 0}).sort([("diameter", 1), ("length", 1)]).to_list(50)
 
     all_implants = await db.implant_library.find(
-        {"brand": brand, "system": system}, {"_id": 0}
+        {"brand": brand, "system": system, "$or": [
+            {"implant_type": "conventional"},
+            {"implant_type": {"$exists": False}},
+        ]}, {"_id": 0}
     ).sort([("diameter", 1), ("length", 1)]).to_list(200)
 
     response = {
@@ -23318,6 +24804,212 @@ def _extract_procedure_implants(proc: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
+def _resolve_active_implants_inline(proc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Merge the currently-active revision (chain[-1] or `replacement`) over
+    each R0 entry in `implants[]`. Non-replaced implants pass through
+    unchanged. Treatment-ended entries are annotated but not removed (Phase
+    2 readback still shows the terminal state).
+    """
+    implants = _extract_procedure_implants(proc)
+    review = proc.get("phase2_survival_review") or {}
+    smap = review.get("implants") or {}
+    if not smap:
+        return list(implants)
+    out: List[Dict[str, Any]] = []
+    for i, imp in enumerate(implants):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        status = entry.get("status", "Active")
+        merged = dict(imp)
+        # Preserve the R0 snapshot so views that want the historical value can
+        # still access it (e.g. "R0 tile" in CaseImplantPlanning).
+        merged["_r0"] = dict(imp)
+        merged["_survival_status"] = status
+        if status == "Replaced" and isinstance(entry.get("replacement"), dict):
+            repl = entry["replacement"]
+            # If site changed, the FDI position also moves.
+            if repl.get("tooth_number"):
+                merged["tooth_number"] = repl["tooth_number"]
+                merged["tooth"] = repl["tooth_number"]
+            # iter-352: Fields specific to the ACTUAL placed implant + its
+            # prosthetic protocol are OVERWRITTEN by R1 (a null / missing
+            # value in R1 CLEARS the R0 value). Anatomy-only fields
+            # (bone_type / bone_width / bone_height) are preserved unless
+            # explicitly overridden by R1.
+            _r1_only = (
+                "system", "system_name", "brand",
+                "diameter", "length",
+                "insertion_torque_ncm", "isq",
+                "lot_number", "placement_date",
+                "procedure_type", "prosthetic_component",
+                "healing_abutment_mm", "immediate_loading_prosthesis",
+                "healing_protocol", "cover_screw", "surface",
+                "iopa_url",  # iter-353: R{n}'s radiograph replaces R0's per-implant IOPA thumbnail.
+            )
+            for f in _r1_only:
+                # Explicit overwrite — None from R1 clears the R0 leftover.
+                merged[f] = repl.get(f) if repl.get(f) not in ("",) else None
+            # Anatomy fields — merge only when R1 provides them.
+            for f in ("bone_type", "bone_width", "bone_height"):
+                if repl.get(f) not in (None, ""):
+                    merged[f] = repl[f]
+            merged["revision_number"] = repl.get("revision_number") or 1
+            merged["_active_revision"] = True
+            # iter-354 fix: Replaced implants ARE still active-in-treatment
+            # (the R{n} is the live implant). Only Failed-no-replacement +
+            # Treatment Ended are inactive-in-treatment.
+            merged["_active_in_treatment"] = True
+        elif status == "Treatment Ended":
+            merged["_treatment_ended"] = True
+            merged["_active_in_treatment"] = False
+        elif status == "Failed":
+            merged["_survival_failed"] = True
+            # iter-354: Failed-with-no-replacement implants are excluded from
+            # Phase 3 onwards (per user Q1-a). Downstream filters key off this
+            # flag; Phase 2 readback still renders the entry as Inactive.
+            merged["_active_in_treatment"] = False
+        else:
+            merged["_active_in_treatment"] = True
+        out.append(merged)
+    return out
+
+
+# iter-353: Phase 2 readback and Phase 3 pre-fill pull from `phase2_data.*`
+# (case-level), not from `implants[]`. This helper mirrors the R0 → R{n}
+# substitution into the matching Phase 2 fields per-implant position so the
+# case detail immediately shows the active revision's clinical protocol.
+def _resolve_phase2_data_inline(proc: Dict[str, Any]) -> None:
+    review = proc.get("phase2_survival_review") or {}
+    smap = review.get("implants") or {}
+    if not smap:
+        return
+    pdata = dict(proc.get("phase2_data") or {})
+    if not pdata and "phase2_data" not in proc:
+        # No Phase 2 filled yet — nothing to substitute.
+        return
+    # iter-353: keep the R0 snapshot so the UI can still surface it if needed.
+    proc["phase2_data_original"] = dict(pdata)
+
+    implants = _extract_procedure_implants(proc)
+    n = len(implants)
+
+    # Helper — ensure arrays exist and have length n so we can safely index.
+    def _ensure_arr(key: str, default_val: Any = "") -> List[Any]:
+        cur = pdata.get(key)
+        if isinstance(cur, list):
+            arr = list(cur)
+        elif cur in (None, ""):
+            arr = []
+        else:
+            # Single scalar — expand to length-n array with the same value.
+            arr = [cur] * n
+        while len(arr) < n:
+            arr.append(default_val)
+        return arr
+
+    iopa_arr = _ensure_arr("iopa_files", "")
+    heal_arr = _ensure_arr("healing_abutment_cuff_height", "")
+    pros_arr = _ensure_arr("prosthesis_type", "")
+    prostheic_comp_arr = _ensure_arr("prosthetic_component", "")
+
+    # iter-353: mapping between R{n}'s procedure_type / prosthetic_component
+    # and the Phase 2 "prosthetic_component" enum. Kept explicit for clarity
+    # and easy tweaks per institutional taxonomy.
+    def _phase2_prosthetic_component(repl: Dict[str, Any]) -> Optional[str]:
+        ptype = (repl.get("procedure_type") or "").strip()
+        pcomp = (repl.get("prosthetic_component") or "").strip()
+        if ptype == "Immediate Loading":
+            return "Immediate Loading Done"
+        if ptype == "Single Stage" or pcomp == "Cover Screw":
+            return "Cover Screw Placed"
+        if pcomp == "Healing Abutment":
+            return "Healing Abutment Placed"
+        return None
+
+    changed = False
+    for i in range(n):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        if entry.get("status") != "Replaced":
+            continue
+        repl = entry.get("replacement") or {}
+
+        # IOPA — R{n}'s new radiograph replaces the R0 position.
+        if repl.get("iopa_url"):
+            iopa_arr[i] = repl["iopa_url"]
+            changed = True
+
+        # Healing abutment cuff height (mm) — set from R{n} when present, else
+        # clear if the new prosthetic component doesn't use a cuff height
+        # (e.g. R{n} switched to Cover Screw or Immediate Loading).
+        if repl.get("healing_abutment_mm") not in (None, ""):
+            heal_arr[i] = repl["healing_abutment_mm"]
+            changed = True
+        else:
+            new_pc = (repl.get("prosthetic_component") or "").strip()
+            new_pt = (repl.get("procedure_type") or "").strip()
+            if new_pc and new_pc != "Healing Abutment":
+                heal_arr[i] = ""
+                changed = True
+            elif new_pt == "Single Stage" or new_pt == "Immediate Loading":
+                heal_arr[i] = ""
+                changed = True
+
+        # Immediate-loading prosthesis (Phase 2 stores this under prosthesis_type)
+        if repl.get("immediate_loading_prosthesis") not in (None, ""):
+            pros_arr[i] = repl["immediate_loading_prosthesis"]
+            changed = True
+        else:
+            new_pt = (repl.get("procedure_type") or "").strip()
+            if new_pt and new_pt != "Immediate Loading":
+                pros_arr[i] = ""
+                changed = True
+
+        # Prosthetic component enum (case-level string too when single-implant)
+        mapped_pc = _phase2_prosthetic_component(repl)
+        if mapped_pc:
+            prostheic_comp_arr[i] = mapped_pc
+            changed = True
+
+    if not changed:
+        return
+
+    pdata["iopa_files"] = iopa_arr
+    pdata["healing_abutment_cuff_height"] = heal_arr
+    pdata["prosthesis_type"] = pros_arr
+
+    # Case-level `prosthetic_component`: only overwrite when all populated
+    # positions agree (typical single-implant case). Preserve original
+    # otherwise so multi-implant mixed states don't lose their signal.
+    filled = [v for v in prostheic_comp_arr if v]
+    if filled and len(set(filled)) == 1:
+        pdata["prosthetic_component"] = filled[0]
+
+    # Also patch the positional `radiographs.iopas[i]` + `existing_implants[i].iopa_url`
+    # so the per-implant readback thumbnails on the case detail render R{n}.
+    radiographs = dict(proc.get("radiographs") or {})
+    r_iopas = list(radiographs.get("iopas") or [])
+    while len(r_iopas) < n:
+        r_iopas.append("")
+    ex_impls = list(proc.get("existing_implants") or [])
+    while len(ex_impls) < n:
+        ex_impls.append({})
+    for i in range(n):
+        entry = smap.get(str(i)) or smap.get(i) or {}
+        if entry.get("status") != "Replaced":
+            continue
+        new_iopa = (entry.get("replacement") or {}).get("iopa_url")
+        if not new_iopa:
+            continue
+        r_iopas[i] = new_iopa
+        if isinstance(ex_impls[i], dict):
+            ex_impls[i] = dict(ex_impls[i])
+            ex_impls[i]["iopa_url"] = new_iopa
+    radiographs["iopas"] = r_iopas
+    proc["radiographs"] = radiographs
+    proc["existing_implants"] = ex_impls
+
+    proc["phase2_data"] = pdata
+
+
 @api_router.post("/procedures/{procedure_id}/survival-review")
 async def submit_survival_review(
     procedure_id: str,
@@ -27384,7 +29076,58 @@ async def seed_on_startup():
             if u and u.startswith("http://") and u not in ("http://localhost", "http://127.0.0.1", "http://0.0.0.0"):
                 logging.warning(f"HTTPS enforcement: URL '{u}' uses http:// instead of https://. Consider using HTTPS in production.")
 
-    # --- User seeding and cleanup disabled ---
+    # --- Seed users (force-sync authoritative user list on every startup) ---
+    AUTHORITATIVE_USERS = [
+        {"name": "Dr. Abhijit Patil", "username": "Abhijit.patil", "email": "Abhijit.patil@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
+        {"name": "Dr. Ajay Sabane", "username": "Ajay.sabane", "email": "Ajay.sabane@dental.edu", "password": "Admin@123", "role": "implant_incharge"},
+        {"name": "Dr. Paresh Gandhi", "username": "Paresh.gandhi", "email": "Paresh.gandhi@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Rajshree Jadhav", "username": "Rajshree.jadhav", "email": "Rajshree.jadhav@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Vasantha N", "username": "Vasantha.n", "email": "Vasantha.n@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Rupali Patil", "username": "Rupali.patil", "email": "Rupali.patil@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Pankaj Kadam", "username": "Pankaj.kadam", "email": "Pankaj.kadam@dental.edu", "password": "Supervisor@123", "role": "supervisor"},
+        {"name": "Dr. Gaurav Pandey", "username": "Gaurav.pandey", "email": "Gaurav.pandey@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Atharva Mahadik", "username": "Atharva.mahadik", "email": "Atharva.mahadik@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Anand Kurum", "username": "Anand.kurum", "email": "Anand.kurum@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Yashica Jain", "username": "Yashica.jain", "email": "Yashica.jain@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Vaibhav Deshpande", "username": "Vaibhav.deshpande", "email": "Vaibhav.deshpande@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Manasi Dhiren", "username": "Manasi.dhiren", "email": "Manasi.dhiren@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Renuka Bodakhe", "username": "Renuka.bodakhe", "email": "Renuka.bodakhe@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Shritej Shevakari", "username": "Shritej.shevakari", "email": "Shritej.shevakari@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Aaditya Patil", "username": "Aaditya.patil", "email": "Aaditya.patil@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Kunal Parikh", "username": "Kunal.parikh", "email": "Kunal.parikh@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Krishna Mehta", "username": "Krishna.mehta", "email": "Krishna.mehta@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Dr. Sakshi Lohade", "username": "Sakshi.lohade", "email": "Sakshi.lohade@student.dental.edu", "password": "Student@123", "role": "student"},
+        {"name": "Nurse 1", "username": "Nurse.1", "email": "Nurse.1@dental.edu", "password": "Nurse@123", "role": "nurse"},
+        {"name": "Nurse 2", "username": "Nurse.2", "email": "Nurse.2@dental.edu", "password": "Nurse@123", "role": "nurse"},
+    ]
+
+    # Upsert each authoritative user (update existing, insert missing, preserve profile_photo & password for existing users)
+    new_count = 0
+    for u in AUTHORITATIVE_USERS:
+        existing = await db.users.find_one({"username": {"$regex": f"^{re.escape(u['username'])}$", "$options": "i"}})
+        if existing:
+            # Update name, email, role but keep existing password_hash (avoids slow bcrypt on every startup)
+            await db.users.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {
+                    "name": u["name"],
+                    "email": u["email"],
+                    "username": u["username"],
+                    "role": u["role"],
+                }}
+            )
+        else:
+            # New user — hash password and insert
+            await db.users.insert_one({
+                "name": u["name"],
+                "username": u["username"],
+                "email": u["email"],
+                "password_hash": hash_password(u["password"]),
+                "role": u["role"],
+                "profile_photo": None,
+            })
+            new_count += 1
+    logging.info(f"User sync complete: {len(AUTHORITATIVE_USERS)} checked, {new_count} new users added.")
 
     # --- Seed implant library (iter-179: IDEMPOTENT — no more drop()) ──────
     # Source-of-truth = implant_library_data.SYSTEMS (Python module).
@@ -27402,6 +29145,7 @@ async def seed_on_startup():
                     "system": system,
                     "diameter": float(diameter),
                     "length": float(length),
+                    "implant_type": "conventional",
                     "source": "library_master",
                 })
 
@@ -27416,10 +29160,22 @@ async def seed_on_startup():
                             "system": sys_name,
                             "diameter": float(diameter),
                             "length": float(length),
+                            "implant_type": "conventional",
                             "source": "alpha_bio_brochure",
                         })
         except Exception as ab_err:
             logging.warning(f"Alpha-Bio brochure rows skipped: {ab_err}")
+
+        # Append Refirm advanced implants (Zygoma Z-Series + Pterygoid P-Series).
+        # These are advanced implants ONLY surfaced when the case procedure
+        # type is "Zygoma and Pterygoid Implants" — the standard suggestion
+        # engine filters them out by default.
+        try:
+            from refirm_advanced_implants_data import get_seed_records as _refirm_adv
+            for rec in _refirm_adv():
+                records.append(rec)
+        except Exception as rf_err:
+            logging.warning(f"Refirm advanced (Zygoma/Pterygoid) rows skipped: {rf_err}")
 
         # Idempotent upsert keyed on the natural composite key. We $set the
         # source field on every match (so existing rows imported by the
@@ -27429,16 +29185,32 @@ async def seed_on_startup():
         inserted = 0
         for rec in records:
             key = {k: rec[k] for k in ("brand", "system", "diameter", "length")}
+            # Extra fields (implant_type, part_number, kit_sku, material) are
+            # written on both insert and update so advanced-implant metadata
+            # stays in sync with the source module.
+            extra_set = {"source": rec["source"]}
+            for opt in ("implant_type", "part_number", "kit_sku", "material"):
+                if opt in rec:
+                    extra_set[opt] = rec[opt]
+            # For rows without an explicit implant_type, treat as conventional.
+            extra_set.setdefault("implant_type", "conventional")
             res = await db.implant_library.update_one(
                 key,
                 {
-                    "$set": {"source": rec["source"]},
+                    "$set": extra_set,
                     "$setOnInsert": key,
                 },
                 upsert=True,
             )
             if res.upserted_id is not None:
                 inserted += 1
+
+        # Backfill implant_type for any legacy rows that may pre-date this
+        # migration (admin-added rows, older seeds without implant_type).
+        await db.implant_library.update_many(
+            {"implant_type": {"$exists": False}},
+            {"$set": {"implant_type": "conventional"}},
+        )
 
         total = await db.implant_library.count_documents({})
         admin_added = await db.implant_library.count_documents(

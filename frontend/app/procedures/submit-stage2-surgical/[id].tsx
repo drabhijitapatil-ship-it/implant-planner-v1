@@ -28,6 +28,7 @@ import { draftStorageKey, loadDraft, clearDraft, useDraftAutosave, useUnsavedCha
 import { Ionicons } from "@expo/vector-icons";
 import { CHECKLIST_DATA } from "../../../constants/checklist";
 import DoneDatePicker, { todayIso } from "../../../components/DoneDatePicker";
+// iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 3.
 
 const CHECKLIST_ITEMS = CHECKLIST_DATA.second_stage.items;
 
@@ -48,8 +49,19 @@ export default function Stage2SurgicalSubmissionScreen() {
   // (no All-Components-Available, no Healing-Abutment-Placed rows).
   const [phase2Component, setPhase2Component] = useState<string>("");
   const [phase2ProsthesisType, setPhase2ProsthesisType] = useState<string>("");
-  const [phase2ProsthesisOther, setPhase2ProsthesisOther] =
-    useState<string>("");
+  // iter-Jun-2026 (v13, Chunk D, Ask 4): Phase-1 Prosthetic Plan surfaced
+  // inside the Phase 3 "Immediate Prosthesis Done" banner so surgeons see
+  // the plan (not just the Fixed/Removable classifier) at Phase 3.
+  const [prostheticPlan, setProstheticPlan] = useState<string>('');
+  const [prostheticPlanOther, setProstheticPlanOther] = useState<string>('');
+  // iter-Feb-2026-D — Phase-1 Prosthetic Plan composition for the
+  // Phase 3 "Immediate Prosthesis Done" banner. In the new SC/A/B/C
+  // workflows the legacy `prosthetic_plan` string is empty; the plan
+  // lives on structured fields (sc_*, ma_*, fa_*, zp_*) instead. We
+  // hydrate all of them and let `composedPhase1Plan` collapse them
+  // into a single readable string.
+  const [phase1PlanSummary, setPhase1PlanSummary] = useState<string>('');
+  const [phase2ProsthesisOther, setPhase2ProsthesisOther] = useState<string>('');
   const [phase2HealingCuffs, setPhase2HealingCuffs] = useState<string[]>([]);
   const [createdById, setCreatedById] = useState<string | null>(null);
   const [createdByRole, setCreatedByRole] = useState<string | null>(null);
@@ -210,6 +222,53 @@ export default function Stage2SurgicalSubmissionScreen() {
       setPhase2Component(p2.prosthetic_component || "");
       setPhase2ProsthesisType(p2.prosthesis_type || "");
       setPhase2ProsthesisOther(p2.prosthesis_type_other || "");
+      // iter-Jun-2026 (v13, Chunk D, Ask 4): Prosthetic Plan (from Phase 1,
+      // possibly overridden in Phase 2 via iter-419) surfaced in Phase 3.
+      setProstheticPlan(d.prosthetic_plan || '');
+      setProstheticPlanOther(d.prosthetic_plan_other || '');
+      // iter-Feb-2026-D — Compose the Phase 1 plan for the Phase 3 banner
+      // across SC / Group A / Group B / Group C workflows (also handles
+      // the 5 overlap types via num_implants). Falls back to the legacy
+      // `prosthetic_plan` when none of the new fields are populated.
+      const pType = d.implant_procedure_type || '';
+      const numImpl = d.num_implants || '';
+      const OVERLAP = new Set([
+        'Immediate Implant', 'Partial Extraction Therapy',
+        'Implant Placement with Guided Bone Regeneration', 'Guided Surgery', 'Sinus Lift',
+      ]);
+      const isSCEff = pType === 'Single Conventional Implant'
+        || (OVERLAP.has(pType) && numImpl === 'Single Implant');
+      const GROUP_C = new Set([
+        'Quad Zygoma Implants', 'Zygoma and Pterygoid Implants',
+        'Zygoma and Conventional Implants', 'Zygoma, Pterygoid and Conventional Implants',
+      ]);
+      const GROUP_B = new Set(['All on 4', 'All on 6', 'All on X']);
+      const GROUP_A = new Set(['Multiple Conventional Implants', 'Pterygoid and Conventional Implants']);
+      const _resolve = (v: string, o: string) => (v === 'Other' && o) ? `Other — ${o}` : v;
+      let summary = '';
+      if (isSCEff) {
+        const bits: string[] = [];
+        if (d.sc_abutment_type) bits.push(`Abutment: ${_resolve(d.sc_abutment_type, d.sc_abutment_type_other || '')}`);
+        if (d.sc_retention_type) bits.push(`Retention: ${_resolve(d.sc_retention_type, d.sc_retention_type_other || '')}`);
+        if (d.sc_crown_material) bits.push(`Crown: ${_resolve(d.sc_crown_material, d.sc_crown_material_other || '')}`);
+        summary = bits.join(' · ');
+      } else if (GROUP_A.has(pType) || (OVERLAP.has(pType) && numImpl === 'Multiple Implants')) {
+        const bits: string[] = [];
+        if (d.ma_prosthesis_type) bits.push(`Prosthesis: ${_resolve(d.ma_prosthesis_type, d.ma_prosthesis_type_other || '')}`);
+        if (d.ma_abutment_type) bits.push(`Abutment: ${_resolve(d.ma_abutment_type, d.ma_abutment_type_other || '')}`);
+        if (d.ma_retention_type) bits.push(`Retention: ${_resolve(d.ma_retention_type, d.ma_retention_type_other || '')}`);
+        if (d.ma_crown_material) bits.push(`Material: ${_resolve(d.ma_crown_material, d.ma_crown_material_other || '')}`);
+        summary = bits.join(' · ');
+      } else if (GROUP_B.has(pType) && d.fa_prosthetic_plan) {
+        summary = _resolve(d.fa_prosthetic_plan, d.fa_prosthetic_plan_other || '');
+      } else if (GROUP_C.has(pType) && d.zp_prosthetic_plan) {
+        summary = _resolve(d.zp_prosthetic_plan, d.zp_prosthetic_plan_other || '');
+      }
+      // Fallback for legacy cases (Existing Implant, Single Implant classic, etc.)
+      if (!summary) {
+        summary = _resolve(d.prosthetic_plan || '', d.prosthetic_plan_other || '');
+      }
+      setPhase1PlanSummary(summary);
       setCreatedById(d.created_by_id || null);
       setCreatedByRole(d.created_by_role || null);
       if (Array.isArray(p2.healing_abutment_cuff_height))
@@ -316,7 +375,7 @@ export default function Stage2SurgicalSubmissionScreen() {
 
   // ── IOPA Upload helpers ──
   const getIopaLabel = (idx: number): string => {
-    return implantPositions[idx] ? `Tooth #${implantPositions[idx]}` : "Tooth #—";
+    return implantPositions[idx] ? `Implant ${implantPositions[idx]}` : 'Implant —';
   };
 
   const pickIopaFile = async (idx: number) => {
@@ -386,9 +445,13 @@ export default function Stage2SurgicalSubmissionScreen() {
       missing.push(`IOPA Radiographs (${missingIopaCount} pending)`);
     // iter-357: per-implant Phase 3 healing abutment configuration (Q3-a).
     // Every implant must have a completed selection.
+    // iter-Jun-2026 (v13, Chunk D, Ask 5): Skip validation for implants that
+    // received Immediate Loading in Phase 2 — those implants have no healing
+    // abutment concept in Phase 3.
     const haMissingIdxs: number[] = [];
     const haOverWordsIdxs: number[] = [];
     haConfig.forEach((cfg, i) => {
+      if (cfg.phase2_component === 'Immediate Loading Done') return;
       if (!cfg.mode) haMissingIdxs.push(i);
       else if (cfg.mode === "standard" && !cfg.cuff_height_mm.trim())
         haMissingIdxs.push(i);
@@ -442,14 +505,14 @@ export default function Stage2SurgicalSubmissionScreen() {
     if (haMissingIdxs.length > 0) {
       Alert.alert(
         "Healing Abutment Configuration Incomplete",
-        `Please complete each implant: pick "Standard cuff height" (with mm value) OR "Customised healing abutment" (with details).\n\nMissing: ${haMissingIdxs.map((i) => (implantPositions[i] ? `Tooth #${implantPositions[i]}` : "Tooth #—")).join(", ")}`,
+        `Please complete each implant: pick "Standard cuff height" (with mm value) OR "Customised healing abutment" (with details).\n\nMissing: ${haMissingIdxs.map((i) => (implantPositions[i] ? `Implant ${implantPositions[i]}` : "Implant —")).join(", ")}`,
       );
       return;
     }
     if (haOverWordsIdxs.length > 0) {
       Alert.alert(
         "Customised description too long",
-        `Customised healing abutment description exceeds ${WORDS_MAX} words on ${haOverWordsIdxs.map((i) => (implantPositions[i] ? `Tooth #${implantPositions[i]}` : "Tooth #—")).join(", ")}. Please shorten before submitting.`,
+        `Customised healing abutment description exceeds ${WORDS_MAX} words on ${haOverWordsIdxs.map((i) => (implantPositions[i] ? `Implant ${implantPositions[i]}` : "Implant —")).join(", ")}. Please shorten before submitting.`,
       );
       return;
     }
@@ -533,6 +596,7 @@ export default function Stage2SurgicalSubmissionScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={s.scroll} nestedScrollEnabled>
+           {/* iter-Jun-2026 (v13, Chunk D, Ask 1): Removed the Zygoma / Pterygoid / Conventional 3-tab per-implant sub-view from Phase 3 — the equivalent per-implant data is captured via the Healing Abutment Configuration and Checklist sections below. */}
           <View style={s.infoBox}>
             <Ionicons name="information-circle" size={22} color="#1565C0" />
             <Text style={s.infoText}>
@@ -560,10 +624,23 @@ export default function Stage2SurgicalSubmissionScreen() {
               >
                 Immediate Prosthesis Done
               </Text>
-              <Text style={{ marginTop: 6, fontSize: 13, color: "#33691E" }}>
-                {phase2ProsthesisType === "Other"
-                  ? phase2ProsthesisOther || "Other"
-                  : phase2ProsthesisType || "—"}
+              {/* iter-Feb-2026-D — Phase 3 banner rows.
+                    Prosthesis Type  ← the immediate provisional picked at
+                                        surgery in Phase 2 Step 2.
+                    Prosthetic Plan  ← what was planned in Phase 1 Step 1
+                                        (composed from SC/A/B/C fields, or
+                                        the legacy prosthetic_plan). */}
+              <Text style={{ marginTop: 6, fontSize: 13, color: '#33691E' }} testID="phase3-banner-prosthesis-type">
+                <Text style={{ fontWeight: '700' }}>Prosthesis Type:</Text>{' '}
+                {phase2ProsthesisType
+                  ? (phase2ProsthesisType === 'Other'
+                      ? (phase2ProsthesisOther ? `Other — ${phase2ProsthesisOther}` : 'Other')
+                      : phase2ProsthesisType)
+                  : '—'}
+              </Text>
+              <Text style={{ marginTop: 4, fontSize: 13, color: '#33691E' }} testID="phase3-banner-prosthetic-plan">
+                <Text style={{ fontWeight: '700' }}>Prosthetic Plan:</Text>{' '}
+                {phase1PlanSummary || '—'}
               </Text>
               {isOwner && !pendingEditRequest && (
                 <TouchableOpacity
@@ -625,8 +702,8 @@ export default function Stage2SurgicalSubmissionScreen() {
                     style={{ marginTop: 4, fontSize: 13, color: "#4A148C" }}
                   >
                     {implantPositions[i]
-                      ? `Tooth #${implantPositions[i]}`
-                      : "Tooth #—"}
+                      ? `Implant ${implantPositions[i]}`
+                      : "Implant —"}
                     : <Text style={{ fontWeight: "700" }}>{pc || "—"}</Text>
                   </Text>
                 ))}
@@ -657,8 +734,8 @@ export default function Stage2SurgicalSubmissionScreen() {
                     style={{ marginTop: 4, fontSize: 13, color: "#1A237E" }}
                   >
                     {implantPositions[i]
-                      ? `Tooth #${implantPositions[i]}`
-                      : "Tooth #—"}
+                      ? `Implant ${implantPositions[i]}`
+                      : "Implant —"}
                     : {h || "—"} mm
                   </Text>
                 ))
@@ -747,7 +824,10 @@ export default function Stage2SurgicalSubmissionScreen() {
                    Healing Abutment was already placed).
                 b. Customised healing abutment (free-text, ≤ 100 words, hard block).
               Every implant must have a selection before submit. */}
-          {haConfig.length > 0 && (
+          {/* iter-Jun-2026 (v13, Chunk D, Ask 5): only show the section if
+              at least one implant NEEDS healing abutment (i.e. not all
+              implants were Immediate-Loaded in Phase 2). */}
+          {haConfig.length > 0 && haConfig.some(c => c.phase2_component !== 'Immediate Loading Done') && (
             <View style={s.section} data-testid="phase3-per-implant-ha-section">
               <View style={s.sectionHeader}>
                 <Ionicons name="options-outline" size={20} color="#00695C" />
@@ -768,6 +848,10 @@ export default function Stage2SurgicalSubmissionScreen() {
                 abutment.
               </Text>
               {haConfig.map((cfg, idx) => {
+                // iter-Jun-2026 (v13, Chunk D, Ask 5): skip cards for implants
+                // that were Immediate-Loaded in Phase 2 — Healing Abutment is
+                // not applicable to those implants.
+                if (cfg.phase2_component === 'Immediate Loading Done') return null;
                 const wc = countWords(cfg.customised_details);
                 const overWords = wc > WORDS_MAX;
                 const pos = implantPositions[idx];
@@ -818,7 +902,7 @@ export default function Stage2SurgicalSubmissionScreen() {
                       <Text
                         style={{ fontSize: 14, fontWeight: "800", color: "#00695C" }}
                       >
-                        {pos ? `Tooth #${pos}` : "Tooth #—"}
+                        Implant {idx + 1}{pos ? ` (#${pos})` : ''}
                       </Text>
                       <View
                         style={{
@@ -1058,8 +1142,8 @@ export default function Stage2SurgicalSubmissionScreen() {
                     </Text>
                     {iopaFiles.map((file, idx) => {
                       const label = implantPositions[idx]
-                        ? `Tooth #${implantPositions[idx]}`
-                        : "Tooth #—";
+                        ? `Implant ${implantPositions[idx]}`
+                        : "Implant —";
                       const baseUrl = api.defaults.baseURL || "";
                       return (
                         <View
@@ -1241,8 +1325,8 @@ export default function Stage2SurgicalSubmissionScreen() {
                     </Text>
                     {isqValues.map((val, idx) => {
                       const label = implantPositions[idx]
-                        ? `Tooth #${implantPositions[idx]}`
-                        : "Tooth #—";
+                        ? `Implant ${implantPositions[idx]}`
+                        : "Implant —";
                       return (
                         <View
                           key={idx}
@@ -1354,9 +1438,7 @@ export default function Stage2SurgicalSubmissionScreen() {
                               color: "#BF360C",
                             }}
                           >
-                            {implantPositions[idx]
-                              ? `Tooth #${implantPositions[idx]}`
-                              : "Tooth #—"}
+                            Implant {idx + 1}{implantPositions[idx] ? ` (#${implantPositions[idx]})` : ''}
                           </Text>
                         </View>
                         <TextInput
