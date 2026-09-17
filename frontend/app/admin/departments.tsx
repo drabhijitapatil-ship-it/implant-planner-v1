@@ -83,9 +83,15 @@ export default function DepartmentsScreen() {
 
   const [showModal, setShowModal] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [entityType, setEntityType] = useState<"department" | "unit">("department");
   const [nameInput, setNameInput] = useState("");
   const [colorInput, setColorInput] = useState(DEPARTMENT_COLOR_PALETTE[0]);
   const [saving, setSaving] = useState(false);
+
+  const isUnit = editingDept
+    ? (entityType === "unit" || /\bunit\b/i.test(editingDept.name))
+    : entityType === "unit";
+  const entityLabel = isUnit ? "Unit" : "Department";
 
   // Incharges assigned to editingDept, plus org-wide implant_incharge users
   // with no department yet (eligible to be assigned here).
@@ -207,6 +213,7 @@ export default function DepartmentsScreen() {
 
   const openCreateModal = () => {
     setEditingDept(null);
+    setEntityType("department");
     setNameInput("");
     // Rotate through the palette by current department count so a new
     // department doesn't default to the same color as the last one created.
@@ -222,13 +229,14 @@ export default function DepartmentsScreen() {
     setEditingDept(dept);
     setNameInput(dept.name);
     setColorInput(dept.color || DEPARTMENT_COLOR_PALETTE[0]);
+    setEntityType(/\bunit\b/i.test(dept.name) ? "unit" : "department");
     setShowModal(true);
   };
 
   const handleSave = async () => {
     const name = nameInput.trim();
     if (!name) {
-      Alert.alert("Error", "Department name is required");
+      Alert.alert("Error", `${entityLabel} name is required`);
       return;
     }
     setSaving(true);
@@ -253,7 +261,7 @@ export default function DepartmentsScreen() {
     } catch (error: any) {
       Alert.alert(
         "Error",
-        error.response?.data?.detail || "Failed to save department",
+        error.response?.data?.detail || `Failed to save ${entityLabel.toLowerCase()}`,
       );
     } finally {
       setSaving(false);
@@ -263,7 +271,7 @@ export default function DepartmentsScreen() {
   const handleDeleteDepartment = () => {
     if (!editingDept) return;
     Alert.alert(
-      "Delete Department",
+      `Delete ${entityLabel}`,
       `Delete "${editingDept.name}"? This only works if no users are assigned to it — cases already created under it keep their history either way.`,
       [
         { text: "Cancel", style: "cancel" },
@@ -279,7 +287,7 @@ export default function DepartmentsScreen() {
             } catch (error: any) {
               Alert.alert(
                 "Error",
-                error.response?.data?.detail || "Failed to delete department",
+                error.response?.data?.detail || `Failed to delete ${entityLabel.toLowerCase()}`,
               );
             } finally {
               setSaving(false);
@@ -404,14 +412,14 @@ export default function DepartmentsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <CenteredHeader
-          title="Departments"
+          title="Departments and Units"
           fallback="/(tabs)/user-management"
         />
         <View style={styles.accessDenied}>
           <Ionicons name="lock-closed" size={48} color="#CCC" />
           <Text style={styles.accessDeniedText}>Access Restricted</Text>
           <Text style={styles.accessDeniedSubtext}>
-            Only the organization admin can manage departments
+            Only the organization admin can manage departments and units
           </Text>
         </View>
       </SafeAreaView>
@@ -423,8 +431,8 @@ export default function DepartmentsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <CenteredHeader
-        title="Departments"
-        subtitle={`${departments.length} department${departments.length !== 1 ? "s" : ""}`}
+        title="Departments and Units"
+        subtitle={`${departments.length} total`}
         fallback="/(tabs)/user-management"
       />
 
@@ -442,9 +450,10 @@ export default function DepartmentsScreen() {
           }
           ListHeaderComponent={
             <Text style={styles.hint}>
-              Each department gets its own Implant In-Charge, students, and
-              supervisors — isolated from the rest of the organization. Tap a
-              department to assign its incharge.
+              Each department or unit gets its own Implant Incharge,
+              Supervisors, and Students. Each department or unit will be
+              isolated from each other, under one organization.{"\n"}Tap + to
+              add a new Department or Unit.
             </Text>
           }
           renderItem={({ item }) => (
@@ -462,7 +471,11 @@ export default function DepartmentsScreen() {
                 ]}
               >
                 <Ionicons
-                  name="business-outline"
+                  name={
+                    /\bunit\b/i.test(item.name)
+                      ? "grid-outline"
+                      : "business-outline"
+                  }
                   size={20}
                   color={DEPARTMENT_COLOR_TEXT}
                 />
@@ -476,9 +489,10 @@ export default function DepartmentsScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="business-outline" size={48} color="#CCC" />
-              <Text style={styles.emptyText}>No departments yet</Text>
+              <Text style={styles.emptyText}>No departments or units yet</Text>
               <Text style={styles.emptySubtext}>
-                Create one to start splitting cases and users by department.
+                Create one to start splitting cases and users by department or
+                unit.
               </Text>
             </View>
           }
@@ -511,17 +525,78 @@ export default function DepartmentsScreen() {
               >
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>
-                    {editingDept ? editingDept.name : "New Department"}
+                    {editingDept
+                      ? editingDept.name
+                      : isUnit
+                        ? "New Unit"
+                        : "New Department"}
                   </Text>
                   <TouchableOpacity onPress={() => setShowModal(false)}>
                     <Ionicons name="close" size={24} color="#666" />
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.inputLabel}>Department Name</Text>
+                {!editingDept && (
+                  <View style={styles.createTypeContainer}>
+                    <Text style={styles.createPromptLabel}>Create</Text>
+                    <View style={styles.tabBar}>
+                      <TouchableOpacity
+                        style={[
+                          styles.tabBtn,
+                          entityType === "department" && styles.tabBtnActive,
+                        ]}
+                        onPress={() => setEntityType("department")}
+                        data-testid="create-tab-department"
+                      >
+                        <Ionicons
+                          name="business-outline"
+                          size={16}
+                          color={
+                            entityType === "department" ? "#1A73E8" : "#64748B"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.tabBtnText,
+                            entityType === "department" &&
+                              styles.tabBtnTextActive,
+                          ]}
+                        >
+                          Department
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.tabBtn,
+                          entityType === "unit" && styles.tabBtnActive,
+                        ]}
+                        onPress={() => setEntityType("unit")}
+                        data-testid="create-tab-unit"
+                      >
+                        <Ionicons
+                          name="grid-outline"
+                          size={16}
+                          color={entityType === "unit" ? "#1A73E8" : "#64748B"}
+                        />
+                        <Text
+                          style={[
+                            styles.tabBtnText,
+                            entityType === "unit" && styles.tabBtnTextActive,
+                          ]}
+                        >
+                          Unit
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                <Text style={styles.inputLabel}>
+                  {isUnit ? "Unit Name" : "Department Name"}
+                </Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="e.g. Prosthodontics"
+                  placeholder={isUnit ? "e.g. Unit 1" : "e.g. Prosthodontics"}
                   placeholderTextColor="#999"
                   value={nameInput}
                   onChangeText={setNameInput}
@@ -566,7 +641,11 @@ export default function DepartmentsScreen() {
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <Text style={styles.saveBtnText}>
-                      {editingDept ? "Save Name" : "Create Department"}
+                      {editingDept
+                        ? "Save Name"
+                        : isUnit
+                          ? "Create Unit"
+                          : "Create Department"}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -576,7 +655,9 @@ export default function DepartmentsScreen() {
                   creating a new one above). */}
                 {editingDept && (
                   <View style={styles.inchargeSection}>
-                    <Text style={styles.inputLabel}>Department Incharge</Text>
+                    <Text style={styles.inputLabel}>
+                      {isUnit ? "Unit Incharge" : "Department Incharge"}
+                    </Text>
 
                     {loadingIncharges ? (
                       <ActivityIndicator
@@ -606,9 +687,9 @@ export default function DepartmentsScreen() {
                             <View style={{ flex: 1 }}>
                               <View
                                 style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 6,
+                                   flexDirection: "row",
+                                   alignItems: "center",
+                                   gap: 6,
                                 }}
                               >
                                 <Text style={styles.inchargeName}>
@@ -643,7 +724,7 @@ export default function DepartmentsScreen() {
                         {atCap ? (
                           <Text style={styles.hintSmall}>
                             Maximum {MAX_INCHARGES_PER_DEPT} incharges reached
-                            for this department
+                            for this {isUnit ? "unit" : "department"}
                           </Text>
                         ) : (
                           <View style={styles.inchargeActionsRow}>
@@ -690,7 +771,9 @@ export default function DepartmentsScreen() {
                     data-testid="delete-department-btn"
                   >
                     <Ionicons name="trash-outline" size={16} color="#EF5350" />
-                    <Text style={styles.deleteBtnText}>Delete Department</Text>
+                    <Text style={styles.deleteBtnText}>
+                      Delete {isUnit ? "Unit" : "Department"}
+                    </Text>
                   </TouchableOpacity>
                 )}
               </ScrollView>
@@ -987,6 +1070,48 @@ const styles = StyleSheet.create({
     color: "#1A202C",
     flex: 1,
     marginRight: 8,
+  },
+  createTypeContainer: {
+    marginBottom: 16,
+  },
+  createPromptLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#546E7A",
+    marginBottom: 8,
+  },
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    padding: 4,
+    gap: 4,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  tabBtnActive: {
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  tabBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  tabBtnTextActive: {
+    color: "#1A73E8",
+    fontWeight: "700",
   },
   inputLabel: {
     fontSize: 13,

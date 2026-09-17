@@ -1,0 +1,102 @@
+/**
+ * iter-406 — zero-dependency cross-platform signature pad.
+ * PanResponder + react-native-svg polylines: identical behavior on web
+ * preview and native devices (no WebView, no rebuild).
+ * NOTE: Svg gets NUMERIC width/height from onLayout — percentage ("100%")
+ * dimensions crash react-native-svg on the New Architecture (iOS/Android).
+ */
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, PanResponder, Platform } from 'react-native';
+import Svg, { Polyline, Circle } from 'react-native-svg';
+
+export type Stroke = number[][]; // [[x,y], ...]
+
+type Props = {
+  strokes: Stroke[];
+  onChange: (strokes: Stroke[]) => void;
+  height?: number;
+  testID?: string;
+  /** Fired true on touch-down, false on release — lets the parent freeze
+   *  its ScrollView so the page doesn't move while the patient signs. */
+  onSigningChange?: (active: boolean) => void;
+};
+
+export default function SignaturePad({ strokes, onChange, height = 150, testID, onSigningChange }: Props) {
+  const current = useRef<Stroke>([]);
+  const strokesRef = useRef(strokes);
+  strokesRef.current = strokes;
+  const [size, setSize] = useState({ w: 0, h: height });
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: e => {
+        onSigningChange?.(true);
+        const { locationX, locationY } = e.nativeEvent;
+        current.current = [[locationX, locationY]];
+        onChange([...strokesRef.current, current.current]);
+      },
+      onPanResponderMove: e => {
+        const { locationX, locationY } = e.nativeEvent;
+        current.current.push([locationX, locationY]);
+        onChange([...strokesRef.current.slice(0, -1), [...current.current]]);
+      },
+      onPanResponderRelease: () => { current.current = []; onSigningChange?.(false); },
+      onPanResponderTerminate: () => { current.current = []; onSigningChange?.(false); },
+      onPanResponderTerminationRequest: () => false,
+      onShouldBlockNativeResponder: () => true,
+    })
+  ).current;
+
+  const webProps = Platform.OS === 'web' ? { 'data-testid': testID } : {};
+
+  return (
+    <View
+      style={[s.pad, { height }]}
+      {...pan.panHandlers}
+      onLayout={e => { const { width, height } = e.nativeEvent.layout; setSize({ w: width, h: height }); }}
+      testID={testID}
+      {...(webProps as any)}
+    >
+      {size.w > 0 && (
+        <Svg width={size.w} height={size.h} style={{ pointerEvents: 'none' } as any}>
+          {strokes.map((st, i) =>
+            st.length === 1 ? (
+              <Circle key={i} cx={st[0][0]} cy={st[0][1]} r={1.4} fill="#1A2332" />
+            ) : (
+              <Polyline
+                key={i}
+                points={st.map(p => `${p[0]},${p[1]}`).join(' ')}
+                fill="none"
+                stroke="#1A2332"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )
+          )}
+        </Svg>
+      )}
+      {strokes.length === 0 && (
+        <View style={s.hintWrap} pointerEvents="none">
+          <Text style={s.hint}>Sign here</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const s = StyleSheet.create({
+  pad: {
+    width: '100%', borderWidth: 1.5, borderColor: '#B0BEC5', borderStyle: 'dashed',
+    borderRadius: 8, backgroundColor: '#FAFCFF', overflow: 'hidden',
+    ...(Platform.OS === 'web'
+      ? ({ touchAction: 'none', userSelect: 'none' } as any)
+      : null),
+  },
+  hintWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  hint: { color: '#CFD8DC', fontSize: 13, fontWeight: '600' },
+});

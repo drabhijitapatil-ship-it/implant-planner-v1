@@ -73,7 +73,7 @@
         "projectId": "421ba752-d276-4e5d-9496-66d13cd3d6a0"
       },
       "router": {},
-      "backendUrl": ""
+      "backendUrl": "https://api.implanr.com"
     },
     "owner": "abhijitapatil"
   }

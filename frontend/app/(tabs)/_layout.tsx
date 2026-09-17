@@ -128,7 +128,7 @@ function DrawerMenu({
     },
     ...(isOrgAdmin
       ? [{
-          key: 'departments', icon: 'business-outline' as const, label: 'Departments', route: '/admin/departments',
+          key: 'departments', icon: 'business-outline' as const, label: 'Departments and Units', route: '/admin/departments',
           bg: '#E3F2FD', chip: '#BBDEFB', iconColor: '#1565C0',
         }]
       : []),
@@ -619,7 +619,7 @@ export default function TabsLayout() {
       />
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: '#1E88E5',
+          tabBarActiveTintColor: '#1565C0',
           tabBarInactiveTintColor: '#8E8E93',
           headerShown: true,
           headerBackVisible: false,
@@ -647,7 +647,7 @@ export default function TabsLayout() {
             height: 70,
           },
           tabBarLabelStyle: {
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: '600',
             marginTop: 2,
           },
@@ -683,7 +683,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="implant-selection"
           options={{
-            title: 'Implant',
+            title: 'Catalog',
             tabBarIcon: ({ color }) => (
               <ImplantIcon size={28} color={color} />
             ),

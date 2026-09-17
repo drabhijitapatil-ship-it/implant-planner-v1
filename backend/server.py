@@ -9631,8 +9631,15 @@ async def generate_consent_template(
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#CFD8DC'), spaceAfter=2))
     story.append(Paragraph("Signatures", styles['H2']))
     sig_line = "__________________________"
+    esign = procedure.get("consent_esign") or {}
+    patient_sig_cell = sig_line
+    patient_date_cell = "____________"
+    if esign.get("filename") and (UPLOADS_DIR / esign["filename"]).exists():
+        from reportlab.platypus import Image as RLImage
+        patient_sig_cell = RLImage(str(UPLOADS_DIR / esign["filename"]), width=48*mm, height=14*mm, kind='proportional')
+        patient_date_cell = (esign.get("signed_at") or "")[:10] or "____________"
     sig_rows = [
-        ["Patient Signature:", sig_line, "Date:", "____________"],
+        ["Patient Signature:", patient_sig_cell, "Date:", patient_date_cell],
         ["Patient Name (printed):", procedure.get("patient_name") or sig_line, "", ""],
         ["Guardian Signature (if minor):", sig_line, "Relationship:", "____________"],
         ["Treating Clinician Signature:", sig_line, "Date:", "____________"],
@@ -9650,10 +9657,16 @@ async def generate_consent_template(
         ('TOPPADDING', (0,0), (-1,-1), 1),
     ]))
     story.append(st)
-    story.append(Paragraph(
-        "Print — get patient to sign — scan or photograph — upload in the Implanr app to unlock Phase 2.",
-        styles['SmallGrey']
-    ))
+    if esign.get("filename"):
+        story.append(Paragraph(
+            f"Patient signed electronically on {esign.get('signed_at', '')[:10]} · Language: {(esign.get('language') or 'EN').upper()} · Consent text {esign.get('consent_version', 'v2.1')} · Witnessed by {esign.get('witnessed_by_name', 'Clinician')}. SHA-256: {esign.get('sha256', '')[:16]}...",
+            styles['SmallGrey']
+        ))
+    else:
+        story.append(Paragraph(
+            "Print — get patient to sign — scan or photograph — upload in the Implanr app to unlock Phase 2.",
+            styles['SmallGrey']
+        ))
     
     doc.build(story)
     buf.seek(0)

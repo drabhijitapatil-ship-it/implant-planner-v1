@@ -1,15 +1,16 @@
-// iter-Feb-2026 (v5): Fail-closed backend URL resolution.
-// The deploy pipeline rewrites EXPO_PUBLIC_BACKEND_URL at build time.
-// If it is missing we throw at import so the misconfiguration surfaces
-// immediately rather than the app silently pointing at the wrong host.
-const BACKEND_URL: string = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+import Constants from 'expo-constants';
 
-if (!BACKEND_URL) {
-  // eslint-disable-next-line no-console
-  console.warn(
-    '[config] EXPO_PUBLIC_BACKEND_URL is not set. All API calls will fail. ' +
-    'Ensure the environment variable is populated at build/deploy time.'
-  );
-}
+// Fail-safe backend URL resolution:
+// 1. Inlined EXPO_PUBLIC_BACKEND_URL from build/environment
+// 2. Constants.expoConfig?.extra?.backendUrl from dynamic app.config.js
+// 3. Fallback to production API: https://api.implanr.com
+// Trailing slashes are stripped to prevent double-slash (//api) routing errors.
+const rawUrl =
+  process.env.EXPO_PUBLIC_BACKEND_URL ||
+  Constants.expoConfig?.extra?.backendUrl ||
+  (Constants.manifest as any)?.extra?.backendUrl ||
+  'https://api.implanr.com';
+
+const BACKEND_URL: string = (rawUrl && rawUrl.trim() ? rawUrl.trim() : 'https://api.implanr.com').replace(/\/+$/, '');
 
 export { BACKEND_URL };

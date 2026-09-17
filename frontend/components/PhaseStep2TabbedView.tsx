@@ -20,8 +20,9 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator,
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { calculateOris } from '../src/utils/orisCalculator';
+import { BACKEND_URL } from '../utils/config';
 
-const API = `${process.env.EXPO_PUBLIC_BACKEND_URL || ''}/api`;
+const API = `${BACKEND_URL}/api`;
 
 // ── Types ────────────────────────────────────────────────────
 export type PhaseNum = 2 | 3 | 4 | 5;

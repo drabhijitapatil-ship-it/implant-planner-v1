@@ -20,7 +20,8 @@ import { Ionicons } from "@expo/vector-icons";
 import api from "../../utils/api";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { format } from "date-fns";
-import { STATUS_LABELS } from "../../constants/checklist";
+import { STATUS_LABELS, getStatusMeta } from "../../constants/statusMeta";
+import { THEME } from "../../constants/theme";
 import { useAuth } from "../../contexts/AuthContext";
 import CaseSubmissionStatus from "../../components/CaseSubmissionStatus";
 import NurseCasesScreen from "../../components/NurseCasesScreen";
@@ -29,6 +30,7 @@ import RescheduleModal from "../../components/RescheduleModal";
 import CancelCaseModal from "../../components/CancelCaseModal";
 import TransferCaseModal from "../../components/TransferCaseModal";
 import ReferredCaseAssignModal from "../../components/ReferredCaseAssignModal";
+import SafeDeleteModal from "../../components/SafeDeleteModal";
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -40,39 +42,11 @@ export default function ProceduresScreen() {
 }
 
 const getStatusBadgeStyle = (status: string) => {
-  const s = status || "draft";
-  if (s.includes("approved") || s === "completed" || s === "approved") {
-    return {
-      bg: "#0B8A3F",
-      text: "#FFF",
-      icon: "checkmark-circle" as const,
-    };
-  }
-  if (s.includes("pending") || s.includes("delivery")) {
-    return {
-      bg: "#D97706",
-      text: "#FFF",
-      icon: "time-outline" as const,
-    };
-  }
-  if (s.includes("rejected")) {
-    return {
-      bg: "#DC2626",
-      text: "#FFF",
-      icon: "alert-circle-outline" as const,
-    };
-  }
-  if (s === "cancelled") {
-    return {
-      bg: "#78909C",
-      text: "#FFF",
-      icon: "close-circle-outline" as const,
-    };
-  }
+  const meta = getStatusMeta(status);
   return {
-    bg: "#64748B",
-    text: "#FFF",
-    icon: "document-text-outline" as const,
+    bg: meta.solidBg,
+    text: meta.solidFg,
+    icon: meta.icon as any,
   };
 };
 
@@ -98,6 +72,132 @@ const REJECTED_STATUSES = new Set([
   "rejected_phase4_step2",
 ]);
 
+export const PHASE_OPTIONS = [
+  { key: "all", label: "All Phases" },
+  { key: "1", label: "Phase 1" },
+  { key: "2", label: "Phase 2" },
+  { key: "3", label: "Stage 2" },
+  { key: "4", label: "Phase 4" },
+  { key: "augmentation", label: "Augmentation" },
+  { key: "follow_up", label: "Follow-up" },
+];
+
+export const isNeedsMyAction = (p: any, user: any): boolean => {
+  if (!user || !p) return false;
+  const role = user.role;
+  const uid = user.id || user._id;
+  const s = p.status || "";
+
+  if (role === "supervisor") {
+    const isAssigned = p.supervisor_id === uid || p.created_by_id === uid;
+    if (!isAssigned && !user.is_admin) return false;
+    return (
+      s === "pending_phase1" ||
+      s === "pending_phase2" ||
+      s === "pending_stage2_surgical" ||
+      s === "pending_phase4_step1" ||
+      s === "pending_phase4_step2" ||
+      s === "pending_stage2_prosthetic" ||
+      s.startsWith("pending_") ||
+      p.transfer_request?.status === "pending_supervisor" ||
+      p.active_referral?.status === "pending_supervisor"
+    );
+  }
+
+  if (role === "implant_incharge") {
+    return (
+      s === "pending_phase1" ||
+      s === "pending_phase2" ||
+      s === "pending_stage2_surgical" ||
+      s === "pending_phase4_step1" ||
+      s === "pending_phase4_step2" ||
+      s === "pending_stage2_prosthetic" ||
+      s.startsWith("pending_") ||
+      p.requires_incharge_approval === true ||
+      p.active_referral?.status === "pending_assignment"
+    );
+  }
+
+  if (role === "student") {
+    const isOwner = p.student_id === uid || p.created_by_id === uid;
+    if (!isOwner) {
+      return (
+        p.transfer_request?.to_student_id === uid &&
+        p.transfer_request?.status === "pending_recipient"
+      );
+    }
+    // Rejected cases require revision from student:
+    if (s.startsWith("rejected_")) return true;
+    // Next step waiting to be submitted by student:
+    if (s === "phase1_approved") return true;
+    if (s === "phase2_approved") return true;
+    if (s === "stage2_surgical_approved") return true;
+    if (s === "phase4_step1_approved") return true;
+    return false;
+  }
+
+  if (role === "nurse") {
+    const needsConsent = !p.patient_consent_form;
+    const needsAutoclave = !p.instruments_autoclaved?.marked_at;
+    return (
+      (s === "phase1_approved" || s === "phase2_approved") &&
+      (needsConsent || needsAutoclave)
+    );
+  }
+
+  if (user.is_admin || role === "administrator") {
+    return (
+      s.startsWith("pending_") ||
+      s.startsWith("rejected_") ||
+      p.active_referral?.status === "pending_assignment"
+    );
+  }
+
+  return false;
+};
+
+export const matchesPhase = (p: any, phaseKey: string): boolean => {
+  if (!phaseKey || phaseKey === "all") return true;
+  const s = p.status || "";
+
+  if (phaseKey === "1") {
+    return s === "draft" || s.includes("phase1");
+  }
+  if (phaseKey === "2") {
+    return s === "phase1_approved" || s.includes("phase2");
+  }
+  if (phaseKey === "3") {
+    return (
+      s === "phase2_approved" ||
+      s.includes("stage2_surgical") ||
+      s.includes("phase3")
+    );
+  }
+  if (phaseKey === "4") {
+    return (
+      s === "stage2_surgical_approved" ||
+      s.includes("phase4") ||
+      s.includes("stage2_prosthetic") ||
+      s.includes("final_delivery")
+    );
+  }
+  if (phaseKey === "augmentation") {
+    return (
+      !!p.augmentation_details ||
+      p.implant_procedure_type === "Implant Placement with Guided Bone Regeneration" ||
+      p.implant_procedure_type === "Sinus Lift" ||
+      (Array.isArray(p.augmentation_rounds) && p.augmentation_rounds.length > 0)
+    );
+  }
+  if (phaseKey === "follow_up") {
+    return (
+      (Array.isArray(p.follow_up_records) && p.follow_up_records.length > 0) ||
+      s === "completed"
+    );
+  }
+  return true;
+};
+
 function DefaultProceduresScreen() {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -106,13 +206,14 @@ function DefaultProceduresScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   // iter-267: unified filter row — single set of tabs replaces the older
-  // dual-row design (server-side status row + client-side pipeline row).
-  // Filtering is now done entirely client-side over the full case list so
-  // the four tabs (All / In Progress / Completed / Rejected) stay
-  // consistent for every role.
+  // Action-oriented filter tabs: "Needs my action", "In progress", "Completed", "All".
+  // "Needs my action" defaults to active for supervisors and in-charges.
+  const isSupervisorOrIncharge =
+    user?.role === "supervisor" || user?.role === "implant_incharge";
   const [filter, setFilter] = useState<
-    "all" | "in_progress" | "completed" | "rejected"
-  >("all");
+    "needs_action" | "in_progress" | "completed" | "all"
+  >(isSupervisorOrIncharge ? "needs_action" : "needs_action");
+  const [phaseFilter, setPhaseFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   // iter-350: org owner (is_admin) isn't auto-scoped to any department, so
   // give them a filter to narrow "My Cases" down to one instead of always
@@ -120,7 +221,10 @@ function DefaultProceduresScreen() {
   const [departments, setDepartments] = useState<{ id: string; name: string; color?: string }[]>([]);
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [tempFilter, setTempFilter] = useState<string>("all");
+  const [tempFilter, setTempFilter] = useState<string>(
+    isSupervisorOrIncharge ? "needs_action" : "needs_action"
+  );
+  const [tempPhaseFilter, setTempPhaseFilter] = useState<string>("all");
   const [tempDeptFilter, setTempDeptFilter] = useState<string>("all");
   const [shareCase, setShareCase] = useState<{
     id: string;
@@ -142,23 +246,33 @@ function DefaultProceduresScreen() {
   const [transferCase, setTransferCase] = useState<{ id: string; privileged?: boolean } | null>(null);
   const [assignReferredCase, setAssignReferredCase] = useState<{ id: string; patientName: string } | null>(null);
   const [selectedProcedureForActions, setSelectedProcedureForActions] = useState<any | null>(null);
+  const [safeDeleteCase, setSafeDeleteCase] = useState<{
+    id: string;
+    registrationNumber?: string;
+    patientName?: string;
+  } | null>(null);
 
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; phase?: string }>();
 
   useEffect(() => {
     if (params.phase) {
-      setFilter(`phase_${params.phase}` as any);
-    } else if (params.filter === "pending") {
-      // Legacy URL param — map "pending" → new "in_progress" tab
-      setFilter("in_progress");
-    } else if (
-      params.filter &&
-      ["in_progress", "completed", "rejected"].includes(params.filter)
-    ) {
-      setFilter(params.filter as any);
+      setPhaseFilter(String(params.phase));
+      setFilter("all");
+    } else if (params.filter) {
+      if (
+        ["needs_action", "in_progress", "completed", "all"].includes(
+          params.filter
+        )
+      ) {
+        setFilter(params.filter as any);
+      } else if (params.filter === "pending") {
+        setFilter("needs_action");
+      }
+    } else if (isSupervisorOrIncharge) {
+      setFilter("needs_action");
     }
-  }, [params.filter, params.phase]);
+  }, [params.filter, params.phase, isSupervisorOrIncharge]);
 
   useEffect(() => {
     if (!user?.is_admin) return;
@@ -172,20 +286,11 @@ function DefaultProceduresScreen() {
     if (!user) return;
     try {
       const reqParams: any = {};
-      const f = String(filter);
-      if (f.startsWith("phase_")) {
-        reqParams.phase = f.replace("phase_", "");
-      }
       if (user?.is_admin && deptFilter !== "all") {
         reqParams.department_id = deptFilter;
       }
-      // For All / In Progress / Completed / Rejected we fetch the full
-      // case list and filter client-side so categories stay consistent
-      // across roles (see filteredProcedures below).
       const response = await api.get("/procedures", { params: reqParams });
-      const filtered = f.startsWith("phase_")
-        ? response.data
-        : response.data.filter((p: any) => p.status !== "draft");
+      const filtered = response.data.filter((p: any) => p.status !== "draft");
       setProcedures(filtered);
     } catch (error: any) {
       if (error?.response?.status !== 401 && error?.response?.status !== 403) {
@@ -195,7 +300,7 @@ function DefaultProceduresScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [deptFilter, filter, user]);
+  }, [deptFilter, user]);
 
   useEffect(() => {
     loadProcedures();
@@ -246,36 +351,16 @@ function DefaultProceduresScreen() {
     );
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string, registrationNumber?: string, patientName?: string) => {
     if (!id) {
       Alert.alert("Error", "Missing case ID");
       return;
     }
-    Alert.alert(
-      "Delete",
-      "Permanently delete this case? This cannot be undone.",
-      [
-        { text: "Cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await api.delete(`/procedures/${id}`);
-              setProcedures((prev: any) =>
-                prev.filter((p: any) => (p.id || p._id) !== id),
-              );
-              Alert.alert("Done", "Case deleted");
-            } catch (e: any) {
-              Alert.alert(
-                "Error",
-                e.response?.data?.detail || "Failed to delete",
-              );
-            }
-          },
-        },
-      ],
-    );
+    setSafeDeleteCase({
+      id,
+      registrationNumber: registrationNumber || "",
+      patientName: patientName || "",
+    });
   };
 
   const handleEdit = (id: string) => {
@@ -325,8 +410,8 @@ function DefaultProceduresScreen() {
           key: "delete",
           label: "Delete",
           icon: "trash-outline",
-          color: "#1565C0",
-          onPress: () => handleDelete(pid),
+          color: THEME.colors.danger,
+          onPress: () => handleDelete(pid, item.registration_number, item.patient_name),
         });
         actions.push({
           key: "archive",
@@ -728,12 +813,15 @@ function DefaultProceduresScreen() {
     );
   };
 
-  const filterButtons = useMemo(() => [
-    { key: "all", label: "All" },
-    { key: "in_progress", label: "In Progress" },
-    { key: "completed", label: "Completed" },
-    { key: "rejected", label: "Rejected" },
-  ], []);
+  const filterButtons = useMemo(
+    () => [
+      { key: "needs_action", label: "Needs my action" },
+      { key: "in_progress", label: "In progress" },
+      { key: "completed", label: "Completed" },
+      { key: "all", label: "All" },
+    ],
+    []
+  );
 
   const searchFiltered = useMemo(() => {
     if (!searchQuery.trim()) return procedures;
@@ -746,43 +834,41 @@ function DefaultProceduresScreen() {
     ));
   }, [procedures, searchQuery]);
 
-  // iter-267: unified client-side status categorisation. Drafts are
-  // already excluded upstream (Dashboard owns them).
-  //   • In Progress = anything actively moving through the workflow,
-  //     including cases awaiting faculty approval AND cases that have
-  //     cleared a phase but are not yet completed.
-  //   • Completed = final state.
-  //   • Rejected = any rejected_* phase status.
-  // iter-268: per-tab counts so users see workload at a glance.
-  // Counts reflect the active search query (mirrors the visible list).
+  // Tab counts: computed per role for "Needs my action", plus in_progress, completed, all.
   const tabCounts = useMemo<Record<string, number>>(() => ({
-    all: searchFiltered.length,
+    needs_action: searchFiltered.filter((p: any) => isNeedsMyAction(p, user)).length,
     in_progress: searchFiltered.filter((p: any) =>
-      IN_PROGRESS_STATUSES.has(p.status),
+      IN_PROGRESS_STATUSES.has(p.status)
     ).length,
     completed: searchFiltered.filter((p: any) => p.status === "completed")
       .length,
-    rejected: searchFiltered.filter((p: any) => REJECTED_STATUSES.has(p.status))
-      .length,
-  }), [searchFiltered]);
+    all: searchFiltered.length,
+  }), [searchFiltered, user]);
 
   const filteredProcedures = useMemo(() => {
-    const f = String(filter);
-    if (f.startsWith("phase_")) return searchFiltered;
-    if (f === "all") return searchFiltered;
     return searchFiltered.filter((p: any) => {
-      const s = p.status;
-      if (f === "in_progress") return IN_PROGRESS_STATUSES.has(s);
-      if (f === "completed") return s === "completed";
-      if (f === "rejected") return REJECTED_STATUSES.has(s);
+      // 1. Action / Status Filter
+      if (filter === "needs_action") {
+        if (!isNeedsMyAction(p, user)) return false;
+      } else if (filter === "in_progress") {
+        if (!IN_PROGRESS_STATUSES.has(p.status)) return false;
+      } else if (filter === "completed") {
+        if (p.status !== "completed") return false;
+      }
+
+      // 2. Phase Filter
+      if (phaseFilter !== "all") {
+        if (!matchesPhase(p, phaseFilter)) return false;
+      }
+
       return true;
     });
-  }, [filter, searchFiltered]);
+  }, [filter, phaseFilter, searchFiltered, user]);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={THEME.colors.primary} />
       </View>
     );
   }
@@ -822,10 +908,11 @@ function DefaultProceduresScreen() {
           <TouchableOpacity
             style={[
               styles.filterIconButton,
-              (filter !== "all" || deptFilter !== "all") && styles.filterIconButtonActive,
+              (filter !== "all" || phaseFilter !== "all" || deptFilter !== "all") && styles.filterIconButtonActive,
             ]}
             onPress={() => {
               setTempFilter(filter);
+              setTempPhaseFilter(phaseFilter);
               setTempDeptFilter(deptFilter);
               setShowFilterModal(true);
             }}
@@ -834,25 +921,122 @@ function DefaultProceduresScreen() {
             <Ionicons
               name="options-outline"
               size={20}
-              color={(filter !== "all" || deptFilter !== "all") ? "#FFF" : "#1565C0"}
+              color={(filter !== "all" || phaseFilter !== "all" || deptFilter !== "all") ? "#FFF" : "#1565C0"}
             />
-            {(filter !== "all" || deptFilter !== "all") && (
+            {(filter !== "all" || phaseFilter !== "all" || deptFilter !== "all") && (
               <View style={styles.filterBadgeDot} />
             )}
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* Action-Oriented Segmented Control */}
+      <View style={[styles.segmentedWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
+        <View style={styles.segmentedContainer} data-testid="segmented-filter-bar">
+          {filterButtons.map((btn) => {
+            const isActive = filter === btn.key;
+            const count = tabCounts[btn.key] ?? 0;
+            const isActionTab = btn.key === "needs_action";
+            return (
+              <TouchableOpacity
+                key={btn.key}
+                style={[
+                  styles.segmentItem,
+                  isActive && styles.segmentItemActive,
+                ]}
+                onPress={() => setFilter(btn.key as any)}
+                activeOpacity={0.7}
+                testID={`filter-tab-${btn.key}`}
+                {...({ "data-testid": `filter-tab-${btn.key}` } as any)}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    isActive && styles.segmentTextActive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {btn.label}
+                </Text>
+                <View
+                  style={[
+                    styles.segmentBadge,
+                    isActive ? styles.segmentBadgeActive : styles.segmentBadgeInactive,
+                    isActionTab && count > 0 && styles.segmentBadgeAlert,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentBadgeText,
+                      isActive ? styles.segmentBadgeTextActive : styles.segmentBadgeTextInactive,
+                      isActionTab && count > 0 && styles.segmentBadgeTextAlert,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Phase Chip Row */}
+      <View style={[styles.phaseChipsWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.phaseChipsScroll}
+        >
+          {PHASE_OPTIONS.map((ph) => {
+            const isPhaseActive = phaseFilter === ph.key;
+            return (
+              <TouchableOpacity
+                key={ph.key}
+                style={[
+                  styles.phaseChip,
+                  isPhaseActive && styles.phaseChipActive,
+                ]}
+                onPress={() => setPhaseFilter(ph.key)}
+                activeOpacity={0.7}
+                testID={`phase-chip-${ph.key}`}
+                {...({ "data-testid": `phase-chip-${ph.key}` } as any)}
+              >
+                <Text
+                  style={[
+                    styles.phaseChipText,
+                    isPhaseActive && styles.phaseChipTextActive,
+                  ]}
+                >
+                  {ph.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {/* Applied Filters Chips Bar */}
-      {(filter !== "all" || deptFilter !== "all") && (
+      {(filter !== "all" || phaseFilter !== "all" || deptFilter !== "all") && (
         <View style={[styles.appliedFiltersRow, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: "center", gap: 8 }}>
             {filter !== "all" && (
               <View style={styles.appliedChip}>
                 <Text style={styles.appliedChipText}>
-                  Status: {filterButtons.find((b) => b.key === filter)?.label || filter}
+                  Action: {filterButtons.find((b) => b.key === filter)?.label || filter}
                 </Text>
                 <TouchableOpacity onPress={() => setFilter("all" as any)}>
+                  <Ionicons name="close-circle" size={16} color="#1565C0" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {phaseFilter !== "all" && (
+              <View style={styles.appliedChip}>
+                <Text style={styles.appliedChipText}>
+                  Phase: {PHASE_OPTIONS.find((ph) => ph.key === phaseFilter)?.label || phaseFilter}
+                </Text>
+                <TouchableOpacity onPress={() => setPhaseFilter("all")}>
                   <Ionicons name="close-circle" size={16} color="#1565C0" />
                 </TouchableOpacity>
               </View>
@@ -872,6 +1056,7 @@ function DefaultProceduresScreen() {
             <TouchableOpacity
               onPress={() => {
                 setFilter("all" as any);
+                setPhaseFilter("all");
                 setDeptFilter("all");
               }}
               style={{ paddingVertical: 4, paddingHorizontal: 6 }}
@@ -881,6 +1066,7 @@ function DefaultProceduresScreen() {
           </ScrollView>
         </View>
       )}
+
 
       {filteredProcedures.length === 0 ? (
         <View style={styles.emptyState}>
@@ -976,6 +1162,21 @@ function DefaultProceduresScreen() {
           onSuccess={() => {
             setAssignReferredCase(null);
             loadProcedures();
+          }}
+        />
+      )}
+      {safeDeleteCase && (
+        <SafeDeleteModal
+          visible={!!safeDeleteCase}
+          procedureId={safeDeleteCase.id}
+          registrationNumber={safeDeleteCase.registrationNumber}
+          patientName={safeDeleteCase.patientName}
+          onClose={() => setSafeDeleteCase(null)}
+          onSuccess={(deletedId) => {
+            setProcedures((prev: any) =>
+              prev.filter((p: any) => (p.id || p._id) !== deletedId)
+            );
+            setSafeDeleteCase(null);
           }}
         />
       )}
@@ -1169,6 +1370,37 @@ function DefaultProceduresScreen() {
                 })}
               </View>
 
+              {/* Phase Section */}
+              <Text style={[styles.filterSectionTitle, { marginTop: 20 }]}>
+                Phase
+              </Text>
+              <View style={styles.chipGroup}>
+                {PHASE_OPTIONS.map((ph) => {
+                  const isActive = tempPhaseFilter === ph.key;
+                  return (
+                    <TouchableOpacity
+                      key={ph.key}
+                      testID={`modal-phase-${ph.key}`}
+                      {...({ 'data-testid': `modal-phase-${ph.key}` } as any)}
+                      style={[
+                        styles.modalChip,
+                        isActive && styles.modalChipActive,
+                      ]}
+                      onPress={() => setTempPhaseFilter(ph.key)}
+                    >
+                      <Text
+                        style={[
+                          styles.modalChipText,
+                          isActive && styles.modalChipTextActive,
+                        ]}
+                      >
+                        {ph.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
               {/* Department Section */}
               {user?.is_admin && departments.length > 0 && (
                 <>
@@ -1225,6 +1457,7 @@ function DefaultProceduresScreen() {
                 style={styles.resetFilterBtn}
                 onPress={() => {
                   setTempFilter("all");
+                  setTempPhaseFilter("all");
                   setTempDeptFilter("all");
                 }}
               >
@@ -1235,6 +1468,7 @@ function DefaultProceduresScreen() {
                 style={styles.applyFilterBtn}
                 onPress={() => {
                   setFilter(tempFilter as any);
+                  setPhaseFilter(tempPhaseFilter);
                   setDeptFilter(tempDeptFilter);
                   setShowFilterModal(false);
                 }}
@@ -1270,7 +1504,7 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 16,
-    color: "#007AFF",
+    color: "#1565C0",
     fontWeight: "500",
   },
   filterContainer: {
@@ -1290,7 +1524,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   filterButtonActive: {
-    backgroundColor: "#007AFF",
+    backgroundColor: "#1565C0",
   },
   filterText: {
     fontSize: 11,
@@ -1402,6 +1636,102 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF5252",
     borderWidth: 1,
     borderColor: "#FFF",
+  },
+  segmentedWrapper: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  segmentedContainer: {
+    flexDirection: "row",
+    backgroundColor: "#E8ECF2",
+    borderRadius: 12,
+    padding: 4,
+    gap: 4,
+  },
+  segmentItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 9,
+    gap: 5,
+  },
+  segmentItemActive: {
+    backgroundColor: "#FFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#546E7A",
+  },
+  segmentTextActive: {
+    color: "#1565C0",
+    fontWeight: "700",
+  },
+  segmentBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    minWidth: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  segmentBadgeInactive: {
+    backgroundColor: "#CFD8DC",
+  },
+  segmentBadgeActive: {
+    backgroundColor: "#E3F2FD",
+  },
+  segmentBadgeAlert: {
+    backgroundColor: "#FFEBEE",
+  },
+  segmentBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  segmentBadgeTextInactive: {
+    color: "#546E7A",
+  },
+  segmentBadgeTextActive: {
+    color: "#1565C0",
+  },
+  segmentBadgeTextAlert: {
+    color: "#D32F2F",
+  },
+  phaseChipsWrapper: {
+    marginBottom: 10,
+  },
+  phaseChipsScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  phaseChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#F0F4F8",
+    borderWidth: 1,
+    borderColor: "#CFD8DC",
+  },
+  phaseChipActive: {
+    backgroundColor: "#1565C0",
+    borderColor: "#1565C0",
+  },
+  phaseChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#455A64",
+  },
+  phaseChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
   appliedFiltersRow: {
     paddingHorizontal: 16,

@@ -391,8 +391,8 @@ export default function ProfileScreen() {
                 <Ionicons name="business-outline" size={20} color="#1565C0" />
               </View>
               <View style={styles.rowContent}>
-                <Text style={styles.rowLabel}>Departments</Text>
-                <Text style={styles.rowValue}>Create departments &amp; assign incharges</Text>
+                <Text style={styles.rowLabel}>Departments and Units</Text>
+                <Text style={styles.rowValue}>Create departments or units &amp; assign Incharges</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>

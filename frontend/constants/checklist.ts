@@ -712,50 +712,14 @@ export const CUSTOM_ABUTMENT_OPTIONS = [
   'Other',
 ];
 
-// ─── Status Styling ───────────────────────────────────
-export const STATUS_COLORS: Record<string, string> = {
-  draft: '#78909C',
-  pending_phase1: '#FFA500',
-  phase1_approved: '#4CAF50',
-  pending_phase2: '#FFD700',
-  phase2_approved: '#2196F3',
-  pending_stage2_surgical: '#FF9800',
-  stage2_surgical_approved: '#8BC34A',
-  stage2_surgical_rejected: '#F44336',
-  pending_stage2_prosthetic: '#9C27B0',
-  stage2_prosthetic_step1_approved: '#00BCD4',
-  pending_final_delivery: '#FF5722',
-  stage2_prosthetic_rejected: '#F44336',
-  completed: '#4CAF50',
-  approved: '#4CAF50',
-  rejected: '#F44336',
-  permanently_rejected: '#B71C1C',
-  cancelled: '#78909C',
-  augmentation_in_progress: '#E65100',
-  treatment_ended: '#B71C1C',
-};
-
-export const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  pending_phase1: 'Phase 1: Pending Approval',
-  phase1_approved: 'Phase 1: Approved - Ready for Phase 2',
-  pending_phase2: 'Phase 2: Pending Approval',
-  phase2_approved: 'Phase 2 Approved - Ready for Phase 3',
-  pending_stage2_surgical: 'Phase 3: Pending Approval',
-  stage2_surgical_approved: 'Phase 3: Approved - Ready for Phase 4',
-  stage2_surgical_rejected: 'Phase 3: Rejected',
-  pending_stage2_prosthetic: 'Phase 4 Step 1: Pending Approval',
-  stage2_prosthetic_step1_approved: 'Phase 4 Step 1: Approved - Ready for Step 2',
-  pending_final_delivery: 'Phase 4 Step 2: Pending Approval',
-  stage2_prosthetic_rejected: 'Phase 4: Rejected',
-  completed: 'Treatment Complete',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  permanently_rejected: 'Permanently Rejected',
-  cancelled: 'Cancelled',
-  augmentation_in_progress: 'Pre-Implant Augmentation In Progress',
-  treatment_ended: 'Treatment Terminated',
-};
+// ─── Status Styling & Metadata (Delegated to centralized statusMeta.ts) ───
+export {
+  STATUS_META,
+  getStatusMeta,
+  STATUS_COLORS,
+  STATUS_LABELS,
+  type StatusMeta,
+} from './statusMeta';
 
 export const USER_ROLES = {
   student: 'Student',

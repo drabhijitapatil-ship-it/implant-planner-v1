@@ -74,6 +74,7 @@ export default function RootLayout() {
               <Stack.Screen name="procedures/submit-stage2-surgical/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-stage2-prosthetic/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="procedures/submit-phase4-step2/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="procedures/consent-sign/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="legal/privacy-policy" options={{ headerShown: false }} />
               <Stack.Screen name="legal/terms" options={{ headerShown: false }} />
               <Stack.Screen name="onboarding" options={{ headerShown: false }} />

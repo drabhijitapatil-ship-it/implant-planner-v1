@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import api, { getToken } from '../../utils/api';
+import { BACKEND_URL } from '../../utils/config';
 import { useAuth } from '../../contexts/AuthContext';
 import { router } from 'expo-router';
 import BackButton from '../../components/BackButton';
@@ -139,7 +140,6 @@ export default function AuditLogScreen() {
   const exportCsv = async () => {
     setExportBusy(true);
     try {
-      const backendURL = process.env.EXPO_PUBLIC_BACKEND_URL;
       const qs = new URLSearchParams();
       if (fAction) qs.append('action', fAction);
       if (fOutcome) qs.append('outcome', fOutcome);
@@ -150,7 +150,7 @@ export default function AuditLogScreen() {
         d.setUTCDate(d.getUTCDate() + 1);
         qs.append('end_date', d.toISOString());
       }
-      const url = `${backendURL}/api/admin/access-logs/export-csv?${qs.toString()}`;
+      const url = `${BACKEND_URL}/api/admin/access-logs/export-csv?${qs.toString()}`;
       const token = (await getToken('access_token')) || '';
 
       if (Platform.OS === 'web') {

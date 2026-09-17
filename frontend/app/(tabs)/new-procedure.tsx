@@ -1054,8 +1054,21 @@ export default function NewProcedureScreen() {
   // render the Clinical Examination as a full-arch layout.
   // iter-232 fix: re-added (the iter-231 refactor accidentally removed this
   // declaration while keeping 4 usages → ReferenceError → blank screen).
+  // EXCEPTION: Single/Multiple Conventional Implants still need the FDI chart
+  // even with Overdenture — the user must pick the specific tooth/teeth for
+  // implant placement. The overdenture sits on those implants, but the FDI
+  // positions are still required for implant selection in Step 2.
+  const CONVENTIONAL_IMPLANT_TYPES = new Set([
+    "Single Conventional Implant",
+    "Multiple Conventional Implants",
+  ]);
+  const isConventionalImplant = CONVENTIONAL_IMPLANT_TYPES.has(
+    formData.implant_procedure_type,
+  );
   const isOverdentureNonFullArch =
-    isNonFullArch && formData.prosthetic_plan === "Overdenture with Attachment";
+    isNonFullArch &&
+    !isConventionalImplant &&
+    formData.prosthetic_plan === "Overdenture with Attachment";
 
   // iter-231: sync the lifted existing-implant tooth positions into the
   // form's `missing_teeth` so the Clinical Examination's cluster utilities
@@ -3354,7 +3367,11 @@ export default function NewProcedureScreen() {
         }
       }
       if (isFullArch && !formData.arch) missImplantDetails.push("Arch");
-      if (!isFullArch && (formData.missing_teeth || []).length === 0)
+      if (
+        !isFullArch &&
+        !isOverdentureNonFullArch &&
+        (formData.missing_teeth || []).length === 0
+      )
         missImplantDetails.push("At least one missing tooth on FDI chart");
       // iter-328: Sinus Lift extras surfaced in the missing-fields panel
       if (formData.implant_procedure_type === "Sinus Lift") {
@@ -5649,9 +5666,13 @@ export default function NewProcedureScreen() {
                             updateForm("prosthetic_plan", v);
                             // Flip into Overdenture-with-Attachment full-arch protocol → wipe
                             // any previously-chosen missing teeth (FDI chart will be hidden).
+                            // Exception: Single/Multiple Conventional Implants still show the
+                            // FDI chart (user must pick implant tooth positions), so skip the
+                            // clear for those types.
                             if (
                               v === "Overdenture with Attachment" &&
-                              isNonFullArch
+                              isNonFullArch &&
+                              !isConventionalImplant
                             ) {
                               updateForm("missing_teeth", []);
                               updateForm("edentulous_site_measurements", {});

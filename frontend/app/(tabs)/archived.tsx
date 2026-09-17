@@ -5,12 +5,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
+import SafeDeleteModal from '../../components/SafeDeleteModal';
 
 export default function ArchivedScreen() {
   const { user } = useAuth();
   const [procedures, setProcedures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [safeDeleteCase, setSafeDeleteCase] = useState<{
+    id: string;
+    registrationNumber?: string;
+    patientName?: string;
+  } | null>(null);
 
   useFocusEffect(useCallback(() => {
     loadArchived();
@@ -37,17 +43,12 @@ export default function ArchivedScreen() {
     ]);
   };
 
-  const handleDelete = async (id: string) => {
-    Alert.alert('Delete', 'Permanently delete this case? This cannot be undone.', [
-      { text: 'Cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          await api.delete(`/procedures/${id}`);
-          setProcedures(prev => prev.filter(p => (p.id || p._id) !== id));
-          Alert.alert('Done', 'Case deleted');
-        } catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Failed'); }
-      }}
-    ]);
+  const handleDelete = (id: string, registrationNumber?: string, patientName?: string) => {
+    setSafeDeleteCase({
+      id,
+      registrationNumber: registrationNumber || '',
+      patientName: patientName || '',
+    });
   };
 
   const filtered = procedures.filter(p => {
@@ -78,7 +79,11 @@ export default function ArchivedScreen() {
           <Text style={s.actionText}>Unarchive</Text>
         </TouchableOpacity>
         {user?.role === 'implant_incharge' && (
-          <TouchableOpacity style={[s.actionBtn, { borderColor: '#F44336' }]} onPress={() => handleDelete(item.id || item._id)} data-testid={`delete-archived-btn-${item.id}`}>
+          <TouchableOpacity
+            style={[s.actionBtn, { borderColor: '#F44336' }]}
+            onPress={() => handleDelete(item.id || item._id, item.registration_number, item.patient_name)}
+            data-testid={`delete-archived-btn-${item.id}`}
+          >
             <Ionicons name="trash-outline" size={18} color="#F44336" />
             <Text style={[s.actionText, { color: '#F44336' }]}>Delete</Text>
           </TouchableOpacity>
@@ -106,6 +111,19 @@ export default function ArchivedScreen() {
         </View>
       ) : (
         <FlatList data={filtered} renderItem={renderItem} keyExtractor={item => item.id || item._id || Math.random().toString()} contentContainerStyle={{ padding: 16 }} />
+      )}
+      {safeDeleteCase && (
+        <SafeDeleteModal
+          visible={!!safeDeleteCase}
+          procedureId={safeDeleteCase.id}
+          registrationNumber={safeDeleteCase.registrationNumber}
+          patientName={safeDeleteCase.patientName}
+          onClose={() => setSafeDeleteCase(null)}
+          onSuccess={(deletedId) => {
+            setProcedures(prev => prev.filter(p => (p.id || p._id) !== deletedId));
+            setSafeDeleteCase(null);
+          }}
+        />
       )}
     </View>
   );
