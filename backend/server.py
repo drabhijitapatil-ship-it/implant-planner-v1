@@ -952,6 +952,15 @@ class ProcedureUpdate(BaseModel):
     procedure_time: Optional[str] = Field(None, max_length=20)
     implant_procedure_type: Optional[str] = Field(None, max_length=100)
     num_implants: Optional[str] = Field(None, max_length=50)
+    # iter-328: Sinus Lift sub-fields on the draft model.
+    sinus_lift_type: Optional[str] = Field(None, max_length=50)
+    bone_graft_material_details: Optional[str] = Field(None, max_length=200)
+    # iter-387: surgical-approach cascade on the draft/update model too.
+    procedure_surgery_type: Optional[str] = Field(None, max_length=60)
+    guided_surgery_type: Optional[str] = Field(None, max_length=40)
+    static_guide_type: Optional[str] = Field(None, max_length=40)
+    sleeve_type: Optional[str] = Field(None, max_length=40)
+    dynamic_nav_system: Optional[str] = Field(None, max_length=40)
     loading_type: Optional[List[str]] = None
     prosthetic_plan: Optional[str] = Field(None, max_length=500)
     bone_graft_specifications: Optional[str] = Field(None, max_length=500)
@@ -6927,7 +6936,7 @@ def _adv_normalize_role(current_user: dict) -> str:
     return str(current_user.get("role") or "").lower()
 
 
-class ProstheticPlanUpdate(BaseModel):
+@api_router.post("/procedures/{procedure_id}/advanced-clinical/send-for-approval")
 async def advanced_clinical_send_for_approval(
     procedure_id: str,
     current_user: dict = Depends(get_current_user),
@@ -12359,6 +12368,267 @@ def _build_case_context(proc: dict) -> str:
     return "\n".join(parts)
 
 
+# ── iter-326: AI context enrichment (role+phase + Smart Tips) ────────
+# Inject the viewer's role / phase permissions and a small batch of
+# phase-matched Smart Clinical Tips so Implanr AI can answer meta-questions
+# ("why can't I edit this?") and ground its narrative in the curated tip
+# library — without the LLM ever having to invent that context.
+_STATUS_TO_PHASE_TAG = {
+    "draft":                              "Planning",
+    "submitted":                          "Planning",
+    "phase1_approved":                    "Planning",
+    "phase2_pending":                     "Surgical",
+    "phase2_submitted":                   "Surgical",
+    "phase2_approved":                    "Surgical",
+    "phase3_pending":                     "Healing",
+    "phase3_submitted":                   "Healing",
+    "phase3_approved":                    "Healing",
+    "stage2_prosthetic_step1_pending":    "Prosthetic",
+    "stage2_prosthetic_step1_submitted":  "Prosthetic",
+    "stage2_prosthetic_step1_approved":   "Prosthetic",
+    "phase4_pending":                     "Prosthetic",
+    "phase4_submitted":                   "Prosthetic",
+    "phase4_approved":                    "Prosthetic",
+    "completed":                          "Prosthetic",
+}
+
+_ROLE_PHASE_PERMISSIONS = {
+    # role  →  (can_edit, can_approve, viewer_note)
+    "student":          (True,  False, "drafts and submits each phase; cannot vote at approval gates"),
+    "supervisor":       (False, True,  "clinically approves each phase before the Implant In-Charge sign-off"),
+    "implant_incharge": (False, True,  "final sign-off on implant selection, materials, and prosthesis delivery"),
+    "administrator":    (True,  True,  "platform-wide access; can override and export audit logs"),
+    "nurse":            (False, False, "pre-Phase 2 prep (consent uploads, autoclave stamps); does not vote at approval gates"),
+}
+
+
+def _build_role_and_phase_block(proc: dict, current_user: Optional[dict]) -> str:
+    """Render a tiny role + phase context block for the AI prompt."""
+    if not current_user:
+        return ""
+    role = (current_user.get("role") or "").lower()
+    perm = _ROLE_PHASE_PERMISSIONS.get(role)
+    status = proc.get("status") or "draft"
+    phase = _STATUS_TO_PHASE_TAG.get(status, "Planning")
+    lines = [
+        "",
+        "--- Viewer Context (so AI explanations match what this user can act on) ---",
+        f"Viewer role: {role or 'unknown'}",
+        f"Case status: {status}  (active phase: {phase})",
+    ]
+    if perm:
+        can_edit, can_approve, note = perm
+        lines.append(f"Viewer permissions: {note}.")
+        lines.append(f"Can edit case data: {'yes' if can_edit else 'no'}  ·  Can approve gate: {'yes' if can_approve else 'no'}.")
+    # Outstanding approvals on the active phase
+    pending = []
+    for gate in ("supervisor_approval", "in_charge_approval", "phase2_supervisor_approval", "phase2_in_charge_approval",
+                 "phase3_supervisor_approval", "phase3_in_charge_approval", "phase4_supervisor_approval", "phase4_in_charge_approval"):
+        v = proc.get(gate)
+        if v and isinstance(v, dict) and not v.get("approved"):
+            pending.append(gate.replace("_", " "))
+    if pending:
+        lines.append(f"Outstanding approvals on this case: {', '.join(pending)}.")
+    return "\n".join(lines)
+
+
+async def _build_smart_tips_block(proc: dict, max_tips: int = 3) -> str:
+    """Pull up to `max_tips` Smart Clinical Tips matching the case's active
+    phase (and a soft category bias from the procedure's flags) so the AI
+    can cite the curated tip library when it summarises the recommendation."""
+    try:
+        status = proc.get("status") or "draft"
+        phase = _STATUS_TO_PHASE_TAG.get(status, "Planning")
+        # Build a small category bias from procedure flags so tips feel relevant.
+        ma = proc.get("medical_assessment") or {}
+        category_hints: List[str] = []
+        if ma.get("smoking") in ("Light (<10/day)", "Heavy (>10/day)"):
+            category_hints.append("Treatment Planning")
+        if (proc.get("implant_procedure_type") or "").lower().startswith("all on"):
+            category_hints.append("Full Arch")
+        if (proc.get("phase2_data") or {}).get("flap_design"):
+            category_hints.append("Soft Tissue")
+        # Query: active tips matching the phase, prefer hinted categories.
+        query: Dict[str, Any] = {"active": True, "phase": phase}
+        cursor = db.tips.find(query, {"_id": 0, "tip_id": 1, "title": 1, "category": 1,
+                                       "tip_text": 1, "source_organization": 1,
+                                       "source_reference": 1, "publication_year": 1})
+        candidates = await cursor.to_list(length=50)
+        if not candidates:
+            return ""
+        # Re-order: hinted-category tips first, then alphabetical for determinism.
+        def _key(t: Dict[str, Any]) -> tuple:
+            hint_score = 0 if t.get("category") in category_hints else 1
+            return (hint_score, t.get("tip_id", ""))
+        candidates.sort(key=_key)
+        chosen = candidates[:max_tips]
+        if not chosen:
+            return ""
+        lines = ["", f"--- Relevant Smart Clinical Tips (curated library; quote when applicable) ---"]
+        for t in chosen:
+            cite = ""
+            org = t.get("source_organization")
+            ref = t.get("source_reference")
+            yr  = t.get("publication_year")
+            if org and ref:
+                cite = f" [{org} — {ref}{', ' + str(yr) if yr else ''}]"
+            elif org:
+                cite = f" [{org}{', ' + str(yr) if yr else ''}]"
+            lines.append(f"  - {t.get('title','')}: {t.get('tip_text','')}{cite}")
+        return "\n".join(lines)
+    except Exception as exc:  # never break AI Explain on a tips-table hiccup
+        logging.warning("smart-tips context build skipped: %s", exc)
+        return ""
+
+
+async def _build_case_context_full(proc: dict, current_user: Optional[dict]) -> str:
+    """`_build_case_context` augmented with role/phase + Smart Tips + program
+    stats + implant alternatives + workflow-graph blocks. Returns the full
+    string to feed into the Implanr AI prompt."""
+    base = _build_case_context(proc)
+    role_block = _build_role_and_phase_block(proc, current_user)
+    tips_block = await _build_smart_tips_block(proc)
+    stats_block = await _build_program_stats_block(proc)
+    alts_block = await _build_implant_alternatives_block(proc)
+    graph_block = _WORKFLOW_GRAPH_BLOCK
+    return "\n".join(s for s in (base, role_block, tips_block, stats_block, alts_block, graph_block) if s)
+
+
+# ── iter-327: 3 more AI context blocks ────────────────────────────────
+# (3) program-stats   - aggregate ISQ / failure rate / top implants at sites
+# (4) implant-alts    - 5 catalog alternatives matching the chosen system
+# (6) workflow-graph  - tiny static knowledge graph of the 4 phases + gates
+
+async def _build_program_stats_block(proc: dict, max_sites: int = 4) -> str:
+    """Aggregate ISQ averages, complication rates, and top implant choices
+    across all CLOSED-OR-ADVANCED procedures in the database at the same
+    FDI positions as the current case. Scoped per-program with multi-tenancy."""
+    try:
+        plans = proc.get("implant_plans") or (proc.get("phase2_data") or {}).get("implant_plans") or []
+        sites = [str(p.get("position") or "").strip() for p in plans if p.get("position")]
+        sites = [s for s in sites if s][:max_sites]
+        if not sites:
+            return ""
+        current_id = proc.get("_id")
+        match_query: Dict[str, Any] = {
+            "_id": {"$ne": current_id},
+            "status": {"$in": ["phase2_approved", "phase3_approved",
+                               "stage2_prosthetic_step1_approved",
+                               "phase4_approved", "completed"]},
+        }
+        if proc.get("org_id"):
+            match_query["org_id"] = proc["org_id"]
+
+        pipeline = [
+            {"$match": match_query},
+            {"$project": {
+                "plans": {"$ifNull": ["$phase2_data.implant_plans", "$implant_plans"]},
+                "complications": {"$ifNull": ["$complications", []]},
+            }},
+            {"$unwind": "$plans"},
+            {"$match": {"plans.position": {"$in": sites}}},
+            {"$group": {
+                "_id": "$plans.position",
+                "n": {"$sum": 1},
+                "isq_avg": {"$avg": "$plans.isq"},
+                "torque_avg": {"$avg": "$plans.insertion_torque_ncm"},
+                "complication_count": {"$sum": {"$cond": [{"$gt": [{"$size": "$complications"}, 0]}, 1, 0]}},
+                "top_systems": {"$push": {
+                    "brand": "$plans.brand", "system": "$plans.system",
+                    "diameter": "$plans.diameter", "length": "$plans.length",
+                }},
+            }},
+        ]
+        rows = await db.procedures.aggregate(pipeline).to_list(length=20)
+        if not rows:
+            return ""
+        from collections import Counter
+        lines = ["", "--- Program Statistics at this Case's Sites (closed cases, anonymised) ---"]
+        for r in rows:
+            site = r["_id"]
+            n = r["n"]
+            isq = f"{r['isq_avg']:.0f}" if r.get("isq_avg") is not None else "—"
+            torque = f"{r['torque_avg']:.0f}" if r.get("torque_avg") is not None else "—"
+            comp_rate = f"{(r['complication_count'] / n * 100):.0f}%" if n else "—"
+            top_combos = Counter(
+                f"{x.get('brand','?')} {x.get('system','?')} {x.get('diameter','?')}x{x.get('length','?')}"
+                for x in r.get("top_systems", []) if x.get("brand")
+            ).most_common(3)
+            top_str = "; ".join(f"{combo} ({cnt})" for combo, cnt in top_combos) or "—"
+            lines.append(
+                f"  - FDI {site}: n={n}  ·  avg ISQ {isq}  ·  avg torque {torque} Ncm  ·  complications {comp_rate}  ·  top choices: {top_str}"
+            )
+        return "\n".join(lines)
+    except Exception as exc:
+        logging.warning("program-stats context build skipped: %s", exc)
+        return ""
+
+
+async def _build_implant_alternatives_block(proc: dict, max_per_site: int = 5) -> str:
+    """For each planned implant in the case, surface up to `max_per_site`
+    alternative implants from the broader catalog that match the same
+    platform/diameter band, so the AI can compare options instead of being
+    limited to the case's pre-chosen system."""
+    try:
+        plans = proc.get("implant_plans") or (proc.get("phase2_data") or {}).get("implant_plans") or []
+        if not plans:
+            return ""
+        lines = ["", "--- Catalog Alternatives (for the AI to compare options) ---"]
+        seen_sites = 0
+        for p in plans[:4]:
+            brand = p.get("brand")
+            diameter = p.get("diameter")
+            length = p.get("length")
+            position = p.get("position")
+            if not (brand and diameter):
+                continue
+            try:
+                d_val = float(str(diameter).replace("mm", "").strip())
+            except (TypeError, ValueError):
+                continue
+            cursor = db.implant_library.find({
+                "diameter": {"$gte": d_val - 0.4, "$lte": d_val + 0.4},
+                "$or": [{"brand": {"$ne": brand}}, {"system": {"$ne": p.get("system")}}],
+            }, {"_id": 0, "brand": 1, "system": 1, "diameter": 1, "length": 1,
+                "platform": 1, "surface": 1, "material": 1})
+            alts = await cursor.to_list(length=max_per_site)
+            if not alts:
+                continue
+            seen_sites += 1
+            lines.append(f"  FDI {position} (planned {brand} {p.get('system','')} {diameter}x{length}):")
+            for a in alts:
+                lines.append(
+                    f"    · {a.get('brand','?')} {a.get('system','?')} {a.get('diameter','?')}x{a.get('length','?')} "
+                    f"[{a.get('platform','?')} / {a.get('surface','?')} / {a.get('material','?')}]"
+                )
+        return "\n".join(lines) if seen_sites else ""
+    except Exception as exc:
+        logging.warning("implant-alternatives context build skipped: %s", exc)
+        return ""
+
+
+# (6) Static workflow graph - injected once per AI call so the LLM can answer
+# meta-questions ("which gate is pending?", "can the student edit Phase 2 after
+# Supervisor approval?") without ever guessing.
+_WORKFLOW_GRAPH_BLOCK = """
+--- Implanr Workflow Reference (so AI can answer meta-questions about the app) ---
+The case progresses through 4 phases, gated by approvals:
+  Phase 1: Planning & Consent        Student drafts -> Supervisor approves -> Implant In-Charge approves
+  Phase 2: Surgical Placement        Student submits -> Supervisor approves -> Implant In-Charge approves
+  Phase 3: Healing & Uncovery        Student submits -> Supervisor approves -> Implant In-Charge approves
+  Phase 4 (Step 1): Prosthesis Design  Student submits -> Supervisor approves -> Implant In-Charge approves
+  Phase 4 (Step 2): Final Delivery   Student submits -> Supervisor approves -> Implant In-Charge approves -> case closed (PDF auto-generated)
+Approval rule: a phase unlocks ONLY after BOTH the Supervisor and the Implant In-Charge have approved.
+Roles and permissions:
+  - Student:          drafts and submits each phase; cannot vote at any gate; can request an edit on an approved phase.
+  - Supervisor:       clinically approves each phase before the Implant In-Charge sign-off; cannot override the in-charge.
+  - Implant In-Charge: final sign-off on implant selection, materials, and prosthesis delivery; can override safety blocks (logged).
+  - Nurse:            pre-Phase 2 prep only (consent uploads, autoclave stamps, instrument trays); does NOT vote at any gate.
+  - Administrator:    platform-wide access; manages users, exports audit logs, overrides any gate (logged).
+Edit-after-approval: once a phase is approved, the student must submit a 'request edit' that the In-Charge resolves; the original data and the edit reason are both kept in the audit log.
+HIPAA-style safeguards (active app-wide): 15-min auto-logout, screen-capture blocking on Android, append-only access log.
+"""
+
 
 def _get_llm_key():
     return os.environ.get("OPENAI_API_KEY", "") or os.environ.get("EMERGENT_LLM_KEY", "")
@@ -12387,7 +12657,7 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
     plans = proc.get("implant_plans") or []
     plan = plans[implant_index] if implant_index < len(plans) else (plans[0] if plans else {})
     
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
     # ── Inject institutional Indications & Features for grounded reasoning ──
     from implant_indications import get_details as _get_implant_details
     inst = _get_implant_details(plan.get("brand"), plan.get("system"))
@@ -12461,13 +12731,38 @@ If the System Catalog is provided, you may briefly cite which prosthetic / surgi
 
 Provide a clinical explanation in professional scientific language. Do not mention any guideline names or references. Write as a professional clinical note."""
 
+    # iter-357: Vision context. Attach the mandatory Phase-1 intra-oral
+    # photographs (Occlusal + Lateral/Frontal + any extras) to the LLM call
+    # so the model can visually assess ridge contour, mucosal biotype,
+    # inter-arch space, and adjacent-tooth condition.
+    vision_attachments = []
+    vision_labels: List[str] = []
+    for photo in (proc.get("intraoral_photos") or []):
+        img = _load_radiograph_image_b64(photo.get("filename"))
+        if img and img.get("b64"):
+            vision_attachments.append(ImageContent(image_base64=img["b64"]))
+            vision_labels.append(str(photo.get("label") or "intra-oral photograph"))
+        if len(vision_attachments) >= 4:
+            break
+    if vision_attachments:
+        prompt += ("\n\nVision context — you have been given "
+                   f"{len(vision_attachments)} intra-oral photograph(s) from Phase 1 "
+                   f"({', '.join(vision_labels)}). Use them to check for ridge deficiency, "
+                   "mucosal biotype, inter-arch space and adjacent-tooth condition. "
+                   "If something clinically relevant is visible, comment on it explicitly; "
+                   "if a finding is not assessable from the images, say so plainly. "
+                   "Do NOT fabricate details that are not visible.")
+
     chat = LlmChat(
         api_key=_get_llm_key(),
         session_id=f"explain-{procedure_id}-{implant_index}-{uuid.uuid4().hex[:8]}",
         system_message="You are an expert implant dentistry clinical advisor. Provide concise, evidence-based clinical explanations."
     ).with_model("anthropic", "claude-sonnet-5")
-    
-    response = await chat.send_message(UserMessage(text=prompt))
+
+    if vision_attachments:
+        response = await chat.send_message(UserMessage(text=prompt, file_contents=vision_attachments))
+    else:
+        response = await chat.send_message(UserMessage(text=prompt))
     # iter-339 HIPAA: scrub all PHI (name, phone, email, DOB, address).
     response = _redact_phi_from_ai_text(response, proc)
     
@@ -13792,7 +14087,7 @@ async def ai_case_summary(request: Request, current_user: dict = Depends(get_cur
 
     current_phase = _detect_case_phase(proc)
     case_type = _detect_case_type(proc)
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
 
     # ---------- Build phase-specific section instructions ----------
     phase1_sections = """
@@ -13950,7 +14245,7 @@ async def ai_surgical_notes(request: Request, current_user: dict = Depends(get_c
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
     phase2 = proc.get("phase2_data") or {}
     
     # Get torque values from correct location
@@ -14228,7 +14523,7 @@ async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
-    context = _build_case_context(proc)
+    context = await _build_case_context_full(proc, current_user)
 
     # iter-147: Implant Catalog awareness for the floating Ask Implanr AI bubble.
     # Inject catalog blocks for EVERY distinct (brand, system) used in the case
@@ -17299,13 +17594,28 @@ async def submit_stage2_prosthetic(
     if not (is_student or is_supervisor or is_incharge or is_creator):
         raise HTTPException(status_code=403, detail="You don't have permission")
     await _assert_phase_edit_allowed(procedure, current_user, 4)
-    # iter-194: save_only=true (Generate-Lab-Slip on the form) tolerates the
-    # case being mid-flow — it's a soft draft. The full submit (save_only=false)
-    # still requires the strict status precondition below.
-    if not save_only and procedure["status"] != "stage2_surgical_approved":
-        raise HTTPException(status_code=400, detail="Phase 3 must be approved before starting Phase 4")
-    if save_only and procedure["status"] not in ("stage2_surgical_approved", "pending_stage2_prosthetic", "stage2_prosthetic_step1_approved"):
-        raise HTTPException(status_code=400, detail="Phase 3 must be approved before drafting Phase 4 data")
+    # iter-Jun-2026 (v13, Chunk G, Ask 2): The strict "must be exactly
+    # stage2_surgical_approved" check was rejecting legitimate cases whose
+    # status had already advanced (e.g. pending_stage2_prosthetic after a
+    # prior save, or stage2_prosthetic_step1_approved on re-submit). Zygoma /
+    # Pterygoid / Conventional cases were most affected because their
+    # Advanced-Clinical workflow can leave the case in intermediate states.
+    # We now accept the same status set for both `save_only=True` and the
+    # full submit path.
+    allowed_phase4_statuses = (
+        "stage2_surgical_approved",
+        "pending_stage2_prosthetic",
+        "stage2_prosthetic_step1_approved",
+        "pending_final_delivery",
+    )
+    if procedure["status"] not in allowed_phase4_statuses:
+        # Fallback: allow cases whose current_phase is already >= 4 even if
+        # the discrete status enum drifted (e.g. old data with `completed`
+        # relaunched into edit mode). Prevents legitimate resumptions from
+        # being blocked while still gating pre-Phase-3 attempts.
+        cp = int(procedure.get("current_phase") or 0)
+        if cp < 4:
+            raise HTTPException(status_code=400, detail="Phase 3 must be approved before starting Phase 4")
 
     # iter-191: when conventional impression is selected, the tray-type sub-choice
     # is mandatory and must be one of {open_tray, closed_tray}.
@@ -17351,7 +17661,10 @@ async def submit_stage2_prosthetic(
         "impression_material": (
             data.impression_material if data.impression_type == "conventional" else None
         ),
-         "scan_body_types": (
+        # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — persisted
+        # only when impression_type == 'intraoral_scans'. Nulled out on
+        # switch back to conventional so we don't leak stale data.
+        "scan_body_types": (
             [s.strip() for s in (data.scan_body_types or [])]
             if data.impression_type == "intraoral_scans" else None
         ),
@@ -17375,6 +17688,29 @@ async def submit_stage2_prosthetic(
         # Slip falls back to phase2_data.
         **({} if data.multi_unit_abutment_details is None
             else {"multi_unit_abutment_details": data.multi_unit_abutment_details}),
+        # iter-Feb-2026 — Single-Conventional-Implant final plan overrides.
+        # Persisted verbatim on phase4_step1_data. The audit trail is
+        # appended below to `prosthetic_plan_change_log` when the operator
+        # changes the plan relative to Phase 1 (or a prior Phase 4 submit).
+        "sc_final_abutment_type": data.sc_final_abutment_type,
+        "sc_final_retention_type": data.sc_final_retention_type,
+        "sc_final_crown_material": data.sc_final_crown_material,
+        "sc_final_abutment_type_other": data.sc_final_abutment_type_other,
+        "sc_final_retention_type_other": data.sc_final_retention_type_other,
+        "sc_final_crown_material_other": data.sc_final_crown_material_other,
+        # iter-Feb-2026-B — Multiple / Full-Arch / Zygoma final plans.
+        "ma_final_prosthesis_type": data.ma_final_prosthesis_type,
+        "ma_final_prosthesis_type_other": data.ma_final_prosthesis_type_other,
+        "ma_final_abutment_type": data.ma_final_abutment_type,
+        "ma_final_abutment_type_other": data.ma_final_abutment_type_other,
+        "ma_final_retention_type": data.ma_final_retention_type,
+        "ma_final_retention_type_other": data.ma_final_retention_type_other,
+        "ma_final_crown_material": data.ma_final_crown_material,
+        "ma_final_crown_material_other": data.ma_final_crown_material_other,
+        "fa_final_prosthetic_plan": data.fa_final_prosthetic_plan,
+        "fa_final_prosthetic_plan_other": data.fa_final_prosthetic_plan_other,
+        "zp_final_prosthetic_plan": data.zp_final_prosthetic_plan,
+        "zp_final_prosthetic_plan_other": data.zp_final_prosthetic_plan_other,
     }
     
     existing_checklist = procedure.get("checklist") or {}
@@ -17410,6 +17746,102 @@ async def submit_stage2_prosthetic(
     update_data["phase4_step1_done_date"] = _validate_done_date(
         data.done_date, prev_date=_prev, label="Phase 4 Step 1 Done Date",
     )
+
+    # iter-Feb-2026 / -B / -C — Prosthesis Final Plan audit trail across
+    # Single-Conventional, Multiple/Full-Arch/Zygoma AND the 5 overlap
+    # procedure types (Immediate Implant / Sinus Lift / PET / GBR /
+    # Guided Surgery) whose workflow is decided by `num_implants`.
+    # Compare each field against (prior Phase-4 override) → (Phase-1 baseline).
+    # One consolidated audit entry appended when any field changed.
+    proc_type = procedure.get("implant_procedure_type") or ""
+    num_impl = procedure.get("num_implants") or ""
+    prev_p4 = procedure.get("phase4_step1_data") or {}
+
+    _group_c_set = {
+        "Quad Zygoma Implants",
+        "Zygoma and Pterygoid Implants",
+        "Zygoma and Conventional Implants",
+        "Zygoma, Pterygoid and Conventional Implants",
+    }
+    _group_b_set = {"All on 4", "All on 6", "All on X"}
+    _group_a_set = {"Multiple Conventional Implants", "Pterygoid and Conventional Implants"}
+    _overlap_set = {
+        "Immediate Implant",
+        "Partial Extraction Therapy",
+        "Implant Placement with Guided Bone Regeneration",
+        "Guided Surgery",
+        "Sinus Lift",
+    }
+
+    # Effective workflow (SC / A / B / C / None) — same rule as the frontend.
+    if proc_type == "Single Conventional Implant":
+        effective = "SC"
+    elif proc_type in _group_c_set:
+        effective = "C"
+    elif proc_type in _group_b_set:
+        effective = "B"
+    elif proc_type in _group_a_set:
+        effective = "A"
+    elif proc_type in _overlap_set and num_impl == "Single Implant":
+        effective = "SC"
+    elif proc_type in _overlap_set and num_impl == "Multiple Implants":
+        effective = "A"
+    else:
+        effective = None
+
+    def _prev(field: str) -> str:
+        return (prev_p4.get(field) or procedure.get(field.replace("_final_", "_")) or "").strip() \
+            if field.startswith(("sc_final_", "ma_final_", "fa_final_", "zp_final_")) else ""
+
+    def _new(field: str) -> str:
+        v = getattr(data, field, None)
+        return (v or "").strip()
+
+    changed_fields = []
+
+    def _diff(field: str):
+        p, n = _prev(field), _new(field)
+        if n and n != p:
+            changed_fields.append({"field": field, "from": p, "to": n})
+
+    if effective == "SC":
+        for f in (
+            "sc_final_abutment_type", "sc_final_abutment_type_other",
+            "sc_final_retention_type", "sc_final_retention_type_other",
+            "sc_final_crown_material", "sc_final_crown_material_other",
+        ):
+            _diff(f)
+    elif effective == "A":
+        for f in (
+            "ma_final_prosthesis_type", "ma_final_prosthesis_type_other",
+            "ma_final_abutment_type", "ma_final_abutment_type_other",
+            "ma_final_retention_type", "ma_final_retention_type_other",
+            "ma_final_crown_material", "ma_final_crown_material_other",
+        ):
+            _diff(f)
+    elif effective == "B":
+        for f in ("fa_final_prosthetic_plan", "fa_final_prosthetic_plan_other"):
+            _diff(f)
+    elif effective == "C":
+        for f in ("zp_final_prosthetic_plan", "zp_final_prosthetic_plan_other"):
+            _diff(f)
+
+    if changed_fields:
+        now_utc = datetime.utcnow()
+        audit_entry = {
+            "changes": changed_fields,
+            "changed_by": str(current_user.get("_id") or current_user.get("id") or ""),
+            "changed_by_name": current_user.get("name")
+                or (f"{current_user.get('first_name','')} {current_user.get('last_name','')}".strip())
+                or current_user.get("username", ""),
+            "changed_by_role": current_user.get("role", ""),
+            "changed_in_phase": 4,
+            "changed_step": 1,
+            "changed_at": now_utc.isoformat(),
+        }
+        change_log = list(procedure.get("prosthetic_plan_change_log") or [])
+        change_log.append(audit_entry)
+        update_data["prosthetic_plan_change_log"] = change_log
 
     await db.procedures.update_one({"_id": ObjectId(procedure_id)}, {"$set": update_data})
 

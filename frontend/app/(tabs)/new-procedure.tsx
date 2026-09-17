@@ -959,7 +959,8 @@ export default function NewProcedureScreen() {
       profession: p.profession || prev.profession,
       mobile_number: p.mobile_number || prev.mobile_number,
       patient_email: p.patient_email || prev.patient_email,
-      registration_number: entry.registration_number || prev.registration_number,
+      registration_number:
+        entry.registration_number || prev.registration_number,
       linked_parent_case_id: entry.latest_case_id || "",
       medical_assessment: (p.medical_assessment &&
       Object.keys(p.medical_assessment).length
@@ -977,7 +978,9 @@ export default function NewProcedureScreen() {
     setNameCancelledFor(formData.patient_name?.trim() || "");
     setNameLookup(null);
     setFormData((prev) =>
-      prev.linked_parent_case_id ? { ...prev, linked_parent_case_id: "" } : prev,
+      prev.linked_parent_case_id
+        ? { ...prev, linked_parent_case_id: "" }
+        : prev,
     );
   };
 
@@ -1152,8 +1155,7 @@ export default function NewProcedureScreen() {
                 attachment_type_other: proc.attachment_type_other || "",
                 // iter-Feb-2026: Single-Conventional-Implant workflow fields
                 type_of_provisional: proc.type_of_provisional || "",
-                type_of_provisional_other:
-                  proc.type_of_provisional_other || "",
+                type_of_provisional_other: proc.type_of_provisional_other || "",
                 sc_abutment_type: proc.sc_abutment_type || "",
                 sc_abutment_type_other: proc.sc_abutment_type_other || "",
                 sc_retention_type: proc.sc_retention_type || "",
@@ -1161,8 +1163,7 @@ export default function NewProcedureScreen() {
                 sc_crown_material: proc.sc_crown_material || "",
                 sc_crown_material_other: proc.sc_crown_material_other || "",
                 ma_prosthesis_type: proc.ma_prosthesis_type || "",
-                ma_prosthesis_type_other:
-                  proc.ma_prosthesis_type_other || "",
+                ma_prosthesis_type_other: proc.ma_prosthesis_type_other || "",
                 ma_abutment_type: proc.ma_abutment_type || "",
                 ma_abutment_type_other: proc.ma_abutment_type_other || "",
                 ma_retention_type: proc.ma_retention_type || "",
@@ -1170,13 +1171,10 @@ export default function NewProcedureScreen() {
                 ma_crown_material: proc.ma_crown_material || "",
                 ma_crown_material_other: proc.ma_crown_material_other || "",
                 fa_prosthetic_plan: proc.fa_prosthetic_plan || "",
-                fa_prosthetic_plan_other:
-                  proc.fa_prosthetic_plan_other || "",
+                fa_prosthetic_plan_other: proc.fa_prosthetic_plan_other || "",
                 zp_prosthetic_plan: proc.zp_prosthetic_plan || "",
-                zp_prosthetic_plan_other:
-                  proc.zp_prosthetic_plan_other || "",
-                bone_graft_specifications:
-                  proc.bone_graft_specifications || "",
+                zp_prosthetic_plan_other: proc.zp_prosthetic_plan_other || "",
+                bone_graft_specifications: proc.bone_graft_specifications || "",
                 // Clinical Examination
                 occlusocervical_height: proc.occlusocervical_height || "",
                 mesiodistal_space: proc.mesiodistal_space || "",
@@ -1197,8 +1195,7 @@ export default function NewProcedureScreen() {
                 opposing_dentition: proc.opposing_dentition || "",
                 // Occlusal Analysis (full-arch)
                 vertical_dimension_mm: proc.vertical_dimension_mm || "",
-                available_interarch_space:
-                  proc.available_interarch_space || "",
+                available_interarch_space: proc.available_interarch_space || "",
                 opposing_arch: proc.opposing_arch || "",
                 tmj: proc.tmj || "",
                 // Aesthetic Risk Assessment
@@ -1209,10 +1206,9 @@ export default function NewProcedureScreen() {
                   proc.medical_assessment || prev.medical_assessment,
                 medical_risk_level: proc.medical_risk_level || "",
                 // iter-Feb-2026: Zygoma & Pterygoid workflow data
-                zygoma_pterygoid_data:
-                  (proc.zygoma_pterygoid_data?.phase1 ||
-                    proc.zygoma_pterygoid_data ||
-                    {}) as ZygomaPterygoidPhase1Data,
+                zygoma_pterygoid_data: (proc.zygoma_pterygoid_data?.phase1 ||
+                  proc.zygoma_pterygoid_data ||
+                  {}) as ZygomaPterygoidPhase1Data,
                 zygoma_pterygoid_configuration:
                   proc.zygoma_pterygoid_configuration || "",
                 conventional_implant_locations: Array.isArray(
@@ -2279,13 +2275,16 @@ export default function NewProcedureScreen() {
         sanitized.num_implants,
       );
       const otherFilled = (v: string, o: string) =>
-        v !== "Other" || (!!o && o.trim().length > 0);
+        v !== "Other" || (o && o.trim().length > 0);
       if (
         (g === "A" || g === "B" || g === "C") &&
         sanitized.loading_type.includes("Immediate Loading")
       ) {
         if (!sanitized.type_of_provisional) {
-          Alert.alert("Missing Field", "Please select the Type of Provisional.");
+          Alert.alert(
+            "Missing Field",
+            "Please select the Type of Provisional.",
+          );
           return;
         }
         if (
@@ -2475,8 +2474,8 @@ export default function NewProcedureScreen() {
               cbct_content_type: cbctFiles[0]?.content_type || "",
             }
           : {}),
-        // Patient Intra-oral Photograph payload — includes the fixed labels
-        // for slots 0 + 1 and the user-entered labels for extras.
+        // iter-356: Patient Intra-oral Photograph payload — includes the fixed
+        // labels for slots 0 + 1 and the user-entered labels for extras.
         ...(intraoralPhotos.filter((f) => f !== null).length > 0
           ? {
               intraoral_photos: intraoralPhotos
@@ -2512,6 +2511,8 @@ export default function NewProcedureScreen() {
             }
           : {}),
         // iter-Feb-2026 / -C — SC + overlap-with-Single workflow payload.
+        // Send SC fields when effective workflow is 'SC' (pure SC OR overlap
+        // types with num_implants='Single Implant').
         ...(getEffectiveWorkflow(
           sanitized.implant_procedure_type,
           sanitized.num_implants,
@@ -2545,6 +2546,8 @@ export default function NewProcedureScreen() {
             }
           : {}),
         // iter-Feb-2026-B / -C — Multiple/Full-Arch/Zygoma workflow payload.
+        // Uses the effective workflow so overlap types with num_implants='Multiple Implants'
+        // route to Group A automatically.
         ...(() => {
           const g = getEffectiveWorkflow(
             sanitized.implant_procedure_type,
@@ -3302,7 +3305,8 @@ export default function NewProcedureScreen() {
           formData.num_implants,
         ) === "SC"
       ) {
-        if (!formData.sc_abutment_type) missImplantDetails.push("Abutment Type");
+        if (!formData.sc_abutment_type)
+          missImplantDetails.push("Abutment Type");
         if (!formData.sc_retention_type)
           missImplantDetails.push("Type of Retention");
         if (!formData.sc_crown_material)
@@ -5243,7 +5247,7 @@ export default function NewProcedureScreen() {
                       if (next.configuration !== undefined) {
                         updateForm(
                           "zygoma_pterygoid_configuration",
-                          next.configuration
+                          next.configuration,
                         );
                       }
                     }}
@@ -5254,8 +5258,9 @@ export default function NewProcedureScreen() {
               {/* iter-235: hide the Arch dropdown for Existing Implant — it lives
             inside the ExistingImplantSection between Type of Implant Procedure
             Done and Implant Selection instead. */}
-              {isFullArch && !isExistingImplantCase && (
-                isZygomaFullArchProcedure(formData.implant_procedure_type) ? (
+              {isFullArch &&
+                !isExistingImplantCase &&
+                (isZygomaFullArchProcedure(formData.implant_procedure_type) ? (
                   // iter-Feb-2026 (v3): Zygoma implants are anatomically maxillary-
                   // only. Lock the Arch to "Maxillary" (read-only chip) and skip
                   // the Mandibular option entirely.
@@ -5282,8 +5287,7 @@ export default function NewProcedureScreen() {
                     required
                     data-testid="arch-dropdown"
                   />
-                )
-              )}
+                ))}
             </View>
 
             {formData.implant_procedure_type !== "Existing Implant" &&
@@ -5298,7 +5302,7 @@ export default function NewProcedureScreen() {
             existing single Prosthetic-Plan dropdown. */}
                   {getEffectiveWorkflow(
                     formData.implant_procedure_type,
-                    formData.num_implants
+                    formData.num_implants,
                   ) === "SC" ? (
                     // iter-Feb-2026 / -C — SC (pure or overlap+Single) → 3-part flow.
                     <View
@@ -5403,7 +5407,7 @@ export default function NewProcedureScreen() {
                     </View>
                   ) : getEffectiveWorkflow(
                       formData.implant_procedure_type,
-                      formData.num_implants
+                      formData.num_implants,
                     ) === "A" ? (
                     // iter-Feb-2026-B — Group A: Multiple Conv / Pterygoid + Conv → 4-part flow.
                     <View
@@ -5538,7 +5542,7 @@ export default function NewProcedureScreen() {
                     </View>
                   ) : getEffectiveWorkflow(
                       formData.implant_procedure_type,
-                      formData.num_implants
+                      formData.num_implants,
                     ) === "B" ? (
                     // iter-Feb-2026-B — Group B: All on 4/6/X → single grouped plan.
                     <View
@@ -5583,7 +5587,7 @@ export default function NewProcedureScreen() {
                     </View>
                   ) : getEffectiveWorkflow(
                       formData.implant_procedure_type,
-                      formData.num_implants
+                      formData.num_implants,
                     ) === "C" ? (
                     // iter-Feb-2026-B — Group C: Quad Zygoma + Zygo variants → 6-option plan.
                     <View
@@ -5824,33 +5828,61 @@ export default function NewProcedureScreen() {
                       blue for unselected — the operator picks the FDI positions
                       where conventional implants will be placed. These positions
                       are later used during Implant Selection. */}
-                  {needsConventionalImplantLocation(formData.implant_procedure_type) && (() => {
-                    const locs = formData.conventional_implant_locations || [];
-                    return (
-                      <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Conventional Implant Location</Text>
-                        <Text style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-                          Select the location where conventional implant/implants need to be placed
-                        </Text>
-                        <FdiAnatomicalChart
-                          mode="multi"
-                          value={locs}
-                          onChange={(next) => updateForm('conventional_implant_locations', next as string[])}
-                          selectedColor="#E53935"
-                          presentColor="#FAFAFA"
-                          presentBorderColor="#B0BEC5"
-                          selectedLabel="Implant Location"
-                          hidePresentLegend
-                          testIDPrefix="fdi-conv-implant-loc"
-                        />
-                        {locs.length > 0 ? (
-                          <Text style={{ fontSize: 12, color: '#B71C1C', fontWeight: '700', marginTop: 8, textAlign: 'center' }}>
-                            {locs.length} {locs.length === 1 ? 'site' : 'sites'} marked — {locs.slice().sort().join(', ')}
+                  {needsConventionalImplantLocation(
+                    formData.implant_procedure_type,
+                  ) &&
+                    (() => {
+                      const locs =
+                        formData.conventional_implant_locations || [];
+                      return (
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitle}>
+                            Conventional Implant Location
                           </Text>
-                        ) : null}
-                      </View>
-                    );
-                  })()}
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: "#666",
+                              marginBottom: 8,
+                            }}
+                          >
+                            Select the location where conventional
+                            implant/implants need to be placed
+                          </Text>
+                          <FdiAnatomicalChart
+                            mode="multi"
+                            value={locs}
+                            onChange={(next) =>
+                              updateForm(
+                                "conventional_implant_locations",
+                                next as string[],
+                              )
+                            }
+                            selectedColor="#E53935"
+                            presentColor="#FAFAFA"
+                            presentBorderColor="#B0BEC5"
+                            selectedLabel="Implant Location"
+                            hidePresentLegend
+                            testIDPrefix="fdi-conv-implant-loc"
+                          />
+                          {locs.length > 0 ? (
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: "#B71C1C",
+                                fontWeight: "700",
+                                marginTop: 8,
+                                textAlign: "center",
+                              }}
+                            >
+                              {locs.length}{" "}
+                              {locs.length === 1 ? "site" : "sites"} marked —{" "}
+                              {locs.slice().sort().join(", ")}
+                            </Text>
+                          ) : null}
+                        </View>
+                      );
+                    })()}
                 </>
               )}
 
@@ -6654,241 +6686,241 @@ export default function NewProcedureScreen() {
                   therapeutic-option recommendation is not actionable. */}
                     {!isExistingImplantCase &&
                       !isZygomaFullArchProcedure(
-                        formData.implant_procedure_type
+                        formData.implant_procedure_type,
                       ) && (
-                      <>
-                        <Text
-                          style={[styles.subSectionTitle, { marginTop: 18 }]}
-                        >
-                          Atrophy Assessment
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            color: "#5C6BC0",
-                            marginBottom: 10,
-                            fontStyle: "italic",
-                          }}
-                        >
-                          Enter average bone height and width in the anterior
-                          and posterior regions for each treated arch. The class
-                          and recommended therapeutic options are computed
-                          automatically.
-                        </Text>
-
-                        {(formData.arch === "Maxillary" ||
-                          formData.arch === "Both") && (
-                          <View
-                            style={{
-                              marginBottom: 12,
-                              padding: 12,
-                              backgroundColor: "#F3F8FF",
-                              borderRadius: 10,
-                              borderLeftWidth: 3,
-                              borderLeftColor: "#1565C0",
-                            }}
-                            testID="atrophy-maxilla-block"
+                        <>
+                          <Text
+                            style={[styles.subSectionTitle, { marginTop: 18 }]}
                           >
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                fontWeight: "700",
-                                color: "#0D47A1",
-                                marginBottom: 8,
-                              }}
-                            >
-                              Maxilla
-                            </Text>
-                            <View style={{ flexDirection: "row", gap: 8 }}>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Anterior Height (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 14"
-                                  value={formData.atrophy_max_ant_h}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_max_ant_h", v)
-                                  }
-                                  testID="atrophy-max-ant-h"
-                                />
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Posterior Height (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 6"
-                                  value={formData.atrophy_max_post_h}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_max_post_h", v)
-                                  }
-                                  testID="atrophy-max-post-h"
-                                />
-                              </View>
-                            </View>
+                            Atrophy Assessment
+                          </Text>
+                          <Text
+                            style={{
+                              fontSize: 12,
+                              color: "#5C6BC0",
+                              marginBottom: 10,
+                              fontStyle: "italic",
+                            }}
+                          >
+                            Enter average bone height and width in the anterior
+                            and posterior regions for each treated arch. The
+                            class and recommended therapeutic options are
+                            computed automatically.
+                          </Text>
+
+                          {(formData.arch === "Maxillary" ||
+                            formData.arch === "Both") && (
                             <View
                               style={{
-                                flexDirection: "row",
-                                gap: 8,
-                                marginTop: 6,
+                                marginBottom: 12,
+                                padding: 12,
+                                backgroundColor: "#F3F8FF",
+                                borderRadius: 10,
+                                borderLeftWidth: 3,
+                                borderLeftColor: "#1565C0",
                               }}
+                              testID="atrophy-maxilla-block"
                             >
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Anterior Width (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 7"
-                                  value={formData.atrophy_max_ant_w}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_max_ant_w", v)
-                                  }
-                                  testID="atrophy-max-ant-w"
-                                />
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: "700",
+                                  color: "#0D47A1",
+                                  marginBottom: 8,
+                                }}
+                              >
+                                Maxilla
+                              </Text>
+                              <View style={{ flexDirection: "row", gap: 8 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Anterior Height (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 14"
+                                    value={formData.atrophy_max_ant_h}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_max_ant_h", v)
+                                    }
+                                    testID="atrophy-max-ant-h"
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Posterior Height (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 6"
+                                    value={formData.atrophy_max_post_h}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_max_post_h", v)
+                                    }
+                                    testID="atrophy-max-post-h"
+                                  />
+                                </View>
                               </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Posterior Width (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 7"
-                                  value={formData.atrophy_max_post_w}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_max_post_w", v)
-                                  }
-                                  testID="atrophy-max-post-w"
-                                />
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  gap: 8,
+                                  marginTop: 6,
+                                }}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Anterior Width (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 7"
+                                    value={formData.atrophy_max_ant_w}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_max_ant_w", v)
+                                    }
+                                    testID="atrophy-max-ant-w"
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Posterior Width (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 7"
+                                    value={formData.atrophy_max_post_w}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_max_post_w", v)
+                                    }
+                                    testID="atrophy-max-post-w"
+                                  />
+                                </View>
                               </View>
+                              <AtrophyClassificationChip
+                                arch="maxilla"
+                                anterior_height={formData.atrophy_max_ant_h}
+                                posterior_height={formData.atrophy_max_post_h}
+                                anterior_width={formData.atrophy_max_ant_w}
+                                posterior_width={formData.atrophy_max_post_w}
+                                opposing_arch={formData.opposing_arch}
+                                smoking={formData.medical_assessment?.smoking}
+                                hba1c={formData.medical_assessment?.hba1c}
+                              />
                             </View>
-                            <AtrophyClassificationChip
-                              arch="maxilla"
-                              anterior_height={formData.atrophy_max_ant_h}
-                              posterior_height={formData.atrophy_max_post_h}
-                              anterior_width={formData.atrophy_max_ant_w}
-                              posterior_width={formData.atrophy_max_post_w}
-                              opposing_arch={formData.opposing_arch}
-                              smoking={formData.medical_assessment?.smoking}
-                              hba1c={formData.medical_assessment?.hba1c}
-                            />
-                          </View>
-                        )}
+                          )}
 
-                        {(formData.arch === "Mandibular" ||
-                          formData.arch === "Both") && (
-                          <View
-                            style={{
-                              marginBottom: 12,
-                              padding: 12,
-                              backgroundColor: "#F3F8FF",
-                              borderRadius: 10,
-                              borderLeftWidth: 3,
-                              borderLeftColor: "#1565C0",
-                            }}
-                            testID="atrophy-mandible-block"
-                          >
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                fontWeight: "700",
-                                color: "#0D47A1",
-                                marginBottom: 8,
-                              }}
-                            >
-                              Mandible
-                            </Text>
-                            <View style={{ flexDirection: "row", gap: 8 }}>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Anterior Height (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 18"
-                                  value={formData.atrophy_man_ant_h}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_man_ant_h", v)
-                                  }
-                                  testID="atrophy-man-ant-h"
-                                />
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Posterior Height (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 9"
-                                  value={formData.atrophy_man_post_h}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_man_post_h", v)
-                                  }
-                                  testID="atrophy-man-post-h"
-                                />
-                              </View>
-                            </View>
+                          {(formData.arch === "Mandibular" ||
+                            formData.arch === "Both") && (
                             <View
                               style={{
-                                flexDirection: "row",
-                                gap: 8,
-                                marginTop: 6,
+                                marginBottom: 12,
+                                padding: 12,
+                                backgroundColor: "#F3F8FF",
+                                borderRadius: 10,
+                                borderLeftWidth: 3,
+                                borderLeftColor: "#1565C0",
                               }}
+                              testID="atrophy-mandible-block"
                             >
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Anterior Width (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 7"
-                                  value={formData.atrophy_man_ant_w}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_man_ant_w", v)
-                                  }
-                                  testID="atrophy-man-ant-w"
-                                />
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: "700",
+                                  color: "#0D47A1",
+                                  marginBottom: 8,
+                                }}
+                              >
+                                Mandible
+                              </Text>
+                              <View style={{ flexDirection: "row", gap: 8 }}>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Anterior Height (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 18"
+                                    value={formData.atrophy_man_ant_h}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_man_ant_h", v)
+                                    }
+                                    testID="atrophy-man-ant-h"
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Posterior Height (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 9"
+                                    value={formData.atrophy_man_post_h}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_man_post_h", v)
+                                    }
+                                    testID="atrophy-man-post-h"
+                                  />
+                                </View>
                               </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>
-                                  Posterior Width (mm)
-                                </Text>
-                                <TextInput
-                                  style={styles.input}
-                                  keyboardType="decimal-pad"
-                                  placeholder="e.g. 7"
-                                  value={formData.atrophy_man_post_w}
-                                  onChangeText={(v) =>
-                                    updateForm("atrophy_man_post_w", v)
-                                  }
-                                  testID="atrophy-man-post-w"
-                                />
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  gap: 8,
+                                  marginTop: 6,
+                                }}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Anterior Width (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 7"
+                                    value={formData.atrophy_man_ant_w}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_man_ant_w", v)
+                                    }
+                                    testID="atrophy-man-ant-w"
+                                  />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.label}>
+                                    Posterior Width (mm)
+                                  </Text>
+                                  <TextInput
+                                    style={styles.input}
+                                    keyboardType="decimal-pad"
+                                    placeholder="e.g. 7"
+                                    value={formData.atrophy_man_post_w}
+                                    onChangeText={(v) =>
+                                      updateForm("atrophy_man_post_w", v)
+                                    }
+                                    testID="atrophy-man-post-w"
+                                  />
+                                </View>
                               </View>
+                              <AtrophyClassificationChip
+                                arch="mandible"
+                                anterior_height={formData.atrophy_man_ant_h}
+                                posterior_height={formData.atrophy_man_post_h}
+                                anterior_width={formData.atrophy_man_ant_w}
+                                posterior_width={formData.atrophy_man_post_w}
+                                opposing_arch={formData.opposing_arch}
+                                smoking={formData.medical_assessment?.smoking}
+                                hba1c={formData.medical_assessment?.hba1c}
+                              />
                             </View>
-                            <AtrophyClassificationChip
-                              arch="mandible"
-                              anterior_height={formData.atrophy_man_ant_h}
-                              posterior_height={formData.atrophy_man_post_h}
-                              anterior_width={formData.atrophy_man_ant_w}
-                              posterior_width={formData.atrophy_man_post_w}
-                              opposing_arch={formData.opposing_arch}
-                              smoking={formData.medical_assessment?.smoking}
-                              hba1c={formData.medical_assessment?.hba1c}
-                            />
-                          </View>
-                        )}
-                      </>
-                    )}
+                          )}
+                        </>
+                      )}
                   </>
                 )}
 
@@ -6950,22 +6982,22 @@ export default function NewProcedureScreen() {
                 input below the dropdown. */}
             {getEffectiveWorkflow(
               formData.implant_procedure_type,
-              formData.num_implants
+              formData.num_implants,
             ) !== null &&
               formData.loading_type.includes("Immediate Loading") &&
               (() => {
                 const g = getEffectiveWorkflow(
                   formData.implant_procedure_type,
-                  formData.num_implants
+                  formData.num_implants,
                 );
                 const groupsOptions =
                   g === "SC"
                     ? PROVISIONAL_GROUPED_OPTIONS
                     : g === "A"
-                    ? GROUP_A_PROVISIONAL_OPTIONS
-                    : g === "B"
-                    ? GROUP_B_PROVISIONAL_OPTIONS
-                    : GROUP_C_PROVISIONAL_OPTIONS;
+                      ? GROUP_A_PROVISIONAL_OPTIONS
+                      : g === "B"
+                        ? GROUP_B_PROVISIONAL_OPTIONS
+                        : GROUP_C_PROVISIONAL_OPTIONS;
                 return (
                   <View style={styles.section}>
                     <Text style={styles.sectionTitle}>
