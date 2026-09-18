@@ -815,10 +815,10 @@ function DefaultProceduresScreen() {
 
   const filterButtons = useMemo(
     () => [
-      { key: "needs_action", label: "Needs my action" },
-      { key: "in_progress", label: "In progress" },
-      { key: "completed", label: "Completed" },
-      { key: "all", label: "All" },
+      { key: "needs_action", label: "Needs Action", shortLabel: "Action" },
+      { key: "in_progress", label: "In Progress", shortLabel: "In Progress" },
+      { key: "completed", label: "Completed", shortLabel: "Completed" },
+      { key: "all", label: "All", shortLabel: "All" },
     ],
     []
   );
@@ -931,12 +931,18 @@ function DefaultProceduresScreen() {
       </View>
 
       {/* Action-Oriented Segmented Control */}
-      <View style={[styles.segmentedWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
-        <View style={styles.segmentedContainer} data-testid="segmented-filter-bar">
+      {/* <View style={[styles.segmentedWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={[styles.segmentedContainerScroll]}
+          data-testid="segmented-filter-bar"
+        >
           {filterButtons.map((btn) => {
             const isActive = filter === btn.key;
             const count = tabCounts[btn.key] ?? 0;
             const isActionTab = btn.key === "needs_action";
+            const displayLabel = isTablet ? btn.label : (btn.shortLabel || btn.label);
             return (
               <TouchableOpacity
                 key={btn.key}
@@ -956,7 +962,7 @@ function DefaultProceduresScreen() {
                   ]}
                   numberOfLines={1}
                 >
-                  {btn.label}
+                  {displayLabel}
                 </Text>
                 <View
                   style={[
@@ -978,8 +984,8 @@ function DefaultProceduresScreen() {
               </TouchableOpacity>
             );
           })}
-        </View>
-      </View>
+        </ScrollView>
+      </View> */}
 
       {/* Phase Chip Row */}
       <View style={[styles.phaseChipsWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
@@ -1640,94 +1646,108 @@ const styles = StyleSheet.create({
   segmentedWrapper: {
     paddingHorizontal: 16,
     marginBottom: 8,
+    marginTop: 4,
   },
   segmentedContainer: {
     flexDirection: "row",
-    backgroundColor: "#E8ECF2",
+    backgroundColor: "transparent",
     borderRadius: 12,
-    padding: 4,
-    gap: 4,
+    padding: 2,
+    borderWidth: 0,
+    borderColor: "transparent",
+  },
+  segmentedContainerScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    marginHorizontal: 12,
   },
   segmentItem: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 9,
-    gap: 5,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    gap: 8,
+    alignSelf: "flex-start",
+    marginRight: 8,
   },
   segmentItemActive: {
-    backgroundColor: "#FFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
+    backgroundColor: "#1565C0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   segmentText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: "#546E7A",
+    color: "#475569",
   },
   segmentTextActive: {
-    color: "#1565C0",
+    color: "#FFFFFF",
     fontWeight: "700",
   },
   segmentBadge: {
     paddingHorizontal: 6,
-    paddingVertical: 1,
+    paddingVertical: 2,
     borderRadius: 10,
     minWidth: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   segmentBadgeInactive: {
-    backgroundColor: "#CFD8DC",
+    backgroundColor: "#EEF2FF",
   },
   segmentBadgeActive: {
-    backgroundColor: "#E3F2FD",
+    backgroundColor: "rgba(255,255,255,0.15)",
   },
   segmentBadgeAlert: {
-    backgroundColor: "#FFEBEE",
+    backgroundColor: "#FFF2F2",
   },
   segmentBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
   },
   segmentBadgeTextInactive: {
-    color: "#546E7A",
+    color: "#334155",
   },
   segmentBadgeTextActive: {
-    color: "#1565C0",
+    color: "#E6F0FF",
   },
   segmentBadgeTextAlert: {
-    color: "#D32F2F",
+    color: "#C62828",
   },
   phaseChipsWrapper: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   phaseChipsScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingHorizontal: 12,
+    gap: 10,
   },
   phaseChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "#F0F4F8",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: "#CFD8DC",
+    borderColor: "#E6EEF8",
   },
   phaseChipActive: {
-    backgroundColor: "#1565C0",
-    borderColor: "#1565C0",
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
   },
   phaseChipText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: "#455A64",
+    color: "#475569",
   },
   phaseChipTextActive: {
     color: "#FFFFFF",

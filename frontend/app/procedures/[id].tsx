@@ -20,7 +20,16 @@ import {
   Platform,
   Pressable,
   Animated as RNAnimated,
+  LayoutAnimation,
+  UIManager,
 } from "react-native";
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -443,6 +452,98 @@ export default function ProcedureDetailScreen() {
   const [exitSummaryDraft, setExitSummaryDraft] = useState("");
   const [savingExitSummary, setSavingExitSummary] = useState(false);
 
+  // ── Phase Accordion Collapse State ──────────────────────────────────────────
+  // Determine smart defaults: collapse completed prior phases, keep active open.
+  const getInitialCollapsed = (status: string | undefined) => {
+    const s = status || "";
+    const p1done = !["draft", "pending_phase1"].includes(s);
+    const p2done = [
+      "phase2_approved",
+      "pending_phase3",
+      "phase3_approved",
+      "pending_phase4_step1",
+      "phase4_step1_approved",
+      "pending_phase4_step2",
+      "phase4_step2_approved",
+      "completed",
+      "treatment_ended",
+    ].includes(s);
+    const p3done = [
+      "phase3_approved",
+      "pending_phase4_step1",
+      "phase4_step1_approved",
+      "pending_phase4_step2",
+      "phase4_step2_approved",
+      "completed",
+      "treatment_ended",
+    ].includes(s);
+    const p4done = ["completed", "treatment_ended"].includes(s);
+    return { p1: p1done, p2: p2done, p3: p3done, p4: p4done };
+  };
+
+  const [collapsedPhases, setCollapsedPhases] = useState<{
+    p1: boolean;
+    p2: boolean;
+    p3: boolean;
+    p4: boolean;
+  }>({ p1: false, p2: false, p3: false, p4: false });
+
+  // Re-apply smart defaults whenever the procedure status changes (e.g. after load)
+  const [phasesInitialized, setPhasesInitialized] = useState(false);
+
+  const togglePhase = (key: "p1" | "p2" | "p3" | "p4") => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCollapsedPhases((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const expandAllPhases = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCollapsedPhases({ p1: false, p2: false, p3: false, p4: false });
+  };
+
+  const collapseAllPhases = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCollapsedPhases({ p1: true, p2: true, p3: true, p4: true });
+  };
+
+  const getPhaseBadge = (
+    phaseKey: "p1" | "p2" | "p3" | "p4",
+    status: string | undefined
+  ): { label: string; color: string; bg: string } => {
+    const s = status || "";
+    if (phaseKey === "p1") {
+      if (["draft", "pending_phase1"].includes(s))
+        return { label: "In Progress", color: "#1D4ED8", bg: "#EFF6FF" };
+      if (s === "phase1_rejected")
+        return { label: "Rejected", color: "#991B1B", bg: "#FEE2E2" };
+      return { label: "Approved ✓", color: "#166534", bg: "#DCFCE7" };
+    }
+    if (phaseKey === "p2") {
+      if (!["phase1_approved", "pending_phase2", "phase2_submitted", "phase2_approved", "pending_phase3", "phase3_approved", "pending_phase4_step1", "phase4_step1_approved", "pending_phase4_step2", "phase4_step2_approved", "completed", "treatment_ended"].includes(s))
+        return { label: "Not Started", color: "#64748B", bg: "#F1F5F9" };
+      if (["phase1_approved", "pending_phase2", "phase2_submitted"].includes(s))
+        return { label: "In Progress", color: "#0F766E", bg: "#F0FDFA" };
+      if (s === "phase2_rejected")
+        return { label: "Rejected", color: "#991B1B", bg: "#FEE2E2" };
+      return { label: "Approved ✓", color: "#166534", bg: "#DCFCE7" };
+    }
+    if (phaseKey === "p3") {
+      if (!["phase3_submitted", "phase3_approved", "pending_phase4_step1", "phase4_step1_approved", "pending_phase4_step2", "phase4_step2_approved", "completed", "treatment_ended"].includes(s)) {
+        if (["phase2_approved", "pending_phase3"].includes(s))
+          return { label: "In Progress", color: "#15803D", bg: "#F0FDF4" };
+        return { label: "Not Started", color: "#64748B", bg: "#F1F5F9" };
+      }
+      return { label: "Approved ✓", color: "#166534", bg: "#DCFCE7" };
+    }
+    // p4
+    if (["completed", "treatment_ended"].includes(s))
+      return { label: "Completed ✓", color: "#166534", bg: "#DCFCE7" };
+    if (["pending_phase4_step1", "phase4_step1_approved", "pending_phase4_step2", "phase4_step2_approved"].includes(s))
+      return { label: "In Progress", color: "#C2410C", bg: "#FFF7ED" };
+    return { label: "Not Started", color: "#64748B", bg: "#F1F5F9" };
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   const uploadConsentForProcedure = async () => {
     try {
       const picked = await showUploadPicker([
@@ -596,6 +697,14 @@ export default function ProcedureDetailScreen() {
   useEffect(() => {
     loadProcedure();
   }, [id]);
+
+  // Initialize collapsed phases with smart defaults once procedure loads (first load only)
+  useEffect(() => {
+    if (procedure && !phasesInitialized) {
+      setCollapsedPhases(getInitialCollapsed(procedure.status));
+      setPhasesInitialized(true);
+    }
+  }, [procedure, phasesInitialized]);
 
   // iter-379: When the case is opened via a transfer notification deep-link
   // (?anchor=transfer|handoff), auto-scroll to the TransferApprovalCard once
@@ -1667,6 +1776,17 @@ export default function ProcedureDetailScreen() {
                   const scrollToPhase = (phaseLabel: string, ev?: any) => {
                     const phaseNum = phaseToNum[phaseLabel];
                     if (!phaseNum) return; // 'Done' chip is non-scrolling
+                    // Ensure the target phase is expanded before scrolling
+                    const anchorKey = `p${phaseNum}` as "p1" | "p2" | "p3" | "p4";
+                    setCollapsedPhases((prev) => {
+                      if (prev[anchorKey]) {
+                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                        return { ...prev, [anchorKey]: false };
+                      }
+                      return prev;
+                    });
+                    // Delay scroll slightly to let LayoutAnimation expand the content
+                    const doScroll = () => {
                     if (
                       Platform.OS === "web" &&
                       typeof document !== "undefined"
@@ -1745,18 +1865,20 @@ export default function ProcedureDetailScreen() {
                         return;
                       }
                     }
-                    const anchorKey = `p${phaseNum}` as
+                    const anchorKey2 = `p${phaseNum}` as
                       | "p1"
                       | "p2"
                       | "p3"
                       | "p4";
-                    const y = phaseAnchors.current[anchorKey];
+                    const y = phaseAnchors.current[anchorKey2];
                     if (typeof y === "number") {
                       mainScrollRef.current?.scrollTo({
                         y: Math.max(0, y - HEADER_OFFSET),
                         animated: true,
                       });
                     }
+                    }; // end doScroll
+                    setTimeout(doScroll, 350);
                   };
                   return (
                     <Animated.View style={pillAnimatedStyle}>
@@ -4180,32 +4302,162 @@ export default function ProcedureDetailScreen() {
 
             {/* Instruments Autoclaved Badge moved inline under PHASE 1 APPROVED button (canSubmitPhase2). */}
 
-            <View
-              style={styles.section}
-              testID="phase1-full-data-section"
-              data-testid="phase1-full-data-section"
-              onLayout={(e) => {
-                phaseAnchors.current["p1"] = e.nativeEvent.layout.y;
-              }}
-            >
-              <Text style={styles.sectionTitle}>Patient Information</Text>
-              <InfoRow
-                icon="person"
-                label="Patient Name"
-                value={procedure.patient_name}
-              />
-              <InfoRow
-                icon="card"
-                label="Registration Number"
-                value={procedure.registration_number}
-              />
-              <InfoRow
-                icon="medical"
-                label="Implant Site"
-                value={procedure.implant_site}
-              />
-            </View>
-            <PatientHistoryStrip procedure={procedure} />
+            {/* ── Phase Accordion Toolbar (Expand All / Collapse All) ──────── */}
+            {(() => {
+              const anyExpanded = !collapsedPhases.p1 || !collapsedPhases.p2 || !collapsedPhases.p3 || !collapsedPhases.p4;
+              const openCount = (!collapsedPhases.p1 ? 1 : 0) + (!collapsedPhases.p2 ? 1 : 0) + (!collapsedPhases.p3 ? 1 : 0) + (!collapsedPhases.p4 ? 1 : 0);
+              return (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    marginTop: 6,
+                    marginBottom: 2,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: "#64748B", letterSpacing: 0.6, textTransform: "uppercase" }}>
+                      Procedure Phases
+                    </Text>
+                    <View style={{ backgroundColor: "#F1F5F9", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#E2E8F0" }}>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#475569" }}>
+                        {openCount}/4 Open
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={anyExpanded ? collapseAllPhases : expandAllPhases}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 5,
+                      paddingHorizontal: 10,
+                      paddingVertical: 5,
+                      borderRadius: 8,
+                      backgroundColor: "#FFFFFF",
+                      borderWidth: 1,
+                      borderColor: "#E2E8F0",
+                    }}
+                    accessibilityLabel={anyExpanded ? "Collapse all phases" : "Expand all phases"}
+                  >
+                    <Ionicons
+                      name={anyExpanded ? "contract-outline" : "expand-outline"}
+                      size={13}
+                      color="#64748B"
+                    />
+                    <Text style={{ fontSize: 11.5, fontWeight: "600", color: "#475569" }}>
+                      {anyExpanded ? "Collapse All" : "Expand All"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
+
+            {/* ═══════════ PHASE 1 ACCORDION ═══════════ */}
+            {(() => {
+              const badge = getPhaseBadge("p1", procedure.status);
+              const isOpen = !collapsedPhases.p1;
+              return (
+                <>
+                  {/* Phase 1 Accordion Header */}
+                  <TouchableOpacity
+                    onPress={() => togglePhase("p1")}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      backgroundColor: "#FFFFFF",
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      marginHorizontal: 12,
+                      marginTop: 4,
+                      marginBottom: isOpen ? 8 : 10,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: "#E2E8F0",
+                      borderLeftWidth: 4,
+                      borderLeftColor: "#2563EB",
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.04,
+                      shadowRadius: 3,
+                      elevation: 1,
+                    }}
+                    testID="phase1-accordion-header"
+                    data-testid="phase1-accordion-header"
+                  >
+                    <View
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 8,
+                        backgroundColor: "#EFF6FF",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 12,
+                      }}
+                    >
+                      <Ionicons name="document-text-outline" size={18} color="#2563EB" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                        Phase 1 — Diagnosis & Planning
+                      </Text>
+                      <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
+                        {procedure.patient_name || "Patient Plan"}{procedure.implant_site ? ` · Site ${procedure.implant_site}` : ""}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        backgroundColor: badge.bg,
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 6,
+                        marginRight: 8,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: "700", color: badge.color }}>{badge.label}</Text>
+                    </View>
+                    <Ionicons
+                      name={isOpen ? "chevron-up" : "chevron-down"}
+                      size={18}
+                      color="#64748B"
+                    />
+                  </TouchableOpacity>
+
+                  {/* Phase 1 Content */}
+                  {isOpen && (
+                    <>
+                      <View
+                        style={styles.section}
+                        testID="phase1-full-data-section"
+                        data-testid="phase1-full-data-section"
+                        onLayout={(e) => {
+                          phaseAnchors.current["p1"] = e.nativeEvent.layout.y;
+                        }}
+                      >
+                        <Text style={styles.sectionTitle}>Patient Information</Text>
+                        <InfoRow
+                          icon="person"
+                          label="Patient Name"
+                          value={procedure.patient_name}
+                        />
+                        <InfoRow
+                          icon="card"
+                          label="Registration Number"
+                          value={procedure.registration_number}
+                        />
+                        <InfoRow
+                          icon="medical"
+                          label="Implant Site"
+                          value={procedure.implant_site}
+                        />
+                      </View>
+                      <PatientHistoryStrip procedure={procedure} />
 
         {/* iter-Jun-2026 (v9, Chunk 2): Zygoma / Pterygoid Phase 1 read-only
             review — visible to all roles (student / supervisor / in-charge /
@@ -6590,40 +6842,104 @@ export default function ProcedureDetailScreen() {
                 )}
               </>
             )}
+                    </>
+                  )}
+                </>
+              );
+            })()}
 
             {/* ═══════════ PHASE 2: SURGICAL PROTOCOLS - Full Data Display ═══════════ */}
             {user?.role !== "nurse" &&
               procedure.phase2_data &&
-              Object.keys(procedure.phase2_data).length > 0 && (
-                <View
-                  style={[
-                    styles.section,
-                    { borderLeftWidth: 4, borderLeftColor: "#0D47A1" },
-                  ]}
-                  testID="phase2-full-data-section"
-                  data-testid="phase2-full-data-section"
-                  onLayout={(e) => {
-                    phaseAnchors.current["p2"] = e.nativeEvent.layout.y;
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 12,
-                    }}
-                  >
-                    <Ionicons name="medkit" size={22} color="#0D47A1" />
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { marginBottom: 0, color: "#0D47A1", fontSize: 17 },
-                      ]}
+              Object.keys(procedure.phase2_data).length > 0 && (() => {
+                const badge2 = getPhaseBadge("p2", procedure.status);
+                const isOpen2 = !collapsedPhases.p2;
+                return (
+                  <>
+                    {/* Phase 2 Accordion Header */}
+                    <TouchableOpacity
+                      onPress={() => togglePhase("p2")}
+                      activeOpacity={0.7}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "#FFFFFF",
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        marginHorizontal: 12,
+                        marginTop: 4,
+                        marginBottom: isOpen2 ? 8 : 10,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: "#E2E8F0",
+                        borderLeftWidth: 4,
+                        borderLeftColor: "#0D9488",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.04,
+                        shadowRadius: 3,
+                        elevation: 1,
+                      }}
+                      testID="phase2-accordion-header"
+                      data-testid="phase2-accordion-header"
                     >
-                      Phase 2 — Implant Surgery
-                    </Text>
-                  </View>
+                      <View
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 8,
+                          backgroundColor: "#F0FDFA",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 12,
+                        }}
+                      >
+                        <Ionicons name="medkit-outline" size={18} color="#0D9488" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                          Phase 2 — Implant Surgery
+                        </Text>
+                        <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
+                          {procedure.phase2_data?.implant_systems?.length > 0
+                            ? `${procedure.phase2_data.implant_systems.length} implant system(s) recorded`
+                            : "Surgical Protocols & Placement"}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          backgroundColor: badge2.bg,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 6,
+                          marginRight: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: badge2.color }}>{badge2.label}</Text>
+                      </View>
+                      <Ionicons name={isOpen2 ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+                    </TouchableOpacity>
+
+                    {/* Phase 2 Content */}
+                    {isOpen2 && (
+                      <View
+                        style={[
+                          styles.section,
+                          {
+                            borderLeftWidth: 4,
+                            borderLeftColor: "#0D9488",
+                            marginTop: 0,
+                            marginBottom: 16,
+                            padding: 18,
+                            backgroundColor: "#FFFFFF",
+                          },
+                        ]}
+                        testID="phase2-full-data-section"
+                        data-testid="phase2-full-data-section"
+                        onLayout={(e) => {
+                          phaseAnchors.current["p2"] = e.nativeEvent.layout.y;
+                        }}
+                      >
 
                   {/* Pre-Surgery Checklist */}
                   {procedure.phase2_data.pre_surgery_checklist &&
@@ -7920,6 +8236,9 @@ export default function ProcedureDetailScreen() {
                   )}
                 </View>
               )}
+            </>
+          );
+        })()}
 
             {/* AI Surgical Summary — Generate after Phase 2 approval; editable + persisted to PDF */}
             {(() => {
@@ -8180,18 +8499,95 @@ export default function ProcedureDetailScreen() {
             {user?.role !== "nurse" &&
               (procedure.phase3_data ||
                 procedure.stage2_surgical_remark ||
-                procedure.phase3_student_notes) && (
-                <View
-                  style={[
-                    styles.section,
-                    { borderLeftWidth: 4, borderLeftColor: "#2E7D32" },
-                  ]}
-                  testID="phase3-full-data-section"
-                  data-testid="phase3-full-data-section"
-                  onLayout={(e) => {
-                    phaseAnchors.current["p3"] = e.nativeEvent.layout.y;
-                  }}
-                >
+                procedure.phase3_student_notes) && (() => {
+                const badge3 = getPhaseBadge("p3", procedure.status);
+                const isOpen3 = !collapsedPhases.p3;
+                return (
+                  <>
+                    {/* Phase 3 Accordion Header */}
+                    <TouchableOpacity
+                      onPress={() => togglePhase("p3")}
+                      activeOpacity={0.7}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "#FFFFFF",
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        marginHorizontal: 12,
+                        marginTop: 4,
+                        marginBottom: isOpen3 ? 8 : 10,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: "#E2E8F0",
+                        borderLeftWidth: 4,
+                        borderLeftColor: "#16A34A",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.04,
+                        shadowRadius: 3,
+                        elevation: 1,
+                      }}
+                      testID="phase3-accordion-header"
+                      data-testid="phase3-accordion-header"
+                    >
+                      <View
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 8,
+                          backgroundColor: "#F0FDF4",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 12,
+                        }}
+                      >
+                        <Ionicons name="git-branch-outline" size={18} color="#16A34A" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                          Phase 3 — Healing & Second Stage
+                        </Text>
+                        <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
+                          {procedure.phase3_data?.implants?.length > 0
+                            ? `${procedure.phase3_data.implants.length} implant(s) evaluated`
+                            : "Healing & Second Stage Surgery"}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          backgroundColor: badge3.bg,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 6,
+                          marginRight: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: badge3.color }}>{badge3.label}</Text>
+                      </View>
+                      <Ionicons name={isOpen3 ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+                    </TouchableOpacity>
+
+                    {/* Phase 3 Content */}
+                    {isOpen3 && (
+                      <View
+                        style={[
+                          styles.section,
+                          {
+                            borderLeftWidth: 4,
+                            borderLeftColor: "#16A34A",
+                            marginTop: 0,
+                            marginBottom: 16,
+                            padding: 18,
+                            backgroundColor: "#FFFFFF",
+                          },
+                        ]}
+                        testID="phase3-full-data-section"
+                        data-testid="phase3-full-data-section"
+                        onLayout={(e) => {
+                          phaseAnchors.current["p3"] = e.nativeEvent.layout.y;
+                        }}
+                      >
                   <View
                     style={{
                       flexDirection: "row",
@@ -9751,23 +10147,104 @@ export default function ProcedureDetailScreen() {
                 )}
               </View>
             )}
+          </>
+        );
+      })()}
 
-            {/* ═══════════ PHASE 4 STEP 1: PROSTHETIC PROTOCOL - Full Data Display ═══════════ */}
+            {/* ═══════════ PHASE 4: PROSTHETIC PROTOCOL & DELIVERY ═══════════ */}
             {user?.role !== "nurse" &&
               (procedure.phase4_step1_data ||
                 procedure.stage2_prosthetic_remark ||
-                procedure.phase4_step1_student_notes) && (
-                <View
-                  style={[
-                    styles.section,
-                    { borderLeftWidth: 4, borderLeftColor: "#FF6F00" },
-                  ]}
-                  testID="phase4-step1-full-data-section"
-                  data-testid="phase4-step1-full-data-section"
-                  onLayout={(e) => {
-                    phaseAnchors.current["p4"] = e.nativeEvent.layout.y;
-                  }}
-                >
+                procedure.phase4_step1_student_notes ||
+                procedure.phase4_step2_data ||
+                procedure.phase4_step2_student_notes) && (() => {
+                const badge4 = getPhaseBadge("p4", procedure.status);
+                const isOpen4 = !collapsedPhases.p4;
+                return (
+                  <>
+                    {/* Phase 4 Accordion Header */}
+                    <TouchableOpacity
+                      onPress={() => togglePhase("p4")}
+                      activeOpacity={0.7}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "#FFFFFF",
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        marginHorizontal: 12,
+                        marginTop: 4,
+                        marginBottom: isOpen4 ? 8 : 10,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: "#E2E8F0",
+                        borderLeftWidth: 4,
+                        borderLeftColor: "#EA580C",
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 1 },
+                        shadowOpacity: 0.04,
+                        shadowRadius: 3,
+                        elevation: 1,
+                      }}
+                      testID="phase4-accordion-header"
+                      data-testid="phase4-accordion-header"
+                      onLayout={(e) => {
+                        phaseAnchors.current["p4"] = e.nativeEvent.layout.y;
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 8,
+                          backgroundColor: "#FFF7ED",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 12,
+                        }}
+                      >
+                        <Ionicons name="construct-outline" size={18} color="#EA580C" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                          Phase 4 — Prosthetic Protocol & Delivery
+                        </Text>
+                        <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
+                          {procedure.phase4_step2_data ? "Step 1 & Step 2 recorded" : "Step 1: Prosthetic Protocol"}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          backgroundColor: badge4.bg,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 6,
+                          marginRight: 8,
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: badge4.color }}>{badge4.label}</Text>
+                      </View>
+                      <Ionicons name={isOpen4 ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+                    </TouchableOpacity>
+
+                    {/* Phase 4 Content */}
+                    {isOpen4 && (
+                      <>
+                        {/* Step 1 Section */}
+                        {(procedure.phase4_step1_data ||
+                          procedure.stage2_prosthetic_remark ||
+                          procedure.phase4_step1_student_notes) && (
+                          <View
+                            style={[
+                              styles.section,
+                              { borderLeftWidth: 4, borderLeftColor: "#FF6F00" },
+                            ]}
+                            testID="phase4-step1-full-data-section"
+                            data-testid="phase4-step1-full-data-section"
+                            onLayout={(e) => {
+                              phaseAnchors.current["p4"] = e.nativeEvent.layout.y;
+                            }}
+                          >
                   <View
                     style={{
                       flexDirection: "row",
@@ -10188,16 +10665,15 @@ export default function ProcedureDetailScreen() {
               )}
 
             {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
-            {user?.role !== "nurse" &&
-              (procedure.phase4_step2_data ||
-                procedure.phase4_step2_student_notes) && (
-                <View
-                  style={[
-                    styles.section,
-                    { borderLeftWidth: 4, borderLeftColor: "#AD1457" },
-                  ]}
-                  data-testid="phase4-step2-full-data-section"
-                >
+            {(procedure.phase4_step2_data ||
+              procedure.phase4_step2_student_notes) && (
+              <View
+                style={[
+                  styles.section,
+                  { borderLeftWidth: 4, borderLeftColor: "#AD1457" },
+                ]}
+                data-testid="phase4-step2-full-data-section"
+              >
                   <View
                     style={{
                       flexDirection: "row",
@@ -10395,6 +10871,11 @@ export default function ProcedureDetailScreen() {
                   )}
                 </View>
               )}
+            </>
+          )}
+        </>
+      );
+    })()}
 
             {procedure.stage2_surgical_remark && !procedure.phase3_data && (
               <View style={styles.section}>
@@ -12365,7 +12846,7 @@ const styles = StyleSheet.create({
     color: "#0D47A1",
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,

@@ -222,12 +222,16 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
   return (
     <View style={s.card} testID="add-implant-section" data-testid="add-implant-section">
       <View style={s.head}>
-        <Ionicons name="add-circle-outline" size={20} color="#1565C0" />
-        <Text style={s.title}>Mid-Treatment Implant Addition</Text>
+        <View style={s.iconBox}>
+          <Ionicons name="add-circle-outline" size={18} color="#2563EB" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>Mid-Treatment Implant Addition</Text>
+          <Text style={s.sub}>
+            For this {procedure?.implant_procedure_type || "multiple implants"} case: add an implant that is part of the SAME treatment plan.
+          </Text>
+        </View>
       </View>
-      <Text style={s.sub}>
-        For this {procedure?.implant_procedure_type} case: add an implant that is part of the SAME treatment plan (not a parallel case).
-      </Text>
 
       {requests.map(r => {
         const chip = STATUS_CHIP[r.status] || STATUS_CHIP.pending_supervisor;
@@ -260,8 +264,8 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
       })}
 
       {canAdd && (
-        <TouchableOpacity style={s.addBtn} onPress={openModal} testID="add-implant-btn" data-testid="add-implant-btn">
-          <Ionicons name="add" size={16} color="#FFF" />
+        <TouchableOpacity style={s.addBtn} onPress={openModal} testID="add-implant-btn" data-testid="add-implant-btn" activeOpacity={0.7}>
+          <Ionicons name="add" size={16} color="#2563EB" />
           <Text style={s.addBtnT}>Add implant to this treatment</Text>
         </TouchableOpacity>
       )}
@@ -377,21 +381,71 @@ export default function AddImplantSection({ procedure, onChanged }: { procedure:
 }
 
 const s = StyleSheet.create({
-  card: { backgroundColor: '#FFF', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#E3EAF2' },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontSize: 15, fontWeight: '800', color: '#1565C0' },
-  sub: { fontSize: 12, color: '#78909C', marginTop: 4, lineHeight: 17 },
-  reqRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8FAFD', borderRadius: 10, padding: 10, marginTop: 10, borderWidth: 1, borderColor: '#E3EAF2' },
-  reqTitle: { fontSize: 12.5, fontWeight: '700', color: '#37474F' },
-  reqSub: { fontSize: 11, color: '#78909C', marginTop: 2 },
-  chip: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, marginTop: 5 },
-  chipT: { fontSize: 10.5, fontWeight: '800' },
-  approveBtn: { backgroundColor: '#2E7D32', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
+  card: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  iconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  title: { fontSize: 15, fontWeight: '700', color: '#0F172A', letterSpacing: 0.2 },
+  sub: { fontSize: 12.5, color: '#64748B', marginTop: 4, lineHeight: 18 },
+  reqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  reqTitle: { fontSize: 13, fontWeight: '700', color: '#1E293B' },
+  reqSub: { fontSize: 11.5, color: '#64748B', marginTop: 2 },
+  chip: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 6 },
+  chipT: { fontSize: 10.5, fontWeight: '700' },
+  approveBtn: { backgroundColor: '#16A34A', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
   approveT: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  declineBtn: { borderWidth: 1, borderColor: '#EF9A9A', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 },
-  declineT: { color: '#C62828', fontSize: 12, fontWeight: '700' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#1565C0', borderRadius: 999, paddingVertical: 10, marginTop: 12 },
-  addBtnT: { color: '#FFF', fontSize: 13.5, fontWeight: '700' },
+  declineBtn: {
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  declineT: { color: '#DC2626', fontSize: 12, fontWeight: '700' },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  addBtnT: { color: '#2563EB', fontSize: 13.5, fontWeight: '600' },
   mBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 18 },
   mSheet: { backgroundColor: '#FFF', borderRadius: 14, padding: 14, maxHeight: 500 },
   mTitle: { fontSize: 14, fontWeight: '800', color: '#37474F', marginBottom: 8 },

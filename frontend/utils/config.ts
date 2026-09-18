@@ -1,16 +1,27 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-// Fail-safe backend URL resolution:
-// 1. Inlined EXPO_PUBLIC_BACKEND_URL from build/environment
-// 2. Constants.expoConfig?.extra?.backendUrl from dynamic app.config.js
-// 3. Fallback to production API: https://api.implanr.com
-// Trailing slashes are stripped to prevent double-slash (//api) routing errors.
-const rawUrl =
+const envUrl =
   process.env.EXPO_PUBLIC_BACKEND_URL ||
   Constants.expoConfig?.extra?.backendUrl ||
-  (Constants.manifest as any)?.extra?.backendUrl ||
-  'https://api.implanr.com';
+  (Constants.manifest as any)?.extra?.backendUrl;
 
-const BACKEND_URL: string = (rawUrl && rawUrl.trim() ? rawUrl.trim() : 'https://api.implanr.com').replace(/\/+$/, '');
+function resolveBackendUrl(): string {
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    let url = envUrl.trim().replace(/\/+$/, '');
+    // If running on Android and URL targets localhost, rewrite to 10.0.2.2 (host alias)
+    if (Platform.OS === 'android' && (url.includes('localhost') || url.includes('127.0.0.1'))) {
+      url = url.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2');
+    }
+    return url;
+  }
+  // Local backend default (Android emulator -> 10.0.2.2, iOS/Web -> localhost)
+  if (Platform.OS === 'android') {
+    return 'https://api.implanr.com';
+  }
+  return 'https://api.implanr.com';
+}
+
+const BACKEND_URL: string = resolveBackendUrl();
 
 export { BACKEND_URL };
