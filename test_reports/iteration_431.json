@@ -1,0 +1,38 @@
+{
+  "summary": "iter-431 Implant Overdenture — backend suite 10/10 passed (+1 PDF text-extraction test after pypdf install). Confirmed: /api/case-form-options returns procedure_types with 'Implant Overdenture' positioned immediately AFTER 'Guided Surgery' and BEFORE 'All on 4'; POST /api/procedures with implant_procedure_type='Implant Overdenture' + missing/invalid overdenture_type is rejected 400 with 'Type of Overdenture' in the message; POST with overdenture_type ∈ {Implant Retained Overdenture, Implant Supported Overdenture} succeeds and GET echoes overdenture_type, implant_procedure_type, arch, fa_prosthetic_plan; missing_teeth is NOT required for Implant Overdenture (full-arch exemption via _validate_missing_teeth); POST /api/procedures/{id}/case-report returns 200 PDF whose extracted text contains 'Type of Overdenture'; All-on-4 (no overdenture_type) and Single Conventional Implant regressions still work; add-implant endpoint no longer rejects IOD with the 'only available for Multiple Implants and full-arch' gate. Frontend constants code-verified: checklist.ts PROCEDURE_TYPES contains 'Implant Overdenture' between 'Implant Placement with Guided Bone Regeneration' and 'All on 4' (frontend list intentionally omits 'Guided Surgery'); prosthesisWorkflows.ts IMPLANT_OVERDENTURE_PLAN_OPTIONS = [RP-5, RP-4] only (no Fixed Full-Arch); new-procedure.tsx renders Dropdown with data-testid='overdenture-type-dropdown' gated on isImplantOverdenture(...) and resets overdenture_type when the parent type changes. Live UI drive was limited: the Phase-1 wizard's 'Treatment' sub-step (which hosts the Type of Implant Procedure dropdown) is only clickable after Step 1 'Case Details' required fields are filled; driving the full wizard was out of scope for this iteration but the underlying constants/JSX are code-verified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "new-procedure", "issues": [
+        "Web console emits repeated 'Unexpected text node: . A text node cannot be a child of a <View>.' warnings on the New Case screen. Pre-existing (not iter-431). Report to main agent to hunt down stray whitespace text nodes."
+      ]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter431_implant_overdenture.py",
+    "/app/test_reports/pytest/iter431_results.xml"
+  ],
+  "action_items": [
+    "No functional fixes needed — iter-431 Implant Overdenture backend contract fully meets the spec.",
+    "Optional main-agent follow-up: track down the 'Unexpected text node' React-DOM warnings on the New Case screen (pre-existing)."
+  ],
+  "critical_code_review_comments": [
+    "server.py POST /api/procedures gate for overdenture_type is clean (line 2228-2231) and error text explicitly names 'Type of Overdenture'.",
+    "server.py PROCEDURE_TYPES has 'Implant Overdenture' at index between 'Guided Surgery' and 'All on 4' (line 1851).",
+    "Full-arch exemption already covers 'Implant Overdenture' via full_arch_types set at server.py line 1904/13514/17069 and IOD is NOT in _HEALED_EDENTULOUS/_EXTRACT_AND_PLACE, so _validate_missing_teeth correctly skips it.",
+    "PDF builders echo 'Type of Overdenture' in 3 places (server.py 5467, 5708, 14142) and the case-report PDF test extracted the literal text.",
+    "Frontend prosthesisWorkflows.ts.getGroupBPlanOptions correctly returns the narrowed 2-group catalogue (RP-5 + RP-4 only) for Implant Overdenture, excluding 'Definitive — Fixed Full-Arch'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter431_implant_overdenture.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "code-verified only (live drive blocked by wizard gating)"},
+  "seed_data_creation": "All test cases prefixed 'TEST_IOD_' and cleaned up per-test via pymongo delete_many on created ObjectIds. No residual data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_iter431_implant_overdenture.py is reusable for regression. To drive the 'New Case → Treatment' tab in the frontend, Step 1 'Case Details' must be filled first (patient name, age, sex, profession, mobile, reg. number, supervisor, implant in-charge, date, time, etc.) before the '2. Treat' tab becomes enabled — this is by design.",
+  "rca_of_issue": "N/A — feature verified working."
+}

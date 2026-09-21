@@ -157,7 +157,7 @@ export default function Phase2SubmissionScreen() {
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
-  const FULL_ARCH_SET = new Set(['All on 4', 'All on 6', 'All on X']);
+  const FULL_ARCH_SET = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
   const isFullArch = FULL_ARCH_SET.has(procedureType);
   const isSingleImplant = procedureType === 'Single Conventional Implant';
   // iter-356: per-implant Prosthetic Component applies to multi-implant
@@ -264,6 +264,9 @@ export default function Phase2SubmissionScreen() {
       if (pType === 'All on 4') iopaCount = 4;
       else if (pType === 'All on 6') iopaCount = 6;
       else if (pType === 'All on X') iopaCount = 5;
+      // iter-Jun-2026: Implant Overdenture — variable implant count (min 2);
+      // extra IOPA slots can be added via the "Add IOPA Radiograph" button.
+      else if (pType === 'Implant Overdenture') iopaCount = Math.max(convPositions.length, 2);
       else iopaCount = convPositions.length; // 0 for pure Zygoma/Pterygoid cases
       setIopaFiles(new Array(iopaCount).fill(null));
 
@@ -618,13 +621,13 @@ export default function Phase2SubmissionScreen() {
         // partial data is persisted; warnings are shown inline in the UI.
         multi_unit_abutment_placed:
           (prostheticComponent === 'Immediate Loading Done'
-            && ['All on 4','All on 6','All on X'].includes(procedureType)
+            && ['All on 4','All on 6','All on X','Implant Overdenture'].includes(procedureType)
             && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading'))
             ? (multiUnitPlaced || null)
             : null,
         multi_unit_abutment_details:
           (prostheticComponent === 'Immediate Loading Done'
-            && ['All on 4','All on 6','All on X'].includes(procedureType)
+            && ['All on 4','All on 6','All on X','Implant Overdenture'].includes(procedureType)
             && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading')
             && multiUnitPlaced === 'yes')
             ? implantPositions.map((pos, idx) => ({
@@ -1536,7 +1539,7 @@ export default function Phase2SubmissionScreen() {
                 per-implant details section with Angulation (°) + Cuff Ht (mm)
                 inputs. Prosthesis Type below renders after this section. */}
             {prostheticComponent === 'Immediate Loading Done'
-             && (['All on 4','All on 6','All on X'].includes(procedureType))
+             && (['All on 4','All on 6','All on X','Implant Overdenture'].includes(procedureType))
              && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading') && (
               <View style={s.muaSection}>
                 <Text style={s.muaTitle}>Multi-unit Abutment Placed</Text>
@@ -1699,7 +1702,7 @@ export default function Phase2SubmissionScreen() {
               }
               // Overlapping modifier procedure types — Group A/B decided by teeth count.
               const OVERLAP = new Set(['Immediate Implant','Partial Extraction Therapy','Implant Placement with Guided Bone Regeneration','Guided Surgery']);
-              const FULL_ARCH = new Set(['All on 4','All on 6','All on X']);
+              const FULL_ARCH = new Set(['All on 4','All on 6','All on X','Implant Overdenture']);
               let options: string[] = [];
               if (FULL_ARCH.has(procedureType)) {
                 options = [
@@ -1889,8 +1892,8 @@ export default function Phase2SubmissionScreen() {
                   </View>
                 );
               })}
-              {/* Add extra IOPA button for All on X */}
-              {procedureType === 'All on X' && (
+              {/* Add extra IOPA button for All on X / Implant Overdenture */}
+              {(procedureType === 'All on X' || procedureType === 'Implant Overdenture') && (
                 <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
                   onPress={addExtraIopa} data-testid="add-extra-iopa-btn">
                   <Ionicons name="add-circle" size={26} color="#4CAF50" />

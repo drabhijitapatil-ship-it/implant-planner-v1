@@ -180,7 +180,7 @@ export default function Stage2SurgicalSubmissionScreen() {
         'Quad Zygoma Implants', 'Zygoma and Pterygoid Implants',
         'Zygoma and Conventional Implants', 'Zygoma, Pterygoid and Conventional Implants',
       ]);
-      const GROUP_B = new Set(['All on 4', 'All on 6', 'All on X']);
+      const GROUP_B = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
       const GROUP_A = new Set(['Multiple Conventional Implants', 'Pterygoid and Conventional Implants']);
       const _resolve = (v: string, o: string) => (v === 'Other' && o) ? `Other — ${o}` : v;
       let summary = '';

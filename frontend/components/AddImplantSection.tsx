@@ -17,7 +17,7 @@ import AugStep2Form, { emptyAugStep2 } from './AugStep2Form';
 import PlacementDatePicker from './PlacementDatePicker';
 import { showUploadPicker } from '../utils/uploadPicker';
 
-const ELIGIBLE_TYPES = ['Multiple Conventional Implants', 'All on 4', 'All on 6', 'All on X'];
+const ELIGIBLE_TYPES = ['Multiple Conventional Implants', 'All on 4', 'All on 6', 'All on X', 'Implant Overdenture'];
 const STATUS_PHASE: Record<string, number> = {
   phase1_approved: 2, pending_phase2: 2,
   phase2_approved: 3, pending_stage2_surgical: 3,

@@ -7695,3 +7695,11 @@ CHANGES:
 - /app/frontend/app/procedures/submit-phase4-step2/[id].tsx — `supportsBaselineCompare` widened to `iopaImplantPositions.length > 0`; passes `positionFilter={p => !isZygPtrPosition(p)}` to RadiographCompare. IOPA rows now render with `iopaRow` / `iopaLabelWrap` / `iopaActionWrap` styles matching Phase 2's row (label on left, blue Upload / green View buttons on right, red close for removal). No more `toothBadge` circle. Empty-state button text simplified to "Upload IOPA".
 TESTED (iter-426): Frontend Playwright 8/8 PASS across A–I scenarios. Report /app/test_reports/iteration_426.json.
 Deployment: User needs to redeploy (Publish) so the widened gate + new row UI reach production.
+
+## Iteration 431 (Jun 2026) — New procedure type: Implant Overdenture
+- **Phase 1 picker**: `Implant Overdenture` added to `PROCEDURE_TYPES` (frontend `constants/checklist.ts`, backend `server.py`) immediately before `All on 4`.
+- **Full-arch semantics**: added to `FULL_ARCH_GROUP` and every hardcoded All-on-4/6/X set in FE (Phase 2, Phase 3, Phase 4 Step 2, followup, RadiographCompare, Phase2EditModal, AddImplantSection, ExistingImplantSection, immediateLoadingProsthesis, analytics) and BE (`FULL_ARCH_SET`, `_group_b_set`, `_ADDITION_CASE_TYPES`, Phase-4 Step-2 OPG gate, `/prosthetic-options`, CMI weight 3.0, implant `indicated_procedures`). Arch dropdown shown, no FDI chart, Tooth-Supported guide hidden.
+- **Type of Overdenture** (mandatory): new field `overdenture_type` ∈ {`Implant Retained Overdenture`, `Implant Supported Overdenture`}; dropdown (`overdenture-type-dropdown`) rendered between Type of Implant Procedure and Procedure Type. Validated FE (submit + missing-fields panel) and BE (400 on create). Echoed in case details InfoRow (editable), client PDF, and all 3 backend PDF builders.
+- **Prosthetic Plan**: routes to Group B (`getWorkflowGroup` → 'B'); `IMPLANT_OVERDENTURE_PLAN_OPTIONS` = RP-5 + RP-4 groups only (fixed full-arch group excluded) via `getGroupBPlanOptions(procType)` used in Phase 1 and Phase 4 Step 1. All-on-X unchanged.
+- **Phase 2**: IOPA slot count = max(implant count, 2) with "Add IOPA Radiograph" button enabled.
+- Testing: backend 11/11 pytest (`tests/test_iter431_implant_overdenture.py`), report `/app/test_reports/iteration_431.json`.
