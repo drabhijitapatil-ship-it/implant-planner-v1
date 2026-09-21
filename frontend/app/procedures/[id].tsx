@@ -162,6 +162,8 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
   implant_procedure_type: { options: PROCEDURE_TYPES },
   // iter-307: in-place edit for Number-of-Implants sub-choice
   num_implants: { options: ['Single Implant', 'Multiple Implants'] },
+  // iter-Jun-2026: Implant Overdenture sub-type
+  overdenture_type: { options: ['Implant Retained Overdenture', 'Implant Supported Overdenture'] },
   arch: { options: ['Maxillary', 'Mandibular'] },
   loading_type: { options: LOADING_TYPES, multi: true },
 
@@ -2302,6 +2304,10 @@ export default function ProcedureDetailScreen() {
               )}
             </View>
             <InfoRow icon="construct" label="Type of Implant Procedure" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
+            {/* iter-Jun-2026: Implant Overdenture sub-type */}
+            {procedure.overdenture_type && (
+              <InfoRow icon="layers" label="Type of Overdenture" value={procedure.overdenture_type} fieldKey="overdenture_type" />
+            )}
             {/* iter-387: surgical-approach cascade echoed on the case detail */}
             {procedure.procedure_surgery_type && (
               <InfoRow icon="hand-left" label="Procedure Type" value={procedure.procedure_surgery_type} />

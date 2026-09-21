@@ -414,6 +414,8 @@ class ProcedureCreate(BaseModel):
     # implant_procedure_type == "Sinus Lift".
     sinus_lift_type: Optional[str] = Field("", max_length=50)
     bone_graft_material_details: Optional[str] = Field("", max_length=200)
+    # iter-Jun-2026: Implant Overdenture sub-type (Retained / Supported).
+    overdenture_type: Optional[str] = Field("", max_length=60)
     # iter-387: surgical-approach cascade (Procedure Type → guided details)
     procedure_surgery_type: Optional[str] = Field("", max_length=60)
     guided_surgery_type: Optional[str] = Field("", max_length=40)
@@ -599,6 +601,7 @@ class ProcedureUpdate(BaseModel):
     # iter-328: Sinus Lift sub-fields on the draft model.
     sinus_lift_type: Optional[str] = Field(None, max_length=50)
     bone_graft_material_details: Optional[str] = Field(None, max_length=200)
+    overdenture_type: Optional[str] = Field(None, max_length=60)
     # iter-387: surgical-approach cascade on the draft/update model too.
     procedure_surgery_type: Optional[str] = Field(None, max_length=60)
     guided_surgery_type: Optional[str] = Field(None, max_length=40)
@@ -1842,6 +1845,10 @@ PROCEDURE_TYPES = [
     "Partial Extraction Therapy",
     "Implant Placement with Guided Bone Regeneration",
     "Guided Surgery",
+    # iter-Jun-2026: Implant Overdenture — completely edentulous full-arch
+    # case restored with a removable overdenture (RP-4 / RP-5). Follows
+    # the All-on-X (Group B) workflow across Phases 1-5.
+    "Implant Overdenture",
     "All on 4",
     "All on 6",
     "All on X",
@@ -1870,6 +1877,9 @@ ZYGOMA_PTERYGOID_PROCEDURE_TYPES = {
 
 LOADING_TYPES = ["Immediate Loading", "Early Loading", "Delayed Loading"]
 
+# iter-Jun-2026: Implant Overdenture — mandatory sub-type.
+OVERDENTURE_TYPES = {"Implant Retained Overdenture", "Implant Supported Overdenture"}
+
 @api_router.get("/case-form-options")
 async def get_case_form_options():
     """Return all dropdown options for the New Case form."""
@@ -1891,7 +1901,7 @@ async def get_prosthetic_options(procedure_type: str = "", loading_type: str = "
         "Multiple Conventional Implants", "Immediate Implant",
         "Partial Extraction Therapy", "Implant Placement with GBR",
     }
-    full_arch_types = {"All on 4", "All on 6", "All on X"}
+    full_arch_types = {"All on 4", "All on 6", "All on X", "Implant Overdenture"}
 
     if procedure_type in single_types:
         options.extend(PROSTHETIC_OPTIONS["single_crown"])
@@ -2203,6 +2213,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         # iter-328: Sinus Lift — maxillary-posterior-only adjunctive
         # procedure that grafts bone via the sinus floor.
         "Sinus Lift",
+        "Implant Overdenture",
         "All on 4", "All on 6", "All on X",
         # iter-Feb-2026: Advanced maxillary implants (Zygoma & Pterygoid).
         "Quad Zygoma Implants",
@@ -2213,6 +2224,11 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     ]
     if procedure.implant_procedure_type not in valid_procedure_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
+
+    # iter-Jun-2026: Implant Overdenture requires its Type of Overdenture.
+    if procedure.implant_procedure_type == "Implant Overdenture":
+        if procedure.overdenture_type not in OVERDENTURE_TYPES:
+            raise HTTPException(status_code=400, detail="Implant Overdenture requires a Type of Overdenture (Implant Retained or Implant Supported).")
 
     # iter-328: Sinus Lift gates — validate the cascading sub-fields and
     # restrict the tooth set to the maxillary posterior (14-17, 24-27).
@@ -2650,7 +2666,7 @@ _ADDITION_STATUS_PHASE = {
     "stage2_surgical_approved": 4, "pending_stage2_prosthetic": 4,
     "stage2_prosthetic_step1_approved": 4, "pending_final_delivery": 4,
 }
-_ADDITION_CASE_TYPES = {"Multiple Conventional Implants", "All on 4", "All on 6", "All on X"}
+_ADDITION_CASE_TYPES = {"Multiple Conventional Implants", "All on 4", "All on 6", "All on X", "Implant Overdenture"}
 _FDI_CODES = {str(q * 10 + t) for q in (1, 2, 3, 4) for t in range(1, 9)}
 
 
@@ -5447,6 +5463,8 @@ async def generate_consent_template(
     if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
         proc_rows.insert(1, ["Type of Sinus Lift:", procedure.get("sinus_lift_type") or "____________________"])
         proc_rows.insert(2, ["Bone Graft Material:", procedure.get("bone_graft_material_details") or "____________________"])
+    if procedure.get("overdenture_type"):
+        proc_rows.insert(1, ["Type of Overdenture:", procedure.get("overdenture_type")])
     # iter-387: surgical-approach cascade rows (Procedure Type → guided detail)
     _gs_rows = []
     if procedure.get("procedure_surgery_type"):
@@ -5686,6 +5704,8 @@ async def get_consent_content(procedure_id: str, current_user: dict = Depends(ge
     if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
         proc_rows.append(["Type of Sinus Lift", procedure.get("sinus_lift_type") or "—"])
         proc_rows.append(["Bone Graft Material", procedure.get("bone_graft_material_details") or "—"])
+    if procedure.get("overdenture_type"):
+        proc_rows.append(["Type of Overdenture", procedure.get("overdenture_type")])
     for label, key in [
         ("Procedure Type (Surgical)", "procedure_surgery_type"),
         ("Type of Guided Surgery", "guided_surgery_type"),
@@ -8695,6 +8715,7 @@ _CMI_WEIGHTS = {
     "Immediate Implant": 2.0,
     "Sinus Lift": 2.5,
     "Implant Placement with Guided Bone Regeneration": 2.5,
+    "Implant Overdenture": 3.0,
     "All on 4": 3.5,
     "All on 6": 3.8,
     "All on X": 4.0,
@@ -13490,7 +13511,7 @@ async def get_ai_chat_history(procedure_id: str, current_user: dict = Depends(ge
 
 
 # ── Smart Prosthetic Planner ───────────────────────────────────────────────
-FULL_ARCH_SET = {"All on 4", "All on 6", "All on X"}
+FULL_ARCH_SET = {"All on 4", "All on 6", "All on X", "Implant Overdenture"}
 # iter-Jun-2026 (v13, Chunk E, Ask 1): Zygoma-containing procedure types are
 # always full-maxillary-arch, edentulous rehabilitation. Pterygoid-only
 # combinations (e.g. Pterygoid and Conventional Implants) are NOT included —
@@ -14117,6 +14138,8 @@ async def generate_case_report(
     if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
         add_field("Type of Sinus Lift", procedure.get("sinus_lift_type"))
         add_field("Bone Graft Material Details", procedure.get("bone_graft_material_details"))
+    if procedure.get("overdenture_type"):
+        add_field("Type of Overdenture", procedure.get("overdenture_type"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
     # iter-Feb-2026 / -C — Single-Conventional-Implant Phase 1 granular fields.
@@ -16668,7 +16691,7 @@ async def submit_stage2_prosthetic(
         "Zygoma and Conventional Implants",
         "Zygoma, Pterygoid and Conventional Implants",
     }
-    _group_b_set = {"All on 4", "All on 6", "All on X"}
+    _group_b_set = {"All on 4", "All on 6", "All on X", "Implant Overdenture"}
     _group_a_set = {"Multiple Conventional Implants", "Pterygoid and Conventional Implants"}
     _overlap_set = {
         "Immediate Implant",
@@ -17043,7 +17066,7 @@ async def submit_phase4_step2(
         raise HTTPException(status_code=400, detail="Phase 4 Step 1 must be approved before submitting Step 2")
 
     # ── Validate IOPA / OPG / Prosthesis-photo uploads ──────────────────
-    full_arch_types = {"All on 4", "All on 6", "All on X"}
+    full_arch_types = {"All on 4", "All on 6", "All on X", "Implant Overdenture"}
     is_full_arch = procedure.get("implant_procedure_type") in full_arch_types
     if is_full_arch:
         if not data.opg_upload or not data.opg_upload.get("filename"):
@@ -17767,7 +17790,7 @@ async def complete_phase1_after_augmentation(
         "Single Conventional Implant", "Multiple Conventional Implants",
         "Immediate Implant", "Partial Extraction Therapy",
         "Implant Placement with Guided Bone Regeneration", "Guided Surgery",
-        "Sinus Lift", "All on 4", "All on 6", "All on X",
+        "Sinus Lift", "Implant Overdenture", "All on 4", "All on 6", "All on X",
     }
     if procedure.implant_procedure_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
@@ -18696,7 +18719,7 @@ IMPLANT_INDICATIONS = {
     },
     "BioHorizons|Tapered Pro Conical RBT": {
         "indication": "Indicated for Immediate Placement and All on 4, All on 6, and All on X. Feature Camelog connection with Biohorizons Tapered Pro features.",
-        "indicated_procedures": ["Immediate Implant", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Immediate Implant", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "BioHorizons|Tapered Short Conical RBT": {
@@ -18752,6 +18775,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
@@ -18778,7 +18802,7 @@ IMPLANT_INDICATIONS = {
     },
     "B&B Dental|3P Long": {
         "indication": "Indicated for Pterygoid Implant.",
-        "indicated_procedures": ["All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "B&B Dental|Wide Line": {
@@ -18882,6 +18906,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
@@ -18900,6 +18925,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
@@ -18947,17 +18973,17 @@ IMPLANT_INDICATIONS = {
     },
     "Adin|WP CloseFit": {
         "indication": "Adin CloseFit Wide Platform (Ø4.3 / Ø5.0) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Wide ridges and posterior molars. D1-D4 with immediate function and All-on-X support.",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Adin|Touareg-OS": {
         "indication": "Adin Touareg-OS — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and OsseoFix™ (Calcium-Phosphate RBM) surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Adin|Touareg-S": {
         "indication": "Adin Touareg-S — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and AB/AE surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Adin|Swell": {
@@ -18973,7 +18999,7 @@ IMPLANT_INDICATIONS = {
     # ── Straumann BLT (iter-292, Feb 2026) ────────────────────────────────
     "Straumann|BLT Roxolid SLActive": {
         "indication": "Roxolid® Bone Level Tapered implant with SLActive® hydrophilic surface. D1-D4. Immediate / early / conventional. Soft bone & fresh extraction sockets — primary stability via apical taper. CrossFit® connection (SC Ø2.9 / NC Ø3.3 / RC Ø4.1 / RC Ø4.8).",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Straumann|BLT Roxolid SLA": {
@@ -19001,6 +19027,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },

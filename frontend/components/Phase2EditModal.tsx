@@ -27,7 +27,7 @@ const PROSTHESIS_OPTIONS_FULL = [
   'Temporary PMMA CAD Prosthesis with Multiunit Abutments and Temporary Cylinders',
   'Temporary PMMA CAD Prosthesis on Ti-Base',
 ];
-const FULL_ARCH = new Set(['All on 4', 'All on 6', 'All on X']);
+const FULL_ARCH = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
 const OVERLAP = new Set(['Immediate Implant', 'Partial Extraction Therapy', 'Implant Placement with Guided Bone Regeneration', 'Guided Surgery']);
 
 export default function Phase2EditModal({ visible, onClose, procedureId, request, procedure, onSaved }: Phase2EditModalProps) {

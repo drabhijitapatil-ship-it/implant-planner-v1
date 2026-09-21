@@ -38,7 +38,7 @@ const MULTIPLE_PROCEDURES = new Set([
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
 ]);
-const FULL_ARCH_PROCEDURES = new Set(['All on 4', 'All on 6', 'All on X']);
+const FULL_ARCH_PROCEDURES = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
 
 /**
  * Default Type + Material for the existing-prosthesis history form.
@@ -167,11 +167,12 @@ const ORIGINAL_PROCEDURE_TYPES = [
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
+  'Implant Overdenture',
   'All on 4',
   'All on 6',
   'All on X',
 ];
-const FULL_ARCH_DONE = new Set(['All on 4', 'All on 6', 'All on X']);
+const FULL_ARCH_DONE = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
 
 const PRESENT_COMPONENTS = ['None', 'Healing Abutment', 'Final Abutment', 'Multi-Unit Abutment'] as const;
 type PresentComponent = typeof PRESENT_COMPONENTS[number];

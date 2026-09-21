@@ -159,6 +159,11 @@ export const PROCEDURE_TYPES = [
   // iter-387: 'Guided Surgery' removed as a procedure TYPE — the surgical
   // approach is now captured by the separate "Procedure Type" cascade
   // (Free Hand / Combination / Guided). Legacy cases keep their value.
+  // iter-Jun-2026: Implant Overdenture — completely edentulous full-arch
+  // case restored with a removable overdenture (RP-4 / RP-5). Follows the
+  // Full-Arch (Group B) workflow across Phases 1-5; carries a mandatory
+  // "Type of Overdenture" sub-question (Implant Retained / Supported).
+  'Implant Overdenture',
   'All on 4',
   'All on 6',
   'All on X',
@@ -231,6 +236,16 @@ export const ZYGOMA_FULL_ARCH_PROCEDURE_TYPES = [
 
 export const isZygomaFullArchProcedure = (t: string | undefined | null): boolean =>
   !!t && ZYGOMA_FULL_ARCH_PROCEDURE_TYPES.includes(t);
+
+// iter-Jun-2026: Implant Overdenture — "Type of Overdenture" sub-question
+// (mandatory, single-select) shown directly under Type of Implant Procedure.
+export const IMPLANT_OVERDENTURE = 'Implant Overdenture';
+export const OVERDENTURE_TYPES = [
+  'Implant Retained Overdenture',
+  'Implant Supported Overdenture',
+];
+export const isImplantOverdenture = (t: string | undefined | null): boolean =>
+  t === IMPLANT_OVERDENTURE;
 
 // iter-Feb-2026 (v3): Cases that need a dedicated "Conventional Implant
 // Location" FDI chart (separate from the Missing Teeth chart). Operator
@@ -342,6 +357,9 @@ export const FULL_ARCH_GROUP = new Set([
   'All on 4',
   'All on 6',
   'All on X',
+  // iter-Jun-2026: Implant Overdenture is a completely edentulous
+  // full-arch case (Arch dropdown, no FDI chart, full-arch clinical exam).
+  'Implant Overdenture',
   // iter-Feb-2026 (v3): All Zygoma cases are full-arch maxillary rehabs.
   // Membership here hides the "Missing Teeth" FDI chart, forces the
   // full-arch Clinical Examination workflow, and locks the Arch dropdown

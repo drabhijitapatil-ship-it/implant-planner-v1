@@ -47,6 +47,8 @@ import {
   getProstheticOptions,
   isZygomaPterygoidProcedure,
   isZygomaFullArchProcedure,
+  isImplantOverdenture,
+  OVERDENTURE_TYPES,
   needsConventionalImplantLocation,
   PHASE1_ATTACHMENT_TYPE_OPTIONS,
 } from '../../constants/checklist';
@@ -65,7 +67,7 @@ import {
   GROUP_A_RETENTION_OPTIONS,
   GROUP_A_CROWN_MATERIAL_OPTIONS,
   GROUP_B_PROVISIONAL_OPTIONS,
-  GROUP_B_PROSTHETIC_PLAN_OPTIONS,
+  getGroupBPlanOptions,
   GROUP_C_PROVISIONAL_OPTIONS,
   GROUP_C_PROSTHETIC_PLAN_OPTIONS,
   getEffectiveWorkflow,
@@ -395,6 +397,8 @@ export default function NewProcedureScreen() {
     // dropdowns; the third is a multiline note (≤150 char soft limit).
     sinus_lift_type: '',
     bone_graft_material_details: '',
+    // iter-Jun-2026: Implant Overdenture sub-question (Retained / Supported)
+    overdenture_type: '',
     // iter-387: surgical-approach cascade (hidden for Existing Implant)
     procedure_surgery_type: '',
     guided_surgery_type: '',
@@ -728,6 +732,7 @@ export default function NewProcedureScreen() {
                 num_implants: proc.num_implants || '',
                 sinus_lift_type: proc.sinus_lift_type || '',
                 bone_graft_material_details: proc.bone_graft_material_details || '',
+                overdenture_type: proc.overdenture_type || '',
                 procedure_surgery_type: normalizeSurgeryApproach(proc.procedure_surgery_type) || '',
                 guided_surgery_type: proc.guided_surgery_type || '',
                 static_guide_type: proc.static_guide_type || '',
@@ -926,6 +931,7 @@ export default function NewProcedureScreen() {
           implant_incharge_name: user?.role === 'implant_incharge' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
           implant_procedure_type: '', num_implants: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
+          overdenture_type: '',
           prosthetic_plan: '', prosthetic_plan_other: '', attachment_type: '', attachment_type_other: '', bone_graft_specifications: '',
           type_of_provisional: '', type_of_provisional_other: '',
           sc_abutment_type: '', sc_abutment_type_other: '',
@@ -1381,6 +1387,11 @@ export default function NewProcedureScreen() {
     // material details are both required when Sinus Lift is selected,
     // and every marked tooth must be in the maxillary posterior set
     // (14-17 / 24-27).
+    // iter-Jun-2026: Implant Overdenture — Type of Overdenture is mandatory.
+    if (isImplantOverdenture(sanitized.implant_procedure_type) && !OVERDENTURE_TYPES.includes(sanitized.overdenture_type)) {
+      Alert.alert('Missing Field', 'Please select Type of Overdenture (Implant Retained or Implant Supported).');
+      return;
+    }
     if (sanitized.implant_procedure_type === 'Sinus Lift') {
       if (!sanitized.sinus_lift_type) {
         Alert.alert('Missing Field', 'Please select Type of Sinus Lift (Direct or Indirect).');
@@ -1510,6 +1521,8 @@ export default function NewProcedureScreen() {
         receipt_number: sanitizeString(sanitized.receipt_number),
         bone_graft_specifications: sanitizeString(sanitized.bone_graft_specifications),
         amount_paid: parseFloat(sanitized.amount_paid) || 0,
+        // iter-Jun-2026: only persist Type of Overdenture for Implant Overdenture cases.
+        overdenture_type: isImplantOverdenture(sanitized.implant_procedure_type) ? (sanitized.overdenture_type || '') : '',
         checklist: {
           pre_surgical: {
             items: CHECKLIST_DATA.pre_surgical.items.map(item => ({
@@ -1914,6 +1927,7 @@ export default function NewProcedureScreen() {
         }
       }
       if (isFullArch && !formData.arch) missImplantDetails.push('Arch');
+      if (isImplantOverdenture(formData.implant_procedure_type) && !formData.overdenture_type) missImplantDetails.push('Type of Overdenture');
       if (!isFullArch && (formData.missing_teeth || []).length === 0) missImplantDetails.push('At least one missing tooth on FDI chart');
       // iter-328: Sinus Lift extras surfaced in the missing-fields panel
       if (formData.implant_procedure_type === 'Sinus Lift') {
@@ -2318,9 +2332,11 @@ export default function NewProcedureScreen() {
             // persist into a non-sinus-lift case.
             updateForm('sinus_lift_type', '');
             updateForm('bone_graft_material_details', '');
+            // iter-Jun-2026: reset the Implant Overdenture sub-question too.
+            updateForm('overdenture_type', '');
             // iter-387: Tooth Supported Guide is not offered for full-arch
             // procedures; Existing Implant hides the whole approach cascade.
-            if (['All on 4', 'All on 6', 'All on X'].includes(v) && formData.static_guide_type === 'Tooth Supported Guide') {
+            if (['All on 4', 'All on 6', 'All on X', 'Implant Overdenture'].includes(v) && formData.static_guide_type === 'Tooth Supported Guide') {
               updateForm('static_guide_type', '');
               updateForm('sleeve_type', '');
             }
@@ -2332,6 +2348,20 @@ export default function NewProcedureScreen() {
               updateForm('dynamic_nav_system', '');
             }
           }} required />
+
+        {/* iter-Jun-2026: Implant Overdenture → mandatory "Type of Overdenture"
+            sub-question, rendered directly below the procedure picker and
+            above the surgical-approach "Procedure Type" cascade. */}
+        {isImplantOverdenture(formData.implant_procedure_type) && (
+          <Dropdown
+            label="Type of Overdenture"
+            value={formData.overdenture_type}
+            options={OVERDENTURE_TYPES}
+            onChange={v => updateForm('overdenture_type', v)}
+            required
+            data-testid="overdenture-type-dropdown"
+          />
+        )}
 
         {/* iter-387: Surgical-approach cascade — Procedure Type → Type of
             Guided Surgery → (Static Guide path | Dynamic Navigation path).
@@ -2373,7 +2403,7 @@ export default function NewProcedureScreen() {
           <Dropdown
             label="Type of Static Guide"
             value={formData.static_guide_type}
-            options={['All on 4', 'All on 6', 'All on X'].includes(formData.implant_procedure_type)
+            options={['All on 4', 'All on 6', 'All on X', 'Implant Overdenture'].includes(formData.implant_procedure_type)
               ? STATIC_GUIDE_TYPES.filter(o => o !== 'Tooth Supported Guide')
               : STATIC_GUIDE_TYPES}
             onChange={v => {
@@ -2832,12 +2862,13 @@ export default function NewProcedureScreen() {
         </View>
       ) : getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) === 'B' ? (
         // iter-Feb-2026-B — Group B: All on 4/6/X → single grouped plan.
+        // iter-Jun-2026 — Implant Overdenture narrows the catalogue to RP-5 + RP-4.
         <View style={styles.section} onLayout={showFlowStrip ? onExistingStepLayout(1) : undefined}>
           <Text style={styles.sectionTitle}>Prosthetic Treatment Plan</Text>
           <GroupedDescDropdown label="Prosthetic Plan" required
             value={formData.fa_prosthetic_plan}
             onChange={v => { updateForm('fa_prosthetic_plan', v); if (v !== 'Other') updateForm('fa_prosthetic_plan_other', ''); }}
-            groups={GROUP_B_PROSTHETIC_PLAN_OPTIONS}
+            groups={getGroupBPlanOptions(formData.implant_procedure_type)}
             testID="fa-prosthetic-plan-dropdown" />
           {formData.fa_prosthetic_plan === 'Other' && (
             <View style={styles.fieldContainer}>

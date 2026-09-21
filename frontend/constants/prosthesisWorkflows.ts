@@ -104,6 +104,32 @@ export const GROUP_A_CROWN_MATERIAL_OPTIONS: OptionDesc[] = [
 // GROUP B — All-on-4 / 6 / X (full arch)
 // ══════════════════════════════════════════════════════════════════════
 
+/** RP-5 · Implant-retained & tissue-supported — shared by All-on-X and Implant Overdenture. */
+const GROUP_B_RP5_GROUP = {
+  group: 'Definitive — RP-5 · Implant-retained & tissue-supported',
+  options: [
+    { label: 'Locator / Locator R-Tx stud attachment', description: 'Low-profile resilient stud attachment with colour-coded replaceable nylon inserts.' },
+    { label: 'Ball / O-ring attachment', description: 'Spherical abutment engaged by a metal housing or rubber O-ring.' },
+    { label: 'Magnetic attachment', description: 'Keeper on the abutment, magnet in the denture.' },
+    { label: 'Equator / Novaloc / ERA low-profile studs', description: 'Alternative low-profile stud systems.' },
+    { label: 'Overdenture base with cast metal reinforcement', description: 'A CoCr framework embedded in the denture base.' },
+  ],
+};
+
+/** RP-4 · Fully implant-supported — shared by All-on-X and Implant Overdenture. */
+const GROUP_B_RP4_GROUP = {
+  group: 'Definitive — RP-4 · Fully implant-supported',
+  options: [
+    { label: 'Hader bar with clips', description: 'Round-section bar between implants with retentive plastic or metal clips in the denture.' },
+    { label: 'Dolder bar', description: 'Egg-shaped or U-shaped bar with a matching sleeve.' },
+    { label: 'CAD/CAM milled titanium bar, parallel-walled', description: 'A rigid milled bar whose parallel walls provide friction retention, usually supplemented by attachments.' },
+    { label: 'Telescopic / conical double-crown overdenture', description: 'Primary titanium or gold copings on the abutments, secondary electroformed gold or milled framework within the denture; retention by friction.' },
+    { label: 'Marburg double crown / resilience telescope', description: 'A double-crown design with a deliberate gap in the fitting surface allowing slight resilience under load.' },
+    { label: 'Fixed-removable hybrid ("wrap-around")', description: 'A screw-retained bar carrying a superstructure that only the clinician removes.' },
+    OTHER_OPTION,
+  ],
+};
+
 export const GROUP_B_PROVISIONAL_OPTIONS: GroupedOptions = [
   {
     group: 'Provisional — Full-Arch Fixed',
@@ -145,29 +171,24 @@ export const GROUP_B_PROSTHETIC_PLAN_OPTIONS: GroupedOptions = [
       { label: 'Milled PMMA as a definitive-transitional prosthesis', description: 'A milled PMMA arch for 1–3 years as the working prosthesis.' },
     ],
   },
-  {
-    group: 'Definitive — RP-5 · Implant-retained & tissue-supported',
-    options: [
-      { label: 'Locator / Locator R-Tx stud attachment', description: 'Low-profile resilient stud attachment with colour-coded replaceable nylon inserts.' },
-      { label: 'Ball / O-ring attachment', description: 'Spherical abutment engaged by a metal housing or rubber O-ring.' },
-      { label: 'Magnetic attachment', description: 'Keeper on the abutment, magnet in the denture.' },
-      { label: 'Equator / Novaloc / ERA low-profile studs', description: 'Alternative low-profile stud systems.' },
-      { label: 'Overdenture base with cast metal reinforcement', description: 'A CoCr framework embedded in the denture base.' },
-    ],
-  },
-  {
-    group: 'Definitive — RP-4 · Fully implant-supported',
-    options: [
-      { label: 'Hader bar with clips', description: 'Round-section bar between implants with retentive plastic or metal clips in the denture.' },
-      { label: 'Dolder bar', description: 'Egg-shaped or U-shaped bar with a matching sleeve.' },
-      { label: 'CAD/CAM milled titanium bar, parallel-walled', description: 'A rigid milled bar whose parallel walls provide friction retention, usually supplemented by attachments.' },
-      { label: 'Telescopic / conical double-crown overdenture', description: 'Primary titanium or gold copings on the abutments, secondary electroformed gold or milled framework within the denture; retention by friction.' },
-      { label: 'Marburg double crown / resilience telescope', description: 'A double-crown design with a deliberate gap in the fitting surface allowing slight resilience under load.' },
-      { label: 'Fixed-removable hybrid ("wrap-around")', description: 'A screw-retained bar carrying a superstructure that only the clinician removes.' },
-      OTHER_OPTION,
-    ],
-  },
+  GROUP_B_RP5_GROUP,
+  GROUP_B_RP4_GROUP,
 ];
+
+/**
+ * iter-Jun-2026 — Implant Overdenture: completely edentulous full-arch case
+ * restricted to the removable definitive options only (RP-5 + RP-4).
+ * Fixed full-arch options are intentionally excluded.
+ */
+export const IMPLANT_OVERDENTURE_PLAN_OPTIONS: GroupedOptions = [
+  GROUP_B_RP5_GROUP,
+  GROUP_B_RP4_GROUP,
+];
+
+/** Group B prosthetic-plan catalogue for a given procedure type. */
+export function getGroupBPlanOptions(procType: string | null | undefined): GroupedOptions {
+  return procType === 'Implant Overdenture' ? IMPLANT_OVERDENTURE_PLAN_OPTIONS : GROUP_B_PROSTHETIC_PLAN_OPTIONS;
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // GROUP C — Zygoma/Pterygoid-specific
@@ -220,8 +241,9 @@ export function getWorkflowGroup(procType: string | null | undefined): WorkflowG
   ]);
   if (groupC.has(procType)) return 'C';
 
-  // Group B — All-on-X full arch
-  if (procType === 'All on 4' || procType === 'All on 6' || procType === 'All on X') return 'B';
+  // Group B — All-on-X full arch (+ Implant Overdenture, iter-Jun-2026)
+  if (procType === 'All on 4' || procType === 'All on 6' || procType === 'All on X'
+      || procType === 'Implant Overdenture') return 'B';
 
   // Group A — Multiple Conventional / Pterygoid+Conventional (user override)
   if (procType === 'Multiple Conventional Implants'

@@ -108,7 +108,7 @@ export default function ProcedureOverviewScreen() {
     // still shows the expected list even if no cases of a given type exist yet.
     const staples = [
       'Single Conventional Implant', 'Multiple Conventional Implants',
-      'Immediate Implant', 'Sinus Lift', 'All on 4', 'All on 6', 'All on X',
+      'Immediate Implant', 'Sinus Lift', 'Implant Overdenture', 'All on 4', 'All on 6', 'All on X',
       'Implant Placement with Guided Bone Regeneration', 'Existing Implant',
     ];
     const fromData = (data?.by_procedure_type || []).map(r => r.procedure_type);
