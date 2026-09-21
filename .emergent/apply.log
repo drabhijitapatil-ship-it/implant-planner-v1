@@ -1,0 +1,2059 @@
+=== apply.sh 2026-04-28T17:17:59Z ===
+[OK] Boot hook installed: /root/.emergent/on-restart.sh
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh 2026-04-28T17:18:42Z ===
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply-deferred 2026-04-29T00:46:41Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-29T00:46:43Z ===
+=== apply.sh 2026-04-29T00:46:43Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-29T04:17:10Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-29T04:17:11Z ===
+=== apply.sh 2026-04-29T04:17:11Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-29T05:00:52Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-29T05:00:53Z ===
+=== apply.sh 2026-04-29T05:00:53Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-29T07:03:06Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-29T07:03:07Z ===
+=== apply.sh 2026-04-29T07:03:07Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-29T16:10:02Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-29T16:10:03Z ===
+=== apply.sh 2026-04-29T16:10:03Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-30T01:02:03Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-30T01:02:04Z ===
+=== apply.sh 2026-04-30T01:02:04Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-30T04:50:05Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-30T04:50:06Z ===
+=== apply.sh 2026-04-30T04:50:06Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-30T09:24:38Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-30T09:24:39Z ===
+=== apply.sh 2026-04-30T09:24:39Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-30T12:37:45Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-30T12:37:46Z ===
+=== apply.sh 2026-04-30T12:37:46Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-30T13:27:41Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-30T13:27:42Z ===
+=== apply.sh 2026-04-30T13:27:42Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-04-30T16:45:06Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-04-30T16:45:07Z ===
+=== apply.sh 2026-04-30T16:45:07Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-01T01:04:26Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-01T01:04:27Z ===
+=== apply.sh 2026-05-01T01:04:27Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-01T05:03:57Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-01T05:03:58Z ===
+=== apply.sh 2026-05-01T05:03:58Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-01T09:17:30Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-01T09:17:31Z ===
+=== apply.sh 2026-05-01T09:17:31Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-01T11:52:43Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-01T11:52:45Z ===
+=== apply.sh 2026-05-01T11:52:45Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-01T13:22:32Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-01T13:22:33Z ===
+=== apply.sh 2026-05-01T13:22:33Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-01T15:13:46Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-01T15:13:47Z ===
+=== apply.sh 2026-05-01T15:13:47Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T01:03:24Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T01:03:25Z ===
+=== apply.sh 2026-05-02T01:03:25Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T02:30:13Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T02:30:14Z ===
+=== apply.sh 2026-05-02T02:30:14Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T03:20:13Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T03:20:14Z ===
+=== apply.sh 2026-05-02T03:20:14Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T04:32:45Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T04:32:46Z ===
+=== apply.sh 2026-05-02T04:32:46Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T06:52:16Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T06:52:18Z ===
+=== apply.sh 2026-05-02T06:52:18Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T07:33:28Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T07:33:29Z ===
+=== apply.sh 2026-05-02T07:33:29Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T14:28:04Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T14:28:06Z ===
+=== apply.sh 2026-05-02T14:28:06Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-02T18:13:17Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-02T18:13:18Z ===
+=== apply.sh 2026-05-02T18:13:18Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-04T04:58:12Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-04T04:58:13Z ===
+=== apply.sh 2026-05-04T04:58:13Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-04T07:05:22Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-04T07:05:24Z ===
+=== apply.sh 2026-05-04T07:05:24Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-04T07:59:05Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-04T07:59:06Z ===
+=== apply.sh 2026-05-04T07:59:06Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-04T10:25:31Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-04T10:25:32Z ===
+=== apply.sh 2026-05-04T10:25:32Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-04T12:10:47Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-04T12:10:48Z ===
+=== apply.sh 2026-05-04T12:10:48Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-04T13:40:17Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-04T13:40:18Z ===
+=== apply.sh 2026-05-04T13:40:18Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-04T15:39:36Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-04T15:39:37Z ===
+=== apply.sh 2026-05-04T15:39:37Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-05T04:13:20Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-05T04:13:21Z ===
+=== apply.sh 2026-05-05T04:13:21Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-05T05:14:59Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-05T05:15:00Z ===
+=== apply.sh 2026-05-05T05:15:00Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-05T08:21:12Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-05T08:21:13Z ===
+=== apply.sh 2026-05-05T08:21:13Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-05T10:33:20Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-05T10:33:21Z ===
+=== apply.sh 2026-05-05T10:33:21Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-05T16:07:10Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-05T16:07:11Z ===
+=== apply.sh 2026-05-05T16:07:11Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-06T01:02:22Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-06T01:02:23Z ===
+=== apply.sh 2026-05-06T01:02:23Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-06T06:05:57Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-06T06:05:58Z ===
+=== apply.sh 2026-05-06T06:05:58Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-06T08:14:05Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-06T08:14:06Z ===
+=== apply.sh 2026-05-06T08:14:06Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-06T09:01:38Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-06T09:01:39Z ===
+=== apply.sh 2026-05-06T09:01:39Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-06T09:57:36Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-06T09:57:37Z ===
+=== apply.sh 2026-05-06T09:57:37Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-06T15:11:51Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-06T15:11:52Z ===
+=== apply.sh 2026-05-06T15:11:52Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-07T04:04:19Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-07T04:04:21Z ===
+=== apply.sh 2026-05-07T04:04:21Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-07T08:46:21Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-07T08:46:22Z ===
+=== apply.sh 2026-05-07T08:46:22Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-07T13:08:56Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-07T13:08:57Z ===
+=== apply.sh 2026-05-07T13:08:57Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-07T14:25:31Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-07T14:25:32Z ===
+=== apply.sh 2026-05-07T14:25:32Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-07T15:22:13Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-07T15:22:14Z ===
+=== apply.sh 2026-05-07T15:22:14Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-08T03:15:45Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-08T03:15:46Z ===
+=== apply.sh 2026-05-08T03:15:46Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-08T11:20:48Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-08T11:20:50Z ===
+=== apply.sh 2026-05-08T11:20:50Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-08T13:17:49Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-08T13:17:50Z ===
+=== apply.sh 2026-05-08T13:17:50Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-08T13:48:56Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-08T13:48:57Z ===
+=== apply.sh 2026-05-08T13:48:57Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-09T01:00:31Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-09T01:00:32Z ===
+=== apply.sh 2026-05-09T01:00:32Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-09T07:21:37Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-09T07:21:38Z ===
+=== apply.sh 2026-05-09T07:21:38Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-09T08:24:35Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-09T08:24:36Z ===
+=== apply.sh 2026-05-09T08:24:36Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-09T09:17:36Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-09T09:17:37Z ===
+=== apply.sh 2026-05-09T09:17:37Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-09T10:46:27Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-09T10:46:28Z ===
+=== apply.sh 2026-05-09T10:46:28Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-09T13:46:39Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-09T13:46:40Z ===
+=== apply.sh 2026-05-09T13:46:40Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-10T12:35:25Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-10T12:35:26Z ===
+=== apply.sh 2026-05-10T12:35:26Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-10T15:41:04Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-10T15:41:05Z ===
+=== apply.sh 2026-05-10T15:41:05Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-11T02:17:41Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-11T02:17:42Z ===
+=== apply.sh 2026-05-11T02:17:42Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-11T03:06:25Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-11T03:06:26Z ===
+=== apply.sh 2026-05-11T03:06:26Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-11T10:12:18Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-11T10:12:19Z ===
+=== apply.sh 2026-05-11T10:12:19Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-11T12:09:40Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-11T12:09:41Z ===
+=== apply.sh 2026-05-11T12:09:41Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-11T13:23:28Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-11T13:23:29Z ===
+=== apply.sh 2026-05-11T13:23:29Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-12T13:25:02Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-12T13:25:03Z ===
+=== apply.sh 2026-05-12T13:25:03Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-13T01:12:01Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-13T01:12:02Z ===
+=== apply.sh 2026-05-13T01:12:02Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-14T04:14:54Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-14T04:14:55Z ===
+=== apply.sh 2026-05-14T04:14:55Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-14T16:26:46Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-14T16:26:47Z ===
+=== apply.sh 2026-05-14T16:26:47Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-14T22:18:58Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-14T22:18:59Z ===
+=== apply.sh 2026-05-14T22:18:59Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-15T01:46:13Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-15T01:46:14Z ===
+=== apply.sh 2026-05-15T01:46:14Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-15T08:12:27Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-15T08:12:28Z ===
+=== apply.sh 2026-05-15T08:12:28Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-16T14:49:25Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-16T14:49:26Z ===
+=== apply.sh 2026-05-16T14:49:26Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-17T03:35:19Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-17T03:35:20Z ===
+=== apply.sh 2026-05-17T03:35:20Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-17T09:54:06Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-17T09:54:07Z ===
+=== apply.sh 2026-05-17T09:54:07Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-18T06:33:48Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-18T06:33:49Z ===
+=== apply.sh 2026-05-18T06:33:49Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-18T07:46:32Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-18T07:46:33Z ===
+=== apply.sh 2026-05-18T07:46:33Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-18T16:49:01Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-18T16:49:02Z ===
+=== apply.sh 2026-05-18T16:49:02Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-19T01:23:38Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-19T01:23:39Z ===
+=== apply.sh 2026-05-19T01:23:39Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-19T09:48:23Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-19T09:48:25Z ===
+=== apply.sh 2026-05-19T09:48:25Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-19T14:59:22Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-19T14:59:23Z ===
+=== apply.sh 2026-05-19T14:59:23Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-20T00:42:15Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-20T00:42:16Z ===
+=== apply.sh 2026-05-20T00:42:16Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-20T01:34:53Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-20T01:34:54Z ===
+=== apply.sh 2026-05-20T01:34:54Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-20T10:06:18Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-20T10:06:19Z ===
+=== apply.sh 2026-05-20T10:06:19Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-21T02:44:20Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-21T02:44:21Z ===
+=== apply.sh 2026-05-21T02:44:21Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-21T04:16:01Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-21T04:16:02Z ===
+=== apply.sh 2026-05-21T04:16:02Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-21T08:51:25Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-21T08:51:26Z ===
+=== apply.sh 2026-05-21T08:51:26Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-21T10:59:46Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-21T10:59:47Z ===
+=== apply.sh 2026-05-21T10:59:47Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-21T15:39:18Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-21T15:39:19Z ===
+=== apply.sh 2026-05-21T15:39:19Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-22T02:21:30Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-22T02:21:31Z ===
+=== apply.sh 2026-05-22T02:21:31Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-22T04:43:45Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-22T04:43:46Z ===
+=== apply.sh 2026-05-22T04:43:46Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-29T04:22:01Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-29T04:22:02Z ===
+=== apply.sh 2026-05-29T04:22:02Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-05-30T14:03:05Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-05-30T14:03:06Z ===
+=== apply.sh 2026-05-30T14:03:06Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-04T14:31:08Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-04T14:31:09Z ===
+=== apply.sh 2026-06-04T14:31:09Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-04T15:43:39Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-04T15:43:40Z ===
+=== apply.sh 2026-06-04T15:43:40Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-05T06:05:37Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-05T06:05:38Z ===
+=== apply.sh 2026-06-05T06:05:38Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-05T09:26:33Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-05T09:26:34Z ===
+=== apply.sh 2026-06-05T09:26:34Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-05T10:42:08Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-05T10:42:09Z ===
+=== apply.sh 2026-06-05T10:42:09Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-05T13:59:21Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-05T13:59:22Z ===
+=== apply.sh 2026-06-05T13:59:22Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-09T05:47:28Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-09T05:47:29Z ===
+=== apply.sh 2026-06-09T05:47:29Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-09T08:18:08Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-09T08:18:09Z ===
+=== apply.sh 2026-06-09T08:18:09Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-09T09:42:28Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-09T09:42:29Z ===
+=== apply.sh 2026-06-09T09:42:29Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-11T09:48:18Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-11T09:48:19Z ===
+=== apply.sh 2026-06-11T09:48:19Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-15T03:46:54Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-15T03:46:55Z ===
+=== apply.sh 2026-06-15T03:46:55Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-15T06:18:14Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-15T06:18:15Z ===
+=== apply.sh 2026-06-15T06:18:15Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-17T08:32:53Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-17T08:32:54Z ===
+=== apply.sh 2026-06-17T08:32:54Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-17T10:29:26Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-17T10:29:27Z ===
+=== apply.sh 2026-06-17T10:29:27Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-18T05:21:15Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-18T05:21:16Z ===
+=== apply.sh 2026-06-18T05:21:16Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-18T06:11:08Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-18T06:11:09Z ===
+=== apply.sh 2026-06-18T06:11:09Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-18T09:14:31Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-18T09:14:32Z ===
+=== apply.sh 2026-06-18T09:14:32Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-19T09:10:00Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-19T09:10:01Z ===
+=== apply.sh 2026-06-19T09:10:01Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-19T16:47:02Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-19T16:47:03Z ===
+=== apply.sh 2026-06-19T16:47:03Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-20T06:19:27Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-20T06:19:28Z ===
+=== apply.sh 2026-06-20T06:19:28Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-22T04:27:51Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-22T04:27:52Z ===
+=== apply.sh 2026-06-22T04:27:52Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-22T08:37:13Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-22T08:37:14Z ===
+=== apply.sh 2026-06-22T08:37:14Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-22T09:39:57Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-22T09:39:58Z ===
+=== apply.sh 2026-06-22T09:39:58Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-22T13:43:03Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-22T13:43:04Z ===
+=== apply.sh 2026-06-22T13:43:04Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-23T12:56:47Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-23T12:56:48Z ===
+=== apply.sh 2026-06-23T12:56:48Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-24T04:55:39Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-24T04:55:40Z ===
+=== apply.sh 2026-06-24T04:55:40Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-24T16:55:57Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-24T16:55:58Z ===
+=== apply.sh 2026-06-24T16:55:58Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-25T10:28:59Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-25T10:29:00Z ===
+=== apply.sh 2026-06-25T10:29:00Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-25T13:04:32Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-25T13:04:33Z ===
+=== apply.sh 2026-06-25T13:04:33Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-26T08:42:36Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-26T08:42:37Z ===
+=== apply.sh 2026-06-26T08:42:37Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-27T11:49:38Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-27T11:49:39Z ===
+=== apply.sh 2026-06-27T11:49:39Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-27T16:54:33Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-27T16:54:34Z ===
+=== apply.sh 2026-06-27T16:54:34Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-28T02:26:01Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-28T02:26:02Z ===
+=== apply.sh 2026-06-28T02:26:02Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-28T03:42:28Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-28T03:42:29Z ===
+=== apply.sh 2026-06-28T03:42:29Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-28T15:51:36Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-28T15:51:37Z ===
+=== apply.sh 2026-06-28T15:51:37Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-28T16:42:44Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-28T16:42:45Z ===
+=== apply.sh 2026-06-28T16:42:45Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-29T15:22:13Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-29T15:22:15Z ===
+=== apply.sh 2026-06-29T15:22:15Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-30T15:11:48Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-30T15:11:49Z ===
+=== apply.sh 2026-06-30T15:11:49Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[SKIP] postinstall already clean
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-06-30T16:58:04Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-06-30T16:58:05Z ===
+=== apply.sh 2026-06-30T16:58:05Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-01T00:20:45Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-01T00:20:46Z ===
+=== apply.sh 2026-07-01T00:20:46Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-03T13:26:19Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-03T13:26:20Z ===
+=== apply.sh 2026-07-03T13:26:20Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-03T14:12:47Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-03T14:12:48Z ===
+=== apply.sh 2026-07-03T14:12:48Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-04T13:50:04Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-04T13:50:05Z ===
+=== apply.sh 2026-07-04T13:50:05Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-04T15:04:38Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-04T15:04:39Z ===
+=== apply.sh 2026-07-04T15:04:39Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-05T06:50:01Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-05T06:50:02Z ===
+=== apply.sh 2026-07-05T06:50:02Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-05T08:02:01Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-05T08:02:02Z ===
+=== apply.sh 2026-07-05T08:02:02Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-06T02:11:56Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-06T02:11:57Z ===
+=== apply.sh 2026-07-06T02:11:57Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-07T00:53:44Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-07T00:53:45Z ===
+=== apply.sh 2026-07-07T00:53:45Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-07T07:33:34Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-07T07:33:35Z ===
+=== apply.sh 2026-07-07T07:33:35Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-07T14:54:16Z ===
+[OK] Supervisor config populated after 0s
+=== apply.sh 2026-07-07T14:54:17Z ===
+=== apply.sh 2026-07-07T14:54:17Z ===
+[SKIP] Boot hook already correct
+[SKIP] Boot hook already correct
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] Supervisor config already uses --lan (or no --tunnel found)
+[SKIP] postinstall already clean
+[SKIP] postinstall already clean
+=== apply.sh done ===
+=== apply.sh done ===
+[FAIL] Timeout waiting for supervisor
+=== apply-deferred 2026-07-11T03:54:12Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-11T06:41:31Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-11T10:55:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-11T12:29:01Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-11T13:11:08Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-11T15:56:17Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-12T01:47:23Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-12T03:45:30Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-12T04:23:54Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-12T08:33:38Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-12T11:32:48Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-12T12:08:19Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-12T14:16:57Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-13T05:17:20Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-13T07:48:59Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-13T11:47:14Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-14T00:56:27Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-14T03:35:42Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-14T06:16:16Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-15T06:01:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-15T12:41:08Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-15T15:45:32Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-15T17:34:23Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-15T18:17:31Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-16T09:06:59Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-16T10:35:37Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-16T14:34:20Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-18T14:08:49Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-20T10:33:36Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-20T12:30:00Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-20T14:04:15Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-20T15:20:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-20T16:40:02Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-21T12:38:15Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-21T15:30:49Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-21T16:32:02Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-22T04:13:12Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-22T05:22:39Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-27T09:28:40Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-27T17:06:58Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-27T17:41:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-28T00:40:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-28T09:03:17Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-28T10:49:41Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-28T12:06:20Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-28T12:49:04Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-30T09:44:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-30T14:54:32Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-30T16:08:44Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-31T02:01:25Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-31T03:31:17Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-07-31T14:33:27Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-01T06:41:53Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-03T06:35:36Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-03T09:18:15Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-03T10:36:00Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-03T17:19:53Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-04T03:46:37Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-04T06:40:54Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-04T10:20:14Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-04T11:28:02Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-05T10:54:37Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-06T08:13:37Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-09T13:34:50Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-09T14:35:42Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-17T13:44:35Z ===
+=== apply-deferred 2026-08-17T13:45:04Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-17T15:56:02Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-17T17:34:44Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-18T10:51:48Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-18T12:04:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-18T13:17:40Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-18T16:13:39Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-19T05:04:03Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-20T05:04:24Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-20T05:47:25Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-20T07:18:22Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-20T09:19:16Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-20T13:28:59Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-20T14:06:10Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-20T16:38:06Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-21T00:34:16Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-21T05:51:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-21T07:40:24Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-21T08:49:50Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-21T09:43:40Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-21T12:44:47Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-21T14:08:42Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-22T07:04:52Z ===
+=== apply-deferred 2026-08-22T07:05:26Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-22T16:35:16Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-23T02:26:37Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-23T16:49:23Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-08-25T04:15:06Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-09-21T10:28:16Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-09-21T11:18:26Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
