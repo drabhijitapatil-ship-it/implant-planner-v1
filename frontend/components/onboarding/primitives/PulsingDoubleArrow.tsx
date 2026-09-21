@@ -9,7 +9,7 @@ import { View, StyleSheet, ViewStyle } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming, withDelay,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 
 export default function PulsingDoubleArrow({
   color = '#90A4AE',

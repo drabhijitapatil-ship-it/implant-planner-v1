@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { showUploadPicker } from '../utils/uploadPicker';
 import { CHECKLIST_DATA } from '../constants/checklist';
 import api from '../utils/api';

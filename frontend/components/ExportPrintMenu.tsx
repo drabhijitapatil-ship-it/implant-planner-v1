@@ -10,7 +10,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 
 type ExportPrintMenuProps = {
   /** Callback for Print PDF action */
@@ -26,7 +26,7 @@ type ExportPrintMenuProps = {
   /** Style override for the trigger text. */
   textStyle?: TextStyle | TextStyle[];
   /** Optional icon name for trigger. Defaults to "share-outline". */
-  triggerIcon?: keyof typeof Ionicons.glyphMap;
+  triggerIcon?: IoniconsIconName;
   /** Icon size on the trigger (default 16). */
   triggerIconSize?: number;
   /** Show loading spinner on the trigger (parent-controlled). */

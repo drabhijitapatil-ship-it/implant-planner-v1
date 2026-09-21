@@ -8,7 +8,7 @@ import {
   Modal, View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator,
   FlatList, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import api from '../utils/api';
 
 type Props = {

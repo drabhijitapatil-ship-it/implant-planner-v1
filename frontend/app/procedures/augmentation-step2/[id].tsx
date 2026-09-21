@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../../../utils/api';
 import { PhaseHeader } from '../../../components/PhaseHeader';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import AugDropdown from '../../../components/AugDropdown';
 import {
   AUGMENTATION_PROCEDURES, AUTOGENOUS_SITES, OTHER_GRAFT_MATERIALS,

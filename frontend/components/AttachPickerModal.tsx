@@ -19,7 +19,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable, Alert, Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import {
   registerAttachPickerControls, resolveAttachPicker, getPendingAllowedDocTypes,
@@ -178,7 +178,7 @@ export default function AttachPickerModalRoot() {
 function IconTile({
   icon, label, onPress, disabled, testID,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IoniconsIconName;
   label: string;
   onPress: () => void;
   disabled?: boolean;

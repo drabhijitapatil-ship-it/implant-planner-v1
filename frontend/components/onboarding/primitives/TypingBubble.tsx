@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 
 const QUESTION = "Implanr, summarise Phase 2 in 3 sentences.";
 const ANSWER =

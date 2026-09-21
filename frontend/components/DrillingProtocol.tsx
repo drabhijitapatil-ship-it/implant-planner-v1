@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Alert, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import BackButton from './BackButton';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';

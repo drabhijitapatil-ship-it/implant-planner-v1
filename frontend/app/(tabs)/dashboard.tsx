@@ -10,7 +10,7 @@ import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { STATUS_COLORS, STATUS_LABELS } from '../../constants/checklist';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { RecentActivityWidget } from '../../components/RecentActivityWidget';
 import { PatientConsentSection } from '../../components/PatientConsentSection';
 import { ScheduledCasesSection } from '../../components/ScheduledCasesSection';

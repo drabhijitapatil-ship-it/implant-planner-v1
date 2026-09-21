@@ -35,7 +35,7 @@
 
 import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 
 // ── Shared option lists ─────────────────────────────────────────────────
 const YES_NO = ['Yes', 'No'];
@@ -329,7 +329,7 @@ const BilateralChoice: React.FC<{ label: string; options: string[]; value?: Bila
     </View>
   );
 
-const SectionCard: React.FC<{ title: string; icon: keyof typeof Ionicons.glyphMap; tint?: string; children: React.ReactNode }>
+const SectionCard: React.FC<{ title: string; icon: IoniconsIconName; tint?: string; children: React.ReactNode }>
   = ({ title, icon, tint = '#5E35B1', children }) => (
     <View style={s.section}>
       <View style={[s.sectionHeader, { borderLeftColor: tint }]}>

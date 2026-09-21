@@ -12,7 +12,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import {
   CHECKLIST_DATA,
   FLAP_DESIGN_OPTIONS,

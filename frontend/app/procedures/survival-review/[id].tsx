@@ -27,7 +27,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import PlacementDatePicker from '../../../components/PlacementDatePicker';
 import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
 import { showUploadPicker } from '../../../utils/uploadPicker';

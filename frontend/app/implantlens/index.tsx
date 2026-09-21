@@ -4,7 +4,7 @@ import {
   StyleSheet, TextInput, RefreshControl,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import BackButton from '../../components/BackButton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../../utils/api';

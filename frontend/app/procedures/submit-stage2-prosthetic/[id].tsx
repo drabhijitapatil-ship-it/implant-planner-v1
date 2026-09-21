@@ -14,7 +14,7 @@ import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 // iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 4 Step 1.
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import {
   PHASE4_SINGLE_MULTIPLE_OPTIONS,
   PHASE4_FULL_ARCH_OPTIONS,

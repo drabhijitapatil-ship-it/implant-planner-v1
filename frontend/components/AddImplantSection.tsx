@@ -10,7 +10,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, TextInput,
   Modal, Pressable, ScrollView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import AugStep2Form, { emptyAugStep2 } from './AugStep2Form';

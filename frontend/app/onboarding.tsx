@@ -10,7 +10,8 @@ import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, AccessibilityInfo,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
+import MaterialCommunityIcons from '@react-native-vector-icons/material-design-icons';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay, withSequence,
 } from 'react-native-reanimated';
@@ -260,7 +261,7 @@ function SlideForumChatRecap({ recap, chipLabel }: { recap: string[]; chipLabel:
   );
 }
 
-function SubItem({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+function SubItem({ icon, text }: { icon: IoniconsIconName; text: string }) {
   return (
     <View style={styles.subItem}>
       <Ionicons name={icon} size={14} color="#546E7A" />

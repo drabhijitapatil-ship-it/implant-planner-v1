@@ -9,7 +9,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Platform, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { getAuthFileUrl } from '../utils/api';
 
 type Props = {

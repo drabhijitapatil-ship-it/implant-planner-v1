@@ -5,7 +5,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, Alert, ActivityIndicator, Linking } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import api, { getAuthFileUrl } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';

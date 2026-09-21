@@ -19,7 +19,7 @@ import {
   View, Text, TouchableOpacity, TextInput, ScrollView, Alert,
   StyleSheet, Modal, Pressable, ActivityIndicator, Platform, Image,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';

@@ -18,7 +18,7 @@
  */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 
 // The nested Phase 1 data type. Kept loose (any) so this component doesn't
 // couple to the strict form-editor's schema.

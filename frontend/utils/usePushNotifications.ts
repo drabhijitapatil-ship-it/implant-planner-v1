@@ -23,8 +23,8 @@ Notifications.setNotificationHandler({
 });
 
 export function usePushNotifications() {
-  const notificationListener = useRef<NotifSubscription>();
-  const responseListener = useRef<NotifSubscription>();
+  const notificationListener = useRef<NotifSubscription | undefined>(undefined);
+  const responseListener = useRef<NotifSubscription | undefined>(undefined);
 
   useEffect(() => {
     registerForPushNotifications();

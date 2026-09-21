@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Pressable, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 
 export type ComparisonRevision = {
   label: string;                    // "R0", "R1", "R2"

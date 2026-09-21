@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Tabs, useRouter, router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import {
   View,
   Text,
@@ -84,7 +84,7 @@ function DrawerMenu({
   // palette. Order is tuned so the most-used items land in the first row.
   type TileItem = {
     key: string;
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: IoniconsIconName;
     label: string;
     route: string;
     bg: string;       // tile background (lightest)

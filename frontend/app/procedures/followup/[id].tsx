@@ -16,7 +16,7 @@ import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 // iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 5.
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import RadiographCompare from '../../../components/RadiographCompare';

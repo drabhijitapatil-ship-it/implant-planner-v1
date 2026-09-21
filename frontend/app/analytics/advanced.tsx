@@ -23,7 +23,7 @@ import {
 import Svg, { Path, Circle, Line, Text as SvgText, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import api from '../../utils/api';
 import { downloadAuthenticated } from '../../utils/csvDownload';
 import CalendarPicker from '../../components/CalendarPicker';
@@ -31,7 +31,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'augmentation' | 'benchmarks' | 'export';
 
-const SECTIONS: { key: Section; label: string; icon: keyof typeof Ionicons.glyphMap; facultyOnly?: boolean }[] = [
+const SECTIONS: { key: Section; label: string; icon: IoniconsIconName; facultyOnly?: boolean }[] = [
   { key: 'km', label: 'Kaplan-Meier', icon: 'pulse-outline' },
   { key: 'scatter', label: 'Torque × ISQ', icon: 'analytics-outline' },
   { key: 'heatmap', label: 'Bone Heatmap', icon: 'grid-outline' },

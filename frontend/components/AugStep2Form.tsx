@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import AugDropdown from './AugDropdown';
 import {
   AUGMENTATION_PROCEDURES, AUTOGENOUS_SITES, OTHER_GRAFT_MATERIALS,

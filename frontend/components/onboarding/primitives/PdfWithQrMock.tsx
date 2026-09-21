@@ -7,7 +7,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withSequence, withTiming, withSpring,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 
 export default function PdfWithQrMock() {
   const qrScale = useSharedValue(1.6);

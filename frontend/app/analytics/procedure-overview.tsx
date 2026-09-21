@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import api from '../../utils/api';
 import { downloadAuthenticated } from '../../utils/csvDownload';
 import CalendarPicker from '../../components/CalendarPicker';
@@ -660,7 +660,7 @@ function CohortStat({
   );
 }
 
-function SectionHeader({ icon, title }: { icon: keyof typeof Ionicons.glyphMap; title: string }) {
+function SectionHeader({ icon, title }: { icon: IoniconsIconName; title: string }) {
   return (
     <View style={s.sectionHeader}>
       <Ionicons name={icon} size={16} color="#1565C0" />

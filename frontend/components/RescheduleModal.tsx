@@ -12,7 +12,7 @@ import {
   Alert,
   KeyboardAvoidingView,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { format } from 'date-fns';
 import { Calendar } from 'react-native-calendars';
 import api from '../utils/api';

@@ -8,7 +8,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import BackButton from '../components/BackButton';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
@@ -19,7 +19,7 @@ import ApprovalGateDiagram from '../components/onboarding/primitives/ApprovalGat
 import FeatureCard from '../components/onboarding/primitives/FeatureCard';
 
 type Step = {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IoniconsIconName;
   title: string;
   bullets: string[];
   tone: 'pre' | 'phase1' | 'phase2' | 'phase3' | 'phase4' | 'done' | 'reviewer';

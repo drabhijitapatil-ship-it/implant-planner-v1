@@ -8,12 +8,12 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withTiming, withRepeat, withSequence,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import PulsingDoubleArrow from './PulsingDoubleArrow';
 
 type Active = 'student' | 'supervisor' | 'incharge' | 'none';
 
-const TILES: { key: Active; icon: keyof typeof Ionicons.glyphMap; label: string; tint: string }[] = [
+const TILES: { key: Active; icon: IoniconsIconName; label: string; tint: string }[] = [
   { key: 'student',    icon: 'person-outline',           label: 'Student',          tint: '#1565C0' },
   { key: 'supervisor', icon: 'people-outline',           label: 'Supervisor',       tint: '#EF6C00' },
   { key: 'incharge',   icon: 'shield-checkmark-outline', label: 'Implant\nIn-Charge', tint: '#2E7D32' },

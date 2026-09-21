@@ -4,7 +4,7 @@ import {
   Modal, Pressable, ScrollView, Platform, ActivityIndicator,
   TextInput, Alert,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import api, { getAuthFileUrl } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 

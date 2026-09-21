@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
   Modal, ScrollView, Share, Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import api from '../utils/api';
 
 // iter-280: Smart Clinical Tip banner — Phase 1. Floating card placed

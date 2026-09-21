@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import api from '../utils/api';
 
 type ChecklistItem = {
@@ -23,7 +23,7 @@ type ChecklistItem = {
   completed_notes?: string;
 };
 
-const CATEGORY_STYLE: Record<string, { bg: string; border: string; chip: string; icon: keyof typeof Ionicons.glyphMap; label: string }> = {
+const CATEGORY_STYLE: Record<string, { bg: string; border: string; chip: string; icon: IoniconsIconName; label: string }> = {
   keratinized: { bg: '#FFF3E0', border: '#FFB74D', chip: '#E65100', icon: 'leaf-outline', label: 'Keratinized Mucosa' },
   biotype: { bg: '#F3E5F5', border: '#BA68C8', chip: '#7B1FA2', icon: 'water-outline', label: 'Biotype' },
   ridge: { bg: '#FBE9E7', border: '#FF8A65', chip: '#D84315', icon: 'pulse-outline', label: 'Ridge' },

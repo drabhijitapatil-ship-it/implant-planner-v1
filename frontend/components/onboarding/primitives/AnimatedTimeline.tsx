@@ -8,10 +8,10 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import PulsingDoubleArrow from './PulsingDoubleArrow';
 
-type Node = { icon: keyof typeof Ionicons.glyphMap; label: string; tint: string };
+type Node = { icon: IoniconsIconName; label: string; tint: string };
 
 const NODES: Node[] = [
   { icon: 'people-outline',    label: 'Phase 1\nDiagnosis',  tint: '#1565C0' },
