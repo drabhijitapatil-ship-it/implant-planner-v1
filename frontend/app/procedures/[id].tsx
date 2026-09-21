@@ -975,7 +975,7 @@ export default function ProcedureDetailScreen() {
                   into this green banner so the case summary lives in one place.
                   Removes the duplicate yellow card that used to sit at the
                   bottom of the page, just above the implant-planning section. */}
-              {procedure.case_id && (
+              {!!procedure.case_id && (
                 <Text style={styles.completedCaseId} testID="completed-case-id">
                   {procedure.case_id}
                 </Text>
@@ -1081,7 +1081,7 @@ export default function ProcedureDetailScreen() {
         {/* iter-352: End Treatment REJECTED banner. Shown when the last
             end-treatment request was rejected; auto-hides once a new
             survival review or approval cycle overwrites it. */}
-        {procedure.end_treatment_rejected && procedure.status !== 'treatment_ended' && (
+        {!!procedure.end_treatment_rejected && procedure.status !== 'treatment_ended' && (
           <View style={styles.rejectedBanner} testID="end-treatment-rejected-banner">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <Ionicons name="alert-circle" size={18} color="#B71C1C" />
@@ -1112,7 +1112,7 @@ export default function ProcedureDetailScreen() {
                 </Text>
               </View>
             </View>
-            {procedure.treatment_ended_reason && (
+            {!!procedure.treatment_ended_reason && (
               <View style={styles.terminationReasonBox} testID="termination-reason">
                 <Text style={styles.terminationReasonLabel}>Reason on record</Text>
                 <Text style={styles.terminationReasonText}>"{procedure.treatment_ended_reason}"</Text>
@@ -1166,7 +1166,7 @@ export default function ProcedureDetailScreen() {
                 <View style={styles.exitSummaryTitleRow}>
                   <Ionicons name="sparkles-outline" size={16} color="#B71C1C" />
                   <Text style={styles.exitSummaryTitle}>AI Exit Summary</Text>
-                  {procedure.ai_exit_summary?.edited && (
+                  {!!procedure.ai_exit_summary?.edited && (
                     <View style={styles.exitSummaryEditedPill}>
                       <Text style={styles.exitSummaryEditedText}>edited</Text>
                     </View>
@@ -1365,7 +1365,7 @@ export default function ProcedureDetailScreen() {
                   {procedure.prosthesis_history.lab_name && <Text style={{ fontSize: 12, color: '#37474F' }}>Lab: <Text style={{ fontWeight: '700' }}>{procedure.prosthesis_history.lab_name}</Text></Text>}
                 </View>
 
-                {procedure.prosthesis_history.failed && (
+                {!!procedure.prosthesis_history.failed && (
                   <View style={{ backgroundColor: '#FFF8F8', borderRadius: 8, borderWidth: 1, borderColor: '#FFCDD2', padding: 10 }} testID="failure-analysis-block">
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <Ionicons name="warning" size={16} color="#C62828" />
@@ -1404,7 +1404,7 @@ export default function ProcedureDetailScreen() {
                         </View>
                       </View>
                     )}
-                    {procedure.prosthesis_history.failure_narrative && (
+                    {!!procedure.prosthesis_history.failure_narrative && (
                       <Text style={{ fontSize: 12, color: '#3E2723', marginTop: 6, fontStyle: 'italic', lineHeight: 18 }}>
                         "{procedure.prosthesis_history.failure_narrative}"
                       </Text>
@@ -1921,7 +1921,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Rejected with Consideration Banner */}
-        {procedure.rejected_phase && procedure.status !== 'permanently_rejected' && (
+        {!!procedure.rejected_phase && procedure.status !== 'permanently_rejected' && (
           (() => {
             const phase = procedure.rejected_phase;
             const isReconsider =
@@ -2265,7 +2265,7 @@ export default function ProcedureDetailScreen() {
             (PhaseStep2TabbedView) — see /procedures/submit-phase2/[id]. */}
 
         {/* Procedure Type & Plan */}
-        {procedure.implant_procedure_type && (
+        {!!procedure.implant_procedure_type && (
           <View style={styles.section} data-testid="procedure-type-section">
             {/* iter-331: Procedure Details title row with optional inline
                 PRE-OP BRIEFING button (Sinus Lift only). Moved here from
@@ -2305,41 +2305,41 @@ export default function ProcedureDetailScreen() {
             </View>
             <InfoRow icon="construct" label="Type of Implant Procedure" value={procedure.implant_procedure_type} fieldKey="implant_procedure_type" />
             {/* iter-Jun-2026: Implant Overdenture sub-type */}
-            {procedure.overdenture_type && (
+            {!!procedure.overdenture_type && (
               <InfoRow icon="layers" label="Type of Overdenture" value={procedure.overdenture_type} fieldKey="overdenture_type" />
             )}
             {/* iter-387: surgical-approach cascade echoed on the case detail */}
-            {procedure.procedure_surgery_type && (
+            {!!procedure.procedure_surgery_type && (
               <InfoRow icon="hand-left" label="Procedure Type" value={procedure.procedure_surgery_type} />
             )}
-            {procedure.guided_surgery_type && (
+            {!!procedure.guided_surgery_type && (
               <InfoRow icon="navigate" label="Type of Guided Surgery" value={procedure.guided_surgery_type} />
             )}
-            {procedure.static_guide_type && (
+            {!!procedure.static_guide_type && (
               <InfoRow icon="grid" label="Type of Static Guide" value={procedure.static_guide_type} />
             )}
-            {procedure.sleeve_type && (
+            {!!procedure.sleeve_type && (
               <InfoRow icon="ellipse" label="Type of Sleeve" value={procedure.sleeve_type} />
             )}
-            {procedure.dynamic_nav_system && (
+            {!!procedure.dynamic_nav_system && (
               <InfoRow icon="compass" label="Dynamic Navigation System" value={procedure.dynamic_nav_system} />
             )}
             {/* iter-307: Echo the Number-of-Implants sub-choice (only set
                 for Immediate / PET / GBR / Guided Surgery) so faculty
                 can scan it from the case detail without opening Phase 1. */}
-            {procedure.num_implants && (
+            {!!procedure.num_implants && (
               <InfoRow icon="layers" label="Number of Implants" value={procedure.num_implants} fieldKey="num_implants" />
             )}
-            {procedure.arch && (
+            {!!procedure.arch && (
               <InfoRow icon="tablet-landscape" label="Arch" value={procedure.arch} fieldKey="arch" />
             )}
             {procedure.loading_type?.length > 0 && (
               <InfoRow icon="flash" label="Loading Type" value={procedure.loading_type.join(', ')} fieldKey="loading_type" />
             )}
-            {procedure.prosthetic_plan && (
+            {!!procedure.prosthetic_plan && (
               <InfoRow icon="build" label="Prosthetic Plan" value={procedure.prosthetic_plan} fieldKey="prosthetic_plan" />
             )}
-            {procedure.prosthetic_plan_other && (
+            {!!procedure.prosthetic_plan_other && (
               <InfoRow icon="create" label="Prosthetic Plan (Other)" value={procedure.prosthetic_plan_other} fieldKey="prosthetic_plan_other" />
             )}
             {/* iter-Feb-2026 / -C — SC (pure or overlap-Single) plan fields. */}
@@ -2354,22 +2354,22 @@ export default function ProcedureDetailScreen() {
               const rowVal = (val: string, other: string) => val === 'Other' && other ? `Other — ${other}` : val;
               return (
                 <>
-                  {procedure.type_of_provisional && (
+                  {!!procedure.type_of_provisional && (
                     <InfoRow icon="medkit" label="Type of Provisional"
                       value={rowVal(procedure.type_of_provisional, procedure.type_of_provisional_other)}
                       fieldKey="type_of_provisional" />
                   )}
-                  {procedure.sc_abutment_type && (
+                  {!!procedure.sc_abutment_type && (
                     <InfoRow icon="cube" label="Abutment Type"
                       value={rowVal(procedure.sc_abutment_type, procedure.sc_abutment_type_other)}
                       fieldKey="sc_abutment_type" />
                   )}
-                  {procedure.sc_retention_type && (
+                  {!!procedure.sc_retention_type && (
                     <InfoRow icon="link" label="Type of Retention"
                       value={rowVal(procedure.sc_retention_type, procedure.sc_retention_type_other)}
                       fieldKey="sc_retention_type" />
                   )}
-                  {procedure.sc_crown_material && (
+                  {!!procedure.sc_crown_material && (
                     <InfoRow icon="diamond" label="Crown Material"
                       value={rowVal(procedure.sc_crown_material, procedure.sc_crown_material_other)}
                       fieldKey="sc_crown_material" />
@@ -2388,44 +2388,44 @@ export default function ProcedureDetailScreen() {
               if (isSCEff) return null;
               return (
                 <>
-                  {procedure.type_of_provisional && (
+                  {!!procedure.type_of_provisional && (
                     <InfoRow icon="medkit" label="Type of Provisional"
                       value={procedure.type_of_provisional === 'Other' && procedure.type_of_provisional_other
                         ? `Other — ${procedure.type_of_provisional_other}`
                         : procedure.type_of_provisional}
                       fieldKey="type_of_provisional" />
                   )}
-                  {procedure.ma_prosthesis_type && (
+                  {!!procedure.ma_prosthesis_type && (
                     <InfoRow icon="cube" label="Prosthesis Type"
                       value={procedure.ma_prosthesis_type === 'Other' && procedure.ma_prosthesis_type_other
                         ? `Other — ${procedure.ma_prosthesis_type_other}` : procedure.ma_prosthesis_type}
                       fieldKey="ma_prosthesis_type" />
                   )}
-                  {procedure.ma_abutment_type && (
+                  {!!procedure.ma_abutment_type && (
                     <InfoRow icon="cube" label="Abutment Type"
                       value={procedure.ma_abutment_type === 'Other' && procedure.ma_abutment_type_other
                         ? `Other — ${procedure.ma_abutment_type_other}` : procedure.ma_abutment_type}
                       fieldKey="ma_abutment_type" />
                   )}
-                  {procedure.ma_retention_type && (
+                  {!!procedure.ma_retention_type && (
                     <InfoRow icon="link" label="Type of Retention"
                       value={procedure.ma_retention_type === 'Other' && procedure.ma_retention_type_other
                         ? `Other — ${procedure.ma_retention_type_other}` : procedure.ma_retention_type}
                       fieldKey="ma_retention_type" />
                   )}
-                  {procedure.ma_crown_material && (
+                  {!!procedure.ma_crown_material && (
                     <InfoRow icon="diamond" label="Crown/Bridge Material"
                       value={procedure.ma_crown_material === 'Other' && procedure.ma_crown_material_other
                         ? `Other — ${procedure.ma_crown_material_other}` : procedure.ma_crown_material}
                       fieldKey="ma_crown_material" />
                   )}
-                  {procedure.fa_prosthetic_plan && (
+                  {!!procedure.fa_prosthetic_plan && (
                     <InfoRow icon="build" label="Prosthetic Plan"
                       value={procedure.fa_prosthetic_plan === 'Other' && procedure.fa_prosthetic_plan_other
                         ? `Other — ${procedure.fa_prosthetic_plan_other}` : procedure.fa_prosthetic_plan}
                       fieldKey="fa_prosthetic_plan" />
                   )}
-                  {procedure.zp_prosthetic_plan && (
+                  {!!procedure.zp_prosthetic_plan && (
                     <InfoRow icon="build" label="Prosthetic Plan"
                       value={procedure.zp_prosthetic_plan === 'Other' && procedure.zp_prosthetic_plan_other
                         ? `Other — ${procedure.zp_prosthetic_plan_other}` : procedure.zp_prosthetic_plan}
@@ -2438,7 +2438,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ── Full-Arch Atrophy Treatment Plan (silent institutional guidance) ── */}
-        {procedure.atrophy_assessment && (procedure.atrophy_assessment.maxilla || procedure.atrophy_assessment.mandible) && (
+        {!!procedure.atrophy_assessment && !!(procedure.atrophy_assessment.maxilla || procedure.atrophy_assessment.mandible) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} testID="atrophy-treatment-plan-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="layers" size={20} color="#0D47A1" />
@@ -2554,7 +2554,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Clinical Examination */}
-        {(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
+        {!!(procedure.occlusocervical_height || procedure.mesiodistal_space || procedure.edentulous_sites?.length > 0 || procedure.edentulous_site || procedure.arch_condition || procedure.ridge_contour || procedure.soft_tissue_thickness || procedure.keratinized_mucosa) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#1E88E5' }]} data-testid="clinical-examination-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="search" size={20} color="#1E88E5" />
@@ -2563,10 +2563,10 @@ export default function ProcedureDetailScreen() {
             {(procedure.occlusocervical_height || procedure.mesiodistal_space) && (
               <View style={{ marginBottom: 6 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 4 }}>Edentulous Site</Text>
-                {procedure.occlusocervical_height && (
+                {!!procedure.occlusocervical_height && (
                   <InfoRow icon="resize" label="Occlusocervical Height" value={`${procedure.occlusocervical_height} mm`} />
                 )}
-                {procedure.mesiodistal_space && (
+                {!!procedure.mesiodistal_space && (
                   <InfoRow icon="resize" label="Mesiodistal Space" value={`${procedure.mesiodistal_space} mm`} />
                 )}
               </View>
@@ -2577,66 +2577,66 @@ export default function ProcedureDetailScreen() {
             {procedure.edentulous_site && !procedure.edentulous_sites?.length && (
               <InfoRow icon="grid" label="Edentulous Site" value={procedure.edentulous_site} fieldKey="edentulous_site" />
             )}
-            {procedure.arch_condition && (
+            {!!procedure.arch_condition && (
               <InfoRow icon="ellipse" label={procedure.arch === 'Maxillary' ? 'Maxillary Arch Condition' : procedure.arch === 'Mandibular' ? 'Mandibular Arch Condition' : 'Arch Condition'} value={procedure.arch_condition} fieldKey="arch_condition" />
             )}
-            {procedure.ridge_contour && (
+            {!!procedure.ridge_contour && (
               <InfoRow icon="analytics" label="Ridge Contour" value={procedure.ridge_contour} fieldKey="ridge_contour" />
             )}
-            {procedure.soft_tissue_thickness && (
+            {!!procedure.soft_tissue_thickness && (
               <InfoRow icon="layers" label="Soft Tissue Thickness" value={procedure.soft_tissue_thickness} fieldKey="soft_tissue_thickness" />
             )}
-            {procedure.keratinized_mucosa && (
+            {!!procedure.keratinized_mucosa && (
               <InfoRow icon="resize" label="Keratinized Mucosa" value={procedure.keratinized_mucosa} fieldKey="keratinized_mucosa" />
             )}
           </View>
         )}
 
         {/* Occlusal Analysis */}
-        {(procedure.occlusal_scheme || procedure.parafunction_habit || procedure.vertical_dimension || procedure.opposing_dentition || procedure.vertical_dimension_mm || procedure.available_interarch_space || procedure.opposing_arch || procedure.tmj) && (
+        {!!(procedure.occlusal_scheme || procedure.parafunction_habit || procedure.vertical_dimension || procedure.opposing_dentition || procedure.vertical_dimension_mm || procedure.available_interarch_space || procedure.opposing_arch || procedure.tmj) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#7B1FA2' }]} data-testid="occlusal-analysis-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="fitness" size={20} color="#7B1FA2" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#6A1B9A' }]}>Occlusal Analysis</Text>
             </View>
-            {procedure.available_interarch_space && (
+            {!!procedure.available_interarch_space && (
               <InfoRow icon="resize" label={procedure.arch === 'Maxillary' ? 'Maxillary Restorative Space' : procedure.arch === 'Mandibular' ? 'Mandibular Restorative Space' : 'Restorative Space'} value={`${procedure.available_interarch_space} mm`} />
             )}
-            {procedure.opposing_arch && (
+            {!!procedure.opposing_arch && (
               <InfoRow icon="people" label="Opposing Arch" value={procedure.opposing_arch} fieldKey="opposing_arch" />
             )}
-            {procedure.occlusal_scheme && (
+            {!!procedure.occlusal_scheme && (
               <InfoRow icon="swap-horizontal" label="Occlusal Scheme" value={procedure.occlusal_scheme} fieldKey="occlusal_scheme" />
             )}
-            {procedure.parafunction_habit && (
+            {!!procedure.parafunction_habit && (
               <InfoRow icon="alert-circle" label="Parafunctional Habits" value={procedure.parafunction_habit} fieldKey="parafunction_habit" />
             )}
-            {procedure.vertical_dimension && (
+            {!!procedure.vertical_dimension && (
               <InfoRow icon="arrow-up" label="Vertical Dimension" value={procedure.vertical_dimension} fieldKey="vertical_dimension" />
             )}
-            {procedure.vertical_dimension_mm && (
+            {!!procedure.vertical_dimension_mm && (
               <InfoRow icon="arrow-up" label="Vertical Dimension (mm)" value={procedure.vertical_dimension_mm} fieldKey="vertical_dimension_mm" />
             )}
-            {procedure.opposing_dentition && (
+            {!!procedure.opposing_dentition && (
               <InfoRow icon="git-compare" label="Opposing Dentition" value={procedure.opposing_dentition} fieldKey="opposing_dentition" />
             )}
-            {procedure.tmj && (
+            {!!procedure.tmj && (
               <InfoRow icon="pulse" label="TMJ Assessment" value={procedure.tmj} fieldKey="tmj" />
             )}
           </View>
         )}
 
         {/* Aesthetic Risk Assessment */}
-        {(procedure.smile_line || procedure.gingival_biotype) && (
+        {!!(procedure.smile_line || procedure.gingival_biotype) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#E91E63' }]} data-testid="aesthetic-risk-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="happy" size={20} color="#E91E63" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#C2185B' }]}>Aesthetic Risk Assessment</Text>
             </View>
-            {procedure.smile_line && (
+            {!!procedure.smile_line && (
               <InfoRow icon="eye" label="Smile Line" value={procedure.smile_line} fieldKey="smile_line" />
             )}
-            {procedure.gingival_biotype && (
+            {!!procedure.gingival_biotype && (
               <InfoRow icon="leaf" label="Gingival Biotype" value={procedure.gingival_biotype} fieldKey="gingival_biotype" />
             )}
           </View>
@@ -2648,7 +2648,7 @@ export default function ProcedureDetailScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="heart" size={20} color="#D32F2F" />
               <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#B71C1C' }]}>Medical Assessment</Text>
-              {procedure.medical_risk_level && (
+              {!!procedure.medical_risk_level && (
                 <View style={{
                   backgroundColor: procedure.medical_risk_level === 'Low Risk' ? '#E8F5E9' : procedure.medical_risk_level === 'Moderate Risk' ? '#FFF3E0' : '#FFEBEE',
                   borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4,
@@ -2789,16 +2789,16 @@ export default function ProcedureDetailScreen() {
           <InfoRow icon="cash" label="Amount Paid" value={`₹${procedure.amount_paid}`} />
         </View>
 
-        {(procedure.implant_region || procedure.implant_company) && (
+        {!!(procedure.implant_region || procedure.implant_company) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Implant Details</Text>
-            {procedure.implant_region && (
+            {!!procedure.implant_region && (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Region:</Text>
                 <Text style={styles.specText}>{procedure.implant_region}</Text>
               </View>
             )}
-            {procedure.implant_company && (
+            {!!procedure.implant_company && (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Company:</Text>
                 <Text style={styles.specText}>{procedure.implant_company}</Text>
@@ -2807,7 +2807,7 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.bone_graft_specifications && (
+        {!!procedure.bone_graft_specifications && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Bone Graft/Membrane</Text>
             <Text style={styles.specText}>{procedure.bone_graft_specifications}</Text>
@@ -2815,7 +2815,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Final Prosthetic Plan - always visible to everyone when set */}
-        {procedure.final_prosthetic_plan && (
+        {!!procedure.final_prosthetic_plan && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF9800' }]} data-testid="final-prosthetic-plan-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Ionicons name="construct" size={20} color="#FF9800" />
@@ -2862,7 +2862,7 @@ export default function ProcedureDetailScreen() {
                 );
               })()}
               {/* iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan breakdown. */}
-              {procedure.phase4_step1_data && (
+              {!!procedure.phase4_step1_data && (
                 (procedure.phase4_step1_data.ma_final_prosthesis_type
                  || procedure.phase4_step1_data.ma_final_abutment_type
                  || procedure.phase4_step1_data.ma_final_retention_type
@@ -2908,7 +2908,7 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.ios_file && (
+        {!!procedure.ios_file && (
           <View style={styles.section} data-testid="ios-file-section">
             <Text style={styles.sectionTitle}>IOS or Intra-oral Photos</Text>
             <TouchableOpacity
@@ -2934,7 +2934,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* CBCT Reports - Thumbnails */}
-        {(procedure.cbct_files?.length > 0 || procedure.cbct_file) && (
+        {!!(procedure.cbct_files?.length > 0 || procedure.cbct_file) && (
           <View style={styles.section} data-testid="cbct-file-section">
             <Text style={styles.sectionTitle}>CBCT Reports</Text>
             {procedure.cbct_files?.length > 0 ? (
@@ -3027,7 +3027,7 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.remark && (
+        {!!procedure.remark && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
             <Text style={styles.specText}>{procedure.remark}</Text>
@@ -3038,16 +3038,16 @@ export default function ProcedureDetailScreen() {
             both approvers leave a note. Supervisor first, In-Charge
             second, matching the Phase 4 layout already in the app. Each
             block only renders if that role left a comment. */}
-        {(procedure.phase1_supervisor_notes || procedure.phase1_incharge_notes) && (
+        {!!(procedure.phase1_supervisor_notes || procedure.phase1_incharge_notes) && (
           <View style={styles.section} data-testid="phase1-approval-comments">
             <Text style={styles.sectionTitle}>Phase 1 Approval Comments</Text>
-            {procedure.phase1_supervisor_notes && (
+            {!!procedure.phase1_supervisor_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }} data-testid="phase1-supervisor-comment">
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Supervisor Comment</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_supervisor_notes}</Text>
               </View>
             )}
-            {procedure.phase1_incharge_notes && (
+            {!!procedure.phase1_incharge_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }} data-testid="phase1-incharge-comment">
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Implant In-Charge Comment</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase1_incharge_notes}</Text>
@@ -3057,7 +3057,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Phase 1 Pre-Surgical Checklist — shown right after Phase 1 data */}
-        {procedure.checklist?.pre_surgical && (
+        {!!procedure.checklist?.pre_surgical && (
           <>
             {renderChecklistSection('pre_surgical', 'Phase 1: Pre-Surgical Protocol')}
           </>
@@ -3092,16 +3092,16 @@ export default function ProcedureDetailScreen() {
             {/* Surgical Procedure Details */}
             <View style={{ marginBottom: 16 }}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#1565C0', marginBottom: 8 }}>Surgical Procedure</Text>
-              {procedure.phase2_data.anesthesia_adequate && (
+              {!!procedure.phase2_data.anesthesia_adequate && (
                 <InfoRow icon="water" label="Anaesthesia Adequate" value={procedure.phase2_data.anesthesia_adequate} fieldKey="phase2_data.anesthesia_adequate" />
               )}
-              {procedure.phase2_data.anesthesia_details && (
+              {!!procedure.phase2_data.anesthesia_details && (
                 <InfoRow icon="alert" label="Anaesthesia Notes" value={procedure.phase2_data.anesthesia_details} fieldKey="phase2_data.anesthesia_details" />
               )}
-              {procedure.phase2_data.flap_design && (
+              {!!procedure.phase2_data.flap_design && (
                 <InfoRow icon="cut" label="Incision / Flap Design" value={procedure.phase2_data.flap_design} fieldKey="phase2_data.flap_design" />
               )}
-              {procedure.phase2_data.drilling_type && (
+              {!!procedure.phase2_data.drilling_type && (
                 <InfoRow icon="hardware-chip" label="Drilling Type" value={procedure.phase2_data.drilling_type} fieldKey="phase2_data.drilling_type" />
               )}
               {/* iter-391: actual drilling cascade + plan-vs-actual comparison */}
@@ -3150,7 +3150,7 @@ export default function ProcedureDetailScreen() {
               {procedure.phase2_data.implant_seated_correctly !== undefined && (
                 <InfoRow icon="checkmark-done" label="Implant Seated Correctly" value={procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'} fieldKey="phase2_data.implant_seated_correctly" />
               )}
-              {procedure.phase2_data.implant_seated_comment && (
+              {!!procedure.phase2_data.implant_seated_comment && (
                 <InfoRow icon="chatbox" label="Implant Seating Notes" value={procedure.phase2_data.implant_seated_comment} fieldKey="phase2_data.implant_seated_comment" />
               )}
               {/* iter-210: removed the duplicate Torque Values chips from the
@@ -3196,7 +3196,7 @@ export default function ProcedureDetailScreen() {
                   )}
                 </>
               )}
-              {procedure.phase2_data.implant_other_notes && (
+              {!!procedure.phase2_data.implant_other_notes && (
                 <InfoRow icon="document-text" label="Other Implant Notes" value={procedure.phase2_data.implant_other_notes} />
               )}
               {/* iter-361: Per-implant Prosthetic Component readback.
@@ -3511,13 +3511,13 @@ export default function ProcedureDetailScreen() {
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_student_notes || procedure.phase2_remark}</Text>
               </View>
             )}
-            {procedure.phase2_supervisor_notes && (
+            {!!procedure.phase2_supervisor_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_supervisor_notes}</Text>
               </View>
             )}
-            {procedure.phase2_incharge_notes && (
+            {!!procedure.phase2_incharge_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase2_incharge_notes}</Text>
@@ -3623,7 +3623,7 @@ export default function ProcedureDetailScreen() {
         })()}
 
         {/* Legacy Phase 2 remark (for older procedures without phase2_data) */}
-        {!procedure.phase2_data && procedure.phase2_remark && (
+        {!procedure.phase2_data && !!procedure.phase2_remark && (
           <View style={styles.section} data-testid="phase2-remark-section">
             <Text style={styles.sectionTitle}>Phase 2 - Post-Surgical Notes</Text>
             <Text style={styles.specText}>{procedure.phase2_remark}</Text>
@@ -3631,7 +3631,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 3: SECOND STAGE SURGICAL - Full Data Display ═══════════ */}
-        {user?.role !== 'nurse' && (procedure.phase3_data || procedure.stage2_surgical_remark || procedure.phase3_student_notes) && (
+        {user?.role !== 'nurse' && !!(procedure.phase3_data || procedure.stage2_surgical_remark || procedure.phase3_student_notes) && (
           <View
             style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#2E7D32' }]}
             testID="phase3-full-data-section"
@@ -3644,7 +3644,7 @@ export default function ProcedureDetailScreen() {
               {/* iter-358: One-tap prosthodontist hand-off report — reads the
                   per-implant Phase-3 HA config + Phase-2 implant specs +
                   ISQs + IOPAs and generates a printable A4 summary. */}
-              {procedure.phase3_data && (
+              {!!procedure.phase3_data && (
                 <View style={{ flexDirection: 'row', gap: 6 }}>
                   <TouchableOpacity
                     onPress={async () => {
@@ -3914,13 +3914,13 @@ export default function ProcedureDetailScreen() {
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_student_notes || procedure.stage2_surgical_remark}</Text>
               </View>
             )}
-            {procedure.phase3_supervisor_notes && (
+            {!!procedure.phase3_supervisor_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Remarks by Supervising Faculty</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_supervisor_notes}</Text>
               </View>
             )}
-            {procedure.phase3_incharge_notes && (
+            {!!procedure.phase3_incharge_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>Remarks by Implant In-Charge</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase3_incharge_notes}</Text>
@@ -4157,7 +4157,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 4 STEP 1: PROSTHETIC PROTOCOL - Full Data Display ═══════════ */}
-        {user?.role !== 'nurse' && (procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
+        {user?.role !== 'nurse' && !!(procedure.phase4_step1_data || procedure.stage2_prosthetic_remark || procedure.phase4_step1_student_notes) && (
           <View
             style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#FF6F00' }]}
             testID="phase4-step1-full-data-section"
@@ -4170,22 +4170,22 @@ export default function ProcedureDetailScreen() {
             </View>
 
             {/* Prosthetic Plan Details */}
-            {procedure.phase4_step1_data && (
+            {!!procedure.phase4_step1_data && (
               <View style={{ marginBottom: 16 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#EF6C00', marginBottom: 8 }}>Prosthetic Plan</Text>
-                {procedure.phase4_step1_data.final_prosthetic_plan && (
+                {!!procedure.phase4_step1_data.final_prosthetic_plan && (
                   <InfoRow icon="build" label="Final Prosthetic Plan" value={procedure.phase4_step1_data.final_prosthetic_plan} fieldKey="phase4_step1_data.final_prosthetic_plan" />
                 )}
-                {procedure.phase4_step1_data.prosthetic_material && (
+                {!!procedure.phase4_step1_data.prosthetic_material && (
                   <InfoRow icon="diamond" label="Prosthetic Material" value={procedure.phase4_step1_data.prosthetic_material} fieldKey="phase4_step1_data.prosthetic_material" />
                 )}
-                {procedure.phase4_step1_data.custom_abutment && (
+                {!!procedure.phase4_step1_data.custom_abutment && (
                   <InfoRow icon="settings" label="Custom Abutment" value={procedure.phase4_step1_data.custom_abutment} fieldKey="phase4_step1_data.custom_abutment" />
                 )}
-                {procedure.phase4_step1_data.overdenture_attachment && (
+                {!!procedure.phase4_step1_data.overdenture_attachment && (
                   <InfoRow icon="link" label="Overdenture Attachment" value={procedure.phase4_step1_data.overdenture_attachment} fieldKey="phase4_step1_data.overdenture_attachment" />
                 )}
-                {procedure.phase4_step1_data.impression_type && (
+                {!!procedure.phase4_step1_data.impression_type && (
                   <InfoRow icon="scan" label="Impression Type" value={
                     procedure.phase4_step1_data.impression_type === 'intraoral_scans'
                       ? 'Intraoral Scans'
@@ -4341,7 +4341,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
-        {user?.role !== 'nurse' && (procedure.phase4_step2_data || procedure.phase4_step2_student_notes) && (
+        {user?.role !== 'nurse' && !!(procedure.phase4_step2_data || procedure.phase4_step2_student_notes) && (
           <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#AD1457' }]} data-testid="phase4-step2-full-data-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="ribbon" size={22} color="#AD1457" />
@@ -4376,7 +4376,7 @@ export default function ProcedureDetailScreen() {
             )}
 
             {/* Notes & Remarks */}
-            {procedure.phase4_step2_student_notes && (
+            {!!procedure.phase4_step2_student_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#FCE4EC', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#880E4F', marginBottom: 8 }}>
                   {procedure.created_by_role === 'student' ? "Student's Notes" : "Operator's Notes"}
@@ -4384,13 +4384,13 @@ export default function ProcedureDetailScreen() {
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_student_notes}</Text>
               </View>
             )}
-            {procedure.phase4_step2_supervisor_notes && (
+            {!!procedure.phase4_step2_supervisor_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#F3E5F5', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#6A1B9A', marginBottom: 8 }}>Supervisor Comment</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_supervisor_notes}</Text>
               </View>
             )}
-            {procedure.phase4_step2_incharge_notes && (
+            {!!procedure.phase4_step2_incharge_notes && (
               <View style={{ marginBottom: 8, backgroundColor: '#E8F5E9', borderRadius: 8, padding: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: '700', color: '#2E7D32', marginBottom: 8 }}>In-Charge Comment</Text>
                 <Text style={{ fontSize: 14, color: '#333', lineHeight: 20 }}>{procedure.phase4_step2_incharge_notes}</Text>
@@ -4399,32 +4399,32 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.stage2_surgical_remark && !procedure.phase3_data && (
+        {!!procedure.stage2_surgical_remark && !procedure.phase3_data && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 3 Surgical Remarks</Text>
             <Text style={styles.specText}>{procedure.stage2_surgical_remark}</Text>
           </View>
         )}
 
-        {procedure.stage2_prosthetic_remark && !procedure.phase4_step1_data && (
+        {!!procedure.stage2_prosthetic_remark && !procedure.phase4_step1_data && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Phase 4 Prosthetic Remarks</Text>
             <Text style={styles.specText}>{procedure.stage2_prosthetic_remark}</Text>
           </View>
         )}
 
-        {procedure.rejection_reason && (
+        {!!procedure.rejection_reason && (
           <View style={[styles.section, styles.rejectionSection]}>
             <Text style={styles.sectionTitle}>Rejection Reason</Text>
             <Text style={styles.rejectionText}>{procedure.rejection_reason}</Text>
           </View>
         )}
 
-        {procedure.stage2_surgical_rejection_reason && (
+        {!!procedure.stage2_surgical_rejection_reason && (
           <View style={[styles.section, styles.rejectionSection]}>
             <Text style={styles.sectionTitle}>Phase 3 - Rejection Reason</Text>
             <Text style={styles.rejectionText}>{procedure.stage2_surgical_rejection_reason}</Text>
-            {procedure.stage2_surgical_rejected_by && (
+            {!!procedure.stage2_surgical_rejected_by && (
               <Text style={[styles.rejectionText, { marginTop: 4, fontStyle: 'italic' }]}>
                 Rejected by: {procedure.stage2_surgical_rejected_by}
               </Text>
@@ -4432,11 +4432,11 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.stage2_prosthetic_rejection_reason && (
+        {!!procedure.stage2_prosthetic_rejection_reason && (
           <View style={[styles.section, styles.rejectionSection]}>
             <Text style={styles.sectionTitle}>Phase 4 - Rejection Reason</Text>
             <Text style={styles.rejectionText}>{procedure.stage2_prosthetic_rejection_reason}</Text>
-            {procedure.stage2_prosthetic_rejected_by && (
+            {!!procedure.stage2_prosthetic_rejected_by && (
               <Text style={[styles.rejectionText, { marginTop: 4, fontStyle: 'italic' }]}>
                 Rejected by: {procedure.stage2_prosthetic_rejected_by}
               </Text>
@@ -4444,7 +4444,7 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {procedure.checklist && (
+        {!!procedure.checklist && (
           <>
             {renderChecklistSection('surgical', 'Phase 2: Surgical Protocol')}
             {renderChecklistSection('second_stage', 'Phase 3: Healing and Second Stage Surgery')}
@@ -4781,7 +4781,7 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Edit History Footer — tappable, opens full timeline modal. Visible to all viewers including students. */}
-        {procedure.last_edited_by && procedure.last_edited_at && (
+        {!!procedure.last_edited_by && procedure.last_edited_at && (
           <TouchableOpacity
             style={styles.editHistoryFooter}
             onPress={() => setShowEditHistory(true)}

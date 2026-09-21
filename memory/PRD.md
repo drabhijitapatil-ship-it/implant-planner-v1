@@ -7703,3 +7703,13 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - **Prosthetic Plan**: routes to Group B (`getWorkflowGroup` → 'B'); `IMPLANT_OVERDENTURE_PLAN_OPTIONS` = RP-5 + RP-4 groups only (fixed full-arch group excluded) via `getGroupBPlanOptions(procType)` used in Phase 1 and Phase 4 Step 1. All-on-X unchanged.
 - **Phase 2**: IOPA slot count = max(implant count, 2) with "Add IOPA Radiograph" button enabled.
 - Testing: backend 11/11 pytest (`tests/test_iter431_implant_overdenture.py`), report `/app/test_reports/iteration_431.json`.
+
+## Iteration 432 (Jun 2026) — Expo SDK 54 → 57 upgrade
+- **Why**: iOS Expo Go only supports the latest SDK (57); the SDK 54 project could not be opened on the user's iPhone.
+- **Versions**: expo ~57.0.24, react-native 0.86.3, react 19.2.3, expo-router ~57.0.22, reanimated 4.5.1, worklets 0.10.1, gesture-handler ~2.32, screens ~4.26, safe-area-context ~5.7, svg 15.15.4, webview 13.16.1, picker 2.11.4, TypeScript ~6.0.3, eslint-config-expo ~57, @expo/log-box added (peer of expo-router). All expo-* packages on 57.x.
+- **Icons**: `@expo/vector-icons` removed (deprecated in SDK 56, no longer a dep of `expo`). 105 files migrated to `@react-native-vector-icons/ionicons` (default import; `IoniconsIconName` type replaces `keyof typeof Ionicons.glyphMap`) and `@react-native-vector-icons/material-design-icons` (MaterialCommunityIcons). Both config plugins added to app.json.
+- **app.json**: added plugins expo-font, expo-image, expo-secure-store, expo-sharing, expo-status-bar, expo-web-browser (required by SDK 57 CLI), plus the two vector-icons plugins. No newArchEnabled/edgeToEdge keys existed.
+- **Code fixes**: `useRef<T>()` → `useRef<T | undefined>(undefined)` (React 19.2 types) in utils/usePushNotifications.ts. New `@expo/log-box` turns RN-web "Unexpected text node" warnings into blocking overlays → fixed ~80 `{stringField && (...)}` gates in procedures/[id].tsx and new-procedure.tsx with `!!`.
+- **Infra**: patches/@expo+cli patch renamed to 57.0.26 (applies cleanly). `expo-doctor` 20/21 (only pre-existing duplicate package-lock.json warning). Pre-existing TS type errors (~70) unchanged — not bundling blockers.
+- **Not tested**: native iOS/Android runtime (Expo Go SDK 57 / EAS build) — only web preview verified (iteration_432 frontend regression pass). User must redeploy + rebuild.
+- Git snapshot before upgrade: commit e5c1e8c8 ("Snapshot before Expo SDK 54→57 upgrade").

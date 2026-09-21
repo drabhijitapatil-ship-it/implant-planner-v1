@@ -2680,7 +2680,7 @@ export default function NewProcedureScreen() {
               }}
               required
             />
-            {formData.procedure_date && (() => {
+            {!!formData.procedure_date && (() => {
               const d = new Date(formData.procedure_date + 'T00:00:00');
               const dayOfWeek = d.getDay();
               if (dayOfWeek === 0) {
@@ -3496,7 +3496,7 @@ export default function NewProcedureScreen() {
           }}
           required
         />
-        {formData.procedure_date && (() => {
+        {!!formData.procedure_date && (() => {
           const d = new Date(formData.procedure_date + 'T00:00:00');
           const dayOfWeek = d.getDay(); // 0=Sun
           if (dayOfWeek === 0) {
