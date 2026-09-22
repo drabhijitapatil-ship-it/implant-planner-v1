@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import io
 import csv
 import json
+import hashlib
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
@@ -770,6 +771,7 @@ class ProcedureCreate(BaseModel):
     # implant_procedure_type == "Sinus Lift".
     sinus_lift_type: Optional[str] = Field("", max_length=50)
     bone_graft_material_details: Optional[str] = Field("", max_length=200)
+    overdenture_type: Optional[str] = Field("", max_length=60)
     # iter-387: surgical-approach cascade (Procedure Type → guided details)
     procedure_surgery_type: Optional[str] = Field("", max_length=60)
     guided_surgery_type: Optional[str] = Field("", max_length=40)
@@ -1046,6 +1048,7 @@ class Phase2Submit(BaseModel):
     # "17°", "30°", "45°", or free-text via Other).
     mua_placed: Optional[bool] = None
     mua_details: Optional[Dict[str, Dict[str, Any]]] = None
+    implant_traceability: Optional[Dict[str, Dict[str, Any]]] = None
     # Surgical procedure data
     anesthesia_adequate: Optional[str] = Field("Yes", max_length=10)  # Yes/No
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
@@ -1444,6 +1447,7 @@ async def _ensure_access_log_indexes() -> None:
         await db.access_logs.create_index("created_at", expireAfterSeconds=180 * 24 * 3600)
         await db.access_logs.create_index([("user_id", 1), ("created_at", -1)])
         await db.access_logs.create_index([("resource_type", 1), ("resource_id", 1), ("created_at", -1)])
+        await db.gtin_map.create_index([("gtin_key", 1)], unique=True)
     except Exception as e:
         logging.warning(f"[audit] index creation skipped: {e}")
 
@@ -5823,6 +5827,7 @@ PROCEDURE_TYPES = [
     "Partial Extraction Therapy",
     "Implant Placement with Guided Bone Regeneration",
     "Guided Surgery",
+    "Implant Overdenture",
     "All on 4",
     "All on 6",
     "All on X",
@@ -5843,6 +5848,9 @@ ZYGOMA_PTERYGOID_PROCEDURE_TYPES = {
 
 
 LOADING_TYPES = ["Immediate Loading", "Early Loading", "Delayed Loading"]
+# iter-Jun-2026: Implant Overdenture — mandatory sub-type.
+OVERDENTURE_TYPES = {"Implant Retained Overdenture", "Implant Supported Overdenture"}
+
 
 @api_router.get("/case-form-options")
 async def get_case_form_options():
@@ -6249,11 +6257,25 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
         "Single Conventional Implant", "Multiple Conventional Implants",
         "Immediate Implant", "Partial Extraction Therapy",
         "Implant Placement with Guided Bone Regeneration", "Guided Surgery",
-          "Sinus Lift",
+        # iter-328: Sinus Lift — maxillary-posterior-only adjunctive
+        # procedure that grafts bone via the sinus floor.
+        "Sinus Lift",
+        "Implant Overdenture",
         "All on 4", "All on 6", "All on X",
+        # iter-Feb-2026: Advanced maxillary implants (Zygoma & Pterygoid).
+        "Quad Zygoma Implants",
+        "Zygoma and Pterygoid Implants",
+        "Pterygoid and Conventional Implants",
+        "Zygoma and Conventional Implants",
+        "Zygoma, Pterygoid and Conventional Implants",
     ]
     if procedure.implant_procedure_type not in valid_procedure_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
+
+    # iter-Jun-2026: Implant Overdenture requires its Type of Overdenture.
+    if procedure.implant_procedure_type == "Implant Overdenture":
+        if procedure.overdenture_type not in OVERDENTURE_TYPES:
+            raise HTTPException(status_code=400, detail="Implant Overdenture requires a Type of Overdenture (Implant Retained or Implant Supported).")
 
     # iter-328: Sinus Lift gates — validate the cascading sub-fields and
     # restrict the tooth set to the maxillary posterior (14-17, 24-27).
@@ -9757,6 +9779,8 @@ async def get_consent_content(procedure_id: str, current_user: dict = Depends(ge
     if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
         proc_rows.append(["Type of Sinus Lift", procedure.get("sinus_lift_type") or "—"])
         proc_rows.append(["Bone Graft Material", procedure.get("bone_graft_material_details") or "—"])
+    if procedure.get("overdenture_type"):
+        proc_rows.append(["Type of Overdenture", procedure.get("overdenture_type")])
     for label, key in [
         ("Procedure Type (Surgical)", "procedure_surgery_type"),
         ("Type of Guided Surgery", "guided_surgery_type"),
@@ -10873,7 +10897,7 @@ def _maybe_convert_heic_to_jpeg(path: Path) -> Optional[bytes]:
         pillow_heif.register_heif_opener()
         from PIL import Image as _PIL_Image
         img = _PIL_Image.open(str(path)).convert("RGB")
-        buf = BytesIO()
+        buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=85)
         return buf.getvalue()
     except Exception as exc:
@@ -13289,6 +13313,44 @@ async def list_implant_catalog(current_user: dict = Depends(get_current_user)):
     return {"systems": docs}
 
 
+_TRACE_FIELDS = {"gtin", "lot", "serial", "expiry", "mfg_date", "raw", "model_brand",
+                 "model_system", "model_label", "label_photo", "label_photo_name", "source", "scanned_at"}
+
+
+class GtinMapIn(BaseModel):
+    gtin: str = Field(..., min_length=8, max_length=14, pattern=r"^\d+$")
+    brand: str = Field(..., min_length=1, max_length=100)
+    system: Optional[str] = Field("", max_length=150)
+    label: Optional[str] = Field("", max_length=200)
+
+
+@api_router.get("/gtin/{gtin}")
+async def lookup_gtin(gtin: str, current_user: dict = Depends(get_current_user)):
+    """iter-Jun-2026: GTIN → implant model learning map (first scan teaches it)."""
+    key = gtin.strip().lstrip("0")
+    doc = await db.gtin_map.find_one({"gtin_key": key}, {"_id": 0})
+    if not doc:
+        return {"found": False, "gtin": gtin}
+    await db.gtin_map.update_one({"gtin_key": key}, {"$inc": {"uses": 1}})
+    return {"found": True, **doc}
+
+
+@api_router.post("/gtin")
+async def save_gtin(body: GtinMapIn, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") == "nurse":
+        raise HTTPException(status_code=403, detail="Read-only access")
+    key = body.gtin.strip().lstrip("0")
+    doc = {
+        "gtin": body.gtin.strip(), "gtin_key": key, "brand": body.brand.strip(),
+        "system": (body.system or "").strip(), "label": (body.label or "").strip() or f"{body.brand.strip()} {(body.system or '').strip()}".strip(),
+        "learned_by": current_user.get("name") or current_user.get("full_name") or current_user.get("username"),
+        "learned_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.gtin_map.update_one({"gtin_key": key}, {"$set": doc, "$setOnInsert": {"uses": 0}}, upsert=True)
+    return {"ok": True, **doc}
+
+
+
 @api_router.get("/implant-catalog/compare")
 async def compare_implant_catalog(component_type: str, current_user: dict = Depends(get_current_user)):
     """
@@ -14650,7 +14712,7 @@ async def get_ai_chat_history(procedure_id: str, current_user: dict = Depends(ge
 
 
 # ── Smart Prosthetic Planner ───────────────────────────────────────────────
-FULL_ARCH_SET = {"All on 4", "All on 6", "All on X"}
+FULL_ARCH_SET = {"All on 4", "All on 6", "All on X", "Implant Overdenture"}
 ANTERIOR_TEETH = {11, 12, 13, 21, 22, 23}
 
 def _generate_smart_planner_report(procedure: dict) -> dict:
@@ -15257,6 +15319,8 @@ async def generate_case_report(
     if (procedure.get("implant_procedure_type") or "") == "Sinus Lift":
         add_field("Type of Sinus Lift", procedure.get("sinus_lift_type"))
         add_field("Bone Graft Material Details", procedure.get("bone_graft_material_details"))
+    if procedure.get("overdenture_type"):
+        add_field("Type of Overdenture", procedure.get("overdenture_type"))
     add_field("Loading Type", ", ".join(procedure.get("loading_type", [])))
     add_field("Prosthetic Plan", prosthetic)
     # iter-Feb-2026 / -C — Single-Conventional-Implant Phase 1 granular fields.
@@ -15700,6 +15764,20 @@ async def generate_case_report(
                     pos_label = f" (Position {implant_plans[i].get('position', '')})"
                 pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {t} Ncm"), ln=True)
             pdf.ln(2)
+        trace = p2.get("implant_traceability") or {}
+        if trace:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 7, safe("Implant Traceability (box codes):"), ln=True)
+            pdf.set_font("Helvetica", "", 9)
+            for pos, t in trace.items():
+                if not isinstance(t, dict):
+                    continue
+                pos_label = pos if not str(pos).startswith("idx") else f"Implant {int(str(pos)[3:]) + 1}"
+                parts = [f"Model: {t.get('model_label') or '-'}", f"GTIN: {t.get('gtin') or '-'}",
+                         f"Lot: {t.get('lot') or '-'}", f"Serial: {t.get('serial') or '-'}",
+                         f"Expiry: {t.get('expiry') or '-'}", f"Source: {'Scanned' if t.get('source') == 'scan' else 'Manual'}"]
+                pdf.multi_cell(0, 5, safe(f"  {pos_label}: " + " | ".join(parts)))
+            pdf.ln(2)    
         # iter-Jun-2026 (v11/v12): MUA placement (universal, per-implant).
         if p2.get("mua_placed") is not None:
             add_field("Multiunit Abutments (MUA) Placed", "Yes" if p2["mua_placed"] else "No")
@@ -17291,6 +17369,17 @@ async def submit_phase2(
         phase2_surgical_data["per_implant"] = phase2_data.per_implant_data
     if phase2_data.advanced_clinical is not None:
         phase2_surgical_data["advanced_clinical"] = phase2_data.advanced_clinical
+    if phase2_data.implant_traceability is not None:
+        trace = {}
+        for pos, t in phase2_data.implant_traceability.items():
+            if not isinstance(t, dict):
+                continue
+            rec = {k: (str(v)[:200] if v is not None else None) for k, v in t.items()
+                   if k in _TRACE_FIELDS}
+            rec["recorded_by"] = current_user.get("name") or current_user.get("full_name") or current_user.get("username")
+            rec["recorded_at"] = rec.get("scanned_at") or datetime.now(timezone.utc).isoformat()
+            trace[str(pos)[:20]] = rec
+        phase2_surgical_data["implant_traceability"] = trace
     if phase2_data.mua_placed is not None:
         phase2_surgical_data["mua_placed"] = phase2_data.mua_placed
     if phase2_data.mua_details is not None:
@@ -18159,7 +18248,7 @@ async def submit_phase4_step2(
         raise HTTPException(status_code=400, detail="Phase 4 Step 1 must be approved before submitting Step 2")
 
     # ── Validate IOPA / OPG / Prosthesis-photo uploads ──────────────────
-    full_arch_types = {"All on 4", "All on 6", "All on X"}
+    full_arch_types = {"All on 4", "All on 6", "All on X", "Implant Overdenture"}
     is_full_arch = procedure.get("implant_procedure_type") in full_arch_types
     if is_full_arch:
         if not data.opg_upload or not data.opg_upload.get("filename"):
@@ -18718,7 +18807,7 @@ async def complete_phase1_after_augmentation(
         "Single Conventional Implant", "Multiple Conventional Implants",
         "Immediate Implant", "Partial Extraction Therapy",
         "Implant Placement with Guided Bone Regeneration", "Guided Surgery",
-        "Sinus Lift", "All on 4", "All on 6", "All on X",
+        "Sinus Lift", "Implant Overdenture", "All on 4", "All on 6", "All on X",
     }
     if procedure.implant_procedure_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid implant procedure type: {procedure.implant_procedure_type}")
@@ -20013,7 +20102,7 @@ IMPLANT_INDICATIONS = {
     },
     "BioHorizons|Tapered Pro Conical RBT": {
         "indication": "Indicated for Immediate Placement and All on 4, All on 6, and All on X. Feature Camelog connection with Biohorizons Tapered Pro features.",
-        "indicated_procedures": ["Immediate Implant", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Immediate Implant", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "BioHorizons|Tapered Short Conical RBT": {
@@ -20069,6 +20158,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
@@ -20095,7 +20185,7 @@ IMPLANT_INDICATIONS = {
     },
     "B&B Dental|3P Long": {
         "indication": "Indicated for Pterygoid Implant.",
-        "indicated_procedures": ["All on 4", "All on 6", "All on X"],
+       "indicated_procedures": ["All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "B&B Dental|Wide Line": {
@@ -20163,6 +20253,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
@@ -20181,6 +20272,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
@@ -20228,17 +20320,17 @@ IMPLANT_INDICATIONS = {
     },
     "Adin|WP CloseFit": {
         "indication": "Adin CloseFit Wide Platform (Ø4.3 / Ø5.0) with Conical Hex / Morse-taper connection and OsseoFix™ surface. Wide ridges and posterior molars. D1-D4 with immediate function and All-on-X support.",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+       "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Adin|Touareg-OS": {
         "indication": "Adin Touareg-OS — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and OsseoFix™ (Calcium-Phosphate RBM) surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Adin|Touareg-S": {
         "indication": "Adin Touareg-S — tapered self-tapping bone-condensing 2-piece implant with Standard Internal Hex connection and AB/AE surface. D1-D4 with immediate function. Single, multi-unit and full-arch All-on-X.",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Adin|Swell": {
@@ -20254,7 +20346,7 @@ IMPLANT_INDICATIONS = {
     # ── Straumann BLT (iter-292, Feb 2026) ────────────────────────────────
     "Straumann|BLT Roxolid SLActive": {
         "indication": "Roxolid® Bone Level Tapered implant with SLActive® hydrophilic surface. D1-D4. Immediate / early / conventional. Soft bone & fresh extraction sockets — primary stability via apical taper. CrossFit® connection (SC Ø2.9 / NC Ø3.3 / RC Ø4.1 / RC Ø4.8).",
-        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X"],
+        "indicated_procedures": ["Single Conventional Implant", "Multiple Conventional Implants", "Immediate Implant", "Partial Extraction Therapy", "All on 4", "All on 6", "All on X", "Implant Overdenture"],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
     "Straumann|BLT Roxolid SLA": {
@@ -20318,6 +20410,7 @@ IMPLANT_INDICATIONS = {
             "All on 4",
             "All on 6",
             "All on X",
+            "Implant Overdenture",
         ],
         "indicated_bone_types": ["D1", "D2", "D3", "D4"],
     },
@@ -24433,7 +24526,7 @@ async def forum_upload_attachment(file: UploadFile = File(...), current_user: di
 async def serve_forum_upload(filename: str, token: Optional[str] = Query(None), current_user: dict = Depends(get_current_user_optional)):
     if not current_user and token:
         try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             uid = payload.get("sub")
             if uid:
                 current_user = await db.users.find_one({"id": uid}, {"_id": 0, "password": 0})
@@ -24927,7 +25020,7 @@ async def chat_upload(file: UploadFile = File(...), current_user: dict = Depends
 async def serve_chat_upload(filename: str, token: Optional[str] = Query(None), current_user: dict = Depends(get_current_user_optional)):
     if not current_user and token:
         try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             u = payload.get("sub")
             if u:
                 current_user = await db.users.find_one({"_id": ObjectId(u)} if ObjectId.is_valid(u) else {"id": u}, {"_id": 0, "password": 0})
@@ -27524,6 +27617,7 @@ _CMI_WEIGHTS = {
     "Immediate Implant": 2.0,
     "Sinus Lift": 2.5,
     "Implant Placement with Guided Bone Regeneration": 2.5,
+    "Implant Overdenture": 3.0,
     "All on 4": 3.5,
     "All on 6": 3.8,
     "All on X": 4.0,

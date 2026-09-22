@@ -6,10 +6,10 @@
  * them in. The backend endpoint enforces chronological order across
  * phases and rejects future dates; partial updates are allowed.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
-  Alert, Platform,
+  Alert, Platform, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -71,6 +71,16 @@ export default function TimelineBackfillScreen() {
   const [cases, setCases] = useState<TimelineCase[]>([]);
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  const filteredCases = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return cases;
+    return cases.filter(c =>
+      [c.patient_name, c.registration_number, c.student_name]
+        .some(v => (v || '').toLowerCase().includes(q))
+    );
+  }, [cases, search]);
 
   const canAccess = user?.role === 'implant_incharge' || user?.role === 'administrator';
 
@@ -160,7 +170,28 @@ export default function TimelineBackfillScreen() {
           <Text style={s.emptyText}>All caught up. No legacy cases need backfilling.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <>
+        <View style={s.searchBar}>
+          <Ionicons name="search" size={18} color="#94A3B8" />
+          <TextInput
+            style={s.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search patient, reg no. or student"
+            placeholderTextColor="#94A3B8"
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            clearButtonMode="never"
+            testID="backfill-search-input"
+          />
+          {!!search && (
+            <TouchableOpacity onPress={() => setSearch('')} accessibilityLabel="Clear search" testID="backfill-search-clear">
+              <Ionicons name="close-circle" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
           {/* Stats summary banner */}
           <View style={s.statsCard}>
             <View style={s.statsIconContainer}>
@@ -169,7 +200,9 @@ export default function TimelineBackfillScreen() {
             <View style={{ flex: 1 }}>
               <Text style={s.statsTitle}>Backfill Checklist</Text>
               <Text style={s.statsSub}>
-                {cases.length} case{cases.length === 1 ? '' : 's'} require clinical date updates.
+                {search.trim()
+                  ? `${filteredCases.length} of ${cases.length} case${cases.length === 1 ? '' : 's'} match your search.`
+                  : `${cases.length} case${cases.length === 1 ? '' : 's'} require clinical date updates.`}
               </Text>
             </View>
             <View style={s.statsBadge}>
@@ -177,7 +210,14 @@ export default function TimelineBackfillScreen() {
             </View>
           </View>
 
-          {cases.map(c => (
+          {filteredCases.length === 0 && (
+            <View style={s.noResults}>
+              <Ionicons name="search-outline" size={36} color="#CBD5E1" />
+              <Text style={s.noResultsText}>No patients match &ldquo;{search.trim()}&rdquo;.</Text>
+            </View>
+          )}
+
+          {filteredCases.map(c => (
             <View key={c.id} style={s.card} data-testid={`backfill-card-${c.id}`}>
               {/* Card Header */}
               <TouchableOpacity
@@ -286,6 +326,7 @@ export default function TimelineBackfillScreen() {
             </View>
           ))}
         </ScrollView>
+        </>
       )}
     </SafeAreaView>
   );
@@ -307,6 +348,18 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   emptyText: { color: '#475569', fontSize: 14, fontWeight: '600', marginTop: 14, textAlign: 'center' },
   
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12,
+    backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  searchInput: {
+    flex: 1, fontSize: 14, color: '#0F172A',
+    paddingVertical: Platform.OS === 'ios' ? 11 : 8,
+  },
+  noResults: { alignItems: 'center', paddingVertical: 32 },
+  noResultsText: { color: '#64748B', fontSize: 13, fontWeight: '600', marginTop: 10, textAlign: 'center' },
+
   statsCard: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF',
     borderRadius: 12, padding: 12, marginBottom: 16,

@@ -51,6 +51,7 @@ import {
   printConsentTemplate,
 } from "../../utils/consentPdf";
 import BackButton from "../../components/BackButton";
+import ImplantTraceabilityCard from "../../components/ImplantTraceabilityCard";
 import RadiographThumb from "../../components/RadiographThumb";
 import ReferCaseButton from "../../components/ReferCaseButton";
 import {
@@ -100,7 +101,7 @@ import ContributionTimelineCard from "../../components/ContributionTimelineCard"
 import FollowUpSection from "../../components/FollowUpSection";
 import AugmentationSection from "../../components/AugmentationSection";
 import AugmentationPhase2Review from "../../components/AugmentationPhase2Review";
-import AddImplantSection from '../../components/AddImplantSection';
+import AddImplantSection from "../../components/AddImplantSection";
 // Treatment Complete banner above the timeline.
 import ImplantLifecycleTimeline from "../../components/ImplantLifecycleTimeline";
 import ExportPrintMenu from "../../components/ExportPrintMenu";
@@ -228,6 +229,9 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
   implant_procedure_type: { options: PROCEDURE_TYPES },
   // iter-307: in-place edit for Number-of-Implants sub-choice
   num_implants: { options: ["Single Implant", "Multiple Implants"] },
+  overdenture_type: {
+    options: ["Implant Retained Overdenture", "Implant Supported Overdenture"],
+  },
   arch: { options: ["Maxillary", "Mandibular"] },
   loading_type: { options: LOADING_TYPES, multi: true },
 
@@ -508,7 +512,7 @@ export default function ProcedureDetailScreen() {
 
   const getPhaseBadge = (
     phaseKey: "p1" | "p2" | "p3" | "p4",
-    status: string | undefined
+    status: string | undefined,
   ): { label: string; color: string; bg: string } => {
     const s = status || "";
     if (phaseKey === "p1") {
@@ -519,7 +523,22 @@ export default function ProcedureDetailScreen() {
       return { label: "Approved ✓", color: "#166534", bg: "#DCFCE7" };
     }
     if (phaseKey === "p2") {
-      if (!["phase1_approved", "pending_phase2", "phase2_submitted", "phase2_approved", "pending_phase3", "phase3_approved", "pending_phase4_step1", "phase4_step1_approved", "pending_phase4_step2", "phase4_step2_approved", "completed", "treatment_ended"].includes(s))
+      if (
+        ![
+          "phase1_approved",
+          "pending_phase2",
+          "phase2_submitted",
+          "phase2_approved",
+          "pending_phase3",
+          "phase3_approved",
+          "pending_phase4_step1",
+          "phase4_step1_approved",
+          "pending_phase4_step2",
+          "phase4_step2_approved",
+          "completed",
+          "treatment_ended",
+        ].includes(s)
+      )
         return { label: "Not Started", color: "#64748B", bg: "#F1F5F9" };
       if (["phase1_approved", "pending_phase2", "phase2_submitted"].includes(s))
         return { label: "In Progress", color: "#0F766E", bg: "#F0FDFA" };
@@ -528,7 +547,18 @@ export default function ProcedureDetailScreen() {
       return { label: "Approved ✓", color: "#166534", bg: "#DCFCE7" };
     }
     if (phaseKey === "p3") {
-      if (!["phase3_submitted", "phase3_approved", "pending_phase4_step1", "phase4_step1_approved", "pending_phase4_step2", "phase4_step2_approved", "completed", "treatment_ended"].includes(s)) {
+      if (
+        ![
+          "phase3_submitted",
+          "phase3_approved",
+          "pending_phase4_step1",
+          "phase4_step1_approved",
+          "pending_phase4_step2",
+          "phase4_step2_approved",
+          "completed",
+          "treatment_ended",
+        ].includes(s)
+      ) {
         if (["phase2_approved", "pending_phase3"].includes(s))
           return { label: "In Progress", color: "#15803D", bg: "#F0FDF4" };
         return { label: "Not Started", color: "#64748B", bg: "#F1F5F9" };
@@ -538,7 +568,14 @@ export default function ProcedureDetailScreen() {
     // p4
     if (["completed", "treatment_ended"].includes(s))
       return { label: "Completed ✓", color: "#166534", bg: "#DCFCE7" };
-    if (["pending_phase4_step1", "phase4_step1_approved", "pending_phase4_step2", "phase4_step2_approved"].includes(s))
+    if (
+      [
+        "pending_phase4_step1",
+        "phase4_step1_approved",
+        "pending_phase4_step2",
+        "phase4_step2_approved",
+      ].includes(s)
+    )
       return { label: "In Progress", color: "#C2410C", bg: "#FFF7ED" };
     return { label: "Not Started", color: "#64748B", bg: "#F1F5F9" };
   };
@@ -1777,106 +1814,112 @@ export default function ProcedureDetailScreen() {
                     const phaseNum = phaseToNum[phaseLabel];
                     if (!phaseNum) return; // 'Done' chip is non-scrolling
                     // Ensure the target phase is expanded before scrolling
-                    const anchorKey = `p${phaseNum}` as "p1" | "p2" | "p3" | "p4";
+                    const anchorKey = `p${phaseNum}` as
+                      | "p1"
+                      | "p2"
+                      | "p3"
+                      | "p4";
                     setCollapsedPhases((prev) => {
                       if (prev[anchorKey]) {
-                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                        LayoutAnimation.configureNext(
+                          LayoutAnimation.Presets.easeInEaseOut,
+                        );
                         return { ...prev, [anchorKey]: false };
                       }
                       return prev;
                     });
                     // Delay scroll slightly to let LayoutAnimation expand the content
                     const doScroll = () => {
-                    if (
-                      Platform.OS === "web" &&
-                      typeof document !== "undefined"
-                    ) {
-                      let pillEl = (ev && ev.currentTarget) as
-                        | HTMLElement
-                        | undefined;
-                      if (!pillEl || !(pillEl instanceof HTMLElement)) {
-                        pillEl =
-                          (document.querySelector(
-                            '[data-testid="case-progress-indicator"]',
-                          ) as HTMLElement | null) || undefined;
-                      }
-                      let scrollEl: HTMLElement | null = null;
-                      if (pillEl) {
-                        let p: HTMLElement | null = pillEl.parentElement;
-                        while (p && p !== document.body) {
-                          const s = window.getComputedStyle(p);
-                          if (
-                            (s.overflowY === "auto" ||
-                              s.overflowY === "scroll") &&
-                            p.scrollHeight > p.clientHeight + 8
-                          ) {
-                            scrollEl = p;
-                            break;
-                          }
-                          p = p.parentElement;
+                      if (
+                        Platform.OS === "web" &&
+                        typeof document !== "undefined"
+                      ) {
+                        let pillEl = (ev && ev.currentTarget) as
+                          | HTMLElement
+                          | undefined;
+                        if (!pillEl || !(pillEl instanceof HTMLElement)) {
+                          pillEl =
+                            (document.querySelector(
+                              '[data-testid="case-progress-indicator"]',
+                            ) as HTMLElement | null) || undefined;
                         }
-                      }
-                      const sectionEl = document.querySelector(
-                        `[data-testid="phase${phaseNum}-full-data-section"]`,
-                      ) as HTMLElement | null;
-                      if (scrollEl && sectionEl) {
-                        const sRect = scrollEl.getBoundingClientRect();
-                        const tRect = sectionEl.getBoundingClientRect();
-                        const top = Math.max(
-                          0,
-                          tRect.top -
-                            sRect.top +
-                            scrollEl.scrollTop -
-                            HEADER_OFFSET,
-                        );
-                        const start = scrollEl.scrollTop;
-                        const dist = top - start;
-                        if (Math.abs(dist) < 2) return;
-                        const duration = Math.min(
-                          550,
-                          250 + Math.abs(dist) * 0.25,
-                        );
-                        const t0 =
-                          typeof performance !== "undefined"
-                            ? performance.now()
-                            : Date.now();
-                        const ease = (k: number) => 1 - Math.pow(1 - k, 3);
-                        const step = () => {
-                          const now =
+                        let scrollEl: HTMLElement | null = null;
+                        if (pillEl) {
+                          let p: HTMLElement | null = pillEl.parentElement;
+                          while (p && p !== document.body) {
+                            const s = window.getComputedStyle(p);
+                            if (
+                              (s.overflowY === "auto" ||
+                                s.overflowY === "scroll") &&
+                              p.scrollHeight > p.clientHeight + 8
+                            ) {
+                              scrollEl = p;
+                              break;
+                            }
+                            p = p.parentElement;
+                          }
+                        }
+                        const sectionEl = document.querySelector(
+                          `[data-testid="phase${phaseNum}-full-data-section"]`,
+                        ) as HTMLElement | null;
+                        if (scrollEl && sectionEl) {
+                          const sRect = scrollEl.getBoundingClientRect();
+                          const tRect = sectionEl.getBoundingClientRect();
+                          const top = Math.max(
+                            0,
+                            tRect.top -
+                              sRect.top +
+                              scrollEl.scrollTop -
+                              HEADER_OFFSET,
+                          );
+                          const start = scrollEl.scrollTop;
+                          const dist = top - start;
+                          if (Math.abs(dist) < 2) return;
+                          const duration = Math.min(
+                            550,
+                            250 + Math.abs(dist) * 0.25,
+                          );
+                          const t0 =
                             typeof performance !== "undefined"
                               ? performance.now()
                               : Date.now();
-                          const k = Math.min(1, (now - t0) / duration);
-                          scrollEl.scrollTop = start + dist * ease(k);
-                          if (k < 1) requestAnimationFrame(step);
-                        };
-                        if (typeof requestAnimationFrame !== "undefined")
-                          requestAnimationFrame(step);
-                        else scrollEl.scrollTop = top;
-                        return;
+                          const ease = (k: number) => 1 - Math.pow(1 - k, 3);
+                          const step = () => {
+                            const now =
+                              typeof performance !== "undefined"
+                                ? performance.now()
+                                : Date.now();
+                            const k = Math.min(1, (now - t0) / duration);
+                            scrollEl.scrollTop = start + dist * ease(k);
+                            if (k < 1) requestAnimationFrame(step);
+                          };
+                          if (typeof requestAnimationFrame !== "undefined")
+                            requestAnimationFrame(step);
+                          else scrollEl.scrollTop = top;
+                          return;
+                        }
+                        if (sectionEl) {
+                          try {
+                            sectionEl.scrollIntoView({
+                              behavior: "smooth",
+                              block: "start",
+                            });
+                          } catch {}
+                          return;
+                        }
                       }
-                      if (sectionEl) {
-                        try {
-                          sectionEl.scrollIntoView({
-                            behavior: "smooth",
-                            block: "start",
-                          });
-                        } catch {}
-                        return;
+                      const anchorKey2 = `p${phaseNum}` as
+                        | "p1"
+                        | "p2"
+                        | "p3"
+                        | "p4";
+                      const y = phaseAnchors.current[anchorKey2];
+                      if (typeof y === "number") {
+                        mainScrollRef.current?.scrollTo({
+                          y: Math.max(0, y - HEADER_OFFSET),
+                          animated: true,
+                        });
                       }
-                    }
-                    const anchorKey2 = `p${phaseNum}` as
-                      | "p1"
-                      | "p2"
-                      | "p3"
-                      | "p4";
-                    const y = phaseAnchors.current[anchorKey2];
-                    if (typeof y === "number") {
-                      mainScrollRef.current?.scrollTo({
-                        y: Math.max(0, y - HEADER_OFFSET),
-                        animated: true,
-                      });
-                    }
                     }; // end doScroll
                     setTimeout(doScroll, 350);
                   };
@@ -3143,8 +3186,12 @@ export default function ProcedureDetailScreen() {
                     .map((d) => new Date(d))
                     .filter((d) => !isNaN(d.getTime()));
                   if (dates.length < 2) return null;
-                  const min = new Date(Math.min(...dates.map((d) => d.getTime())));
-                  const max = new Date(Math.max(...dates.map((d) => d.getTime())));
+                  const min = new Date(
+                    Math.min(...dates.map((d) => d.getTime())),
+                  );
+                  const max = new Date(
+                    Math.max(...dates.map((d) => d.getTime())),
+                  );
                   const days = Math.max(
                     0,
                     Math.round(
@@ -3164,7 +3211,9 @@ export default function ProcedureDetailScreen() {
                       data-testid="treatment-duration-pill"
                     >
                       <Ionicons name="time-outline" size={12} color="#1565C0" />
-                      <Text style={styles.durationPillText}>Total: {label}</Text>
+                      <Text style={styles.durationPillText}>
+                        Total: {label}
+                      </Text>
                     </View>
                   );
                 })()}
@@ -3671,7 +3720,9 @@ export default function ProcedureDetailScreen() {
                         styles.consentActionBtn,
                         styles.consentActionBtnEsign,
                       ]}
-                      onPress={() => router.push(`/procedures/consent-sign/${id}` as any)}
+                      onPress={() =>
+                        router.push(`/procedures/consent-sign/${id}` as any)
+                      }
                       activeOpacity={0.85}
                       testID="consent-esign-btn"
                     >
@@ -4304,8 +4355,16 @@ export default function ProcedureDetailScreen() {
 
             {/* ── Phase Accordion Toolbar (Expand All / Collapse All) ──────── */}
             {(() => {
-              const anyExpanded = !collapsedPhases.p1 || !collapsedPhases.p2 || !collapsedPhases.p3 || !collapsedPhases.p4;
-              const openCount = (!collapsedPhases.p1 ? 1 : 0) + (!collapsedPhases.p2 ? 1 : 0) + (!collapsedPhases.p3 ? 1 : 0) + (!collapsedPhases.p4 ? 1 : 0);
+              const anyExpanded =
+                !collapsedPhases.p1 ||
+                !collapsedPhases.p2 ||
+                !collapsedPhases.p3 ||
+                !collapsedPhases.p4;
+              const openCount =
+                (!collapsedPhases.p1 ? 1 : 0) +
+                (!collapsedPhases.p2 ? 1 : 0) +
+                (!collapsedPhases.p3 ? 1 : 0) +
+                (!collapsedPhases.p4 ? 1 : 0);
               return (
                 <View
                   style={{
@@ -4318,12 +4377,41 @@ export default function ProcedureDetailScreen() {
                     marginBottom: 2,
                   }}
                 >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: "#64748B", letterSpacing: 0.6, textTransform: "uppercase" }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "700",
+                        color: "#64748B",
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                      }}
+                    >
                       Procedure Phases
                     </Text>
-                    <View style={{ backgroundColor: "#F1F5F9", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#E2E8F0" }}>
-                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#475569" }}>
+                    <View
+                      style={{
+                        backgroundColor: "#F1F5F9",
+                        paddingHorizontal: 7,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                        borderWidth: 1,
+                        borderColor: "#E2E8F0",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "600",
+                          color: "#475569",
+                        }}
+                      >
                         {openCount}/4 Open
                       </Text>
                     </View>
@@ -4342,14 +4430,22 @@ export default function ProcedureDetailScreen() {
                       borderWidth: 1,
                       borderColor: "#E2E8F0",
                     }}
-                    accessibilityLabel={anyExpanded ? "Collapse all phases" : "Expand all phases"}
+                    accessibilityLabel={
+                      anyExpanded ? "Collapse all phases" : "Expand all phases"
+                    }
                   >
                     <Ionicons
                       name={anyExpanded ? "contract-outline" : "expand-outline"}
                       size={13}
                       color="#64748B"
                     />
-                    <Text style={{ fontSize: 11.5, fontWeight: "600", color: "#475569" }}>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: "600",
+                        color: "#475569",
+                      }}
+                    >
                       {anyExpanded ? "Collapse All" : "Expand All"}
                     </Text>
                   </TouchableOpacity>
@@ -4401,14 +4497,31 @@ export default function ProcedureDetailScreen() {
                         marginRight: 12,
                       }}
                     >
-                      <Ionicons name="document-text-outline" size={18} color="#2563EB" />
+                      <Ionicons
+                        name="document-text-outline"
+                        size={18}
+                        color="#2563EB"
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                      <Text
+                        style={{
+                          fontSize: 14.5,
+                          fontWeight: "700",
+                          color: "#0F172A",
+                          letterSpacing: 0.2,
+                        }}
+                      >
                         Phase 1 — Diagnosis & Planning
                       </Text>
-                      <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
-                        {procedure.patient_name || "Patient Plan"}{procedure.implant_site ? ` · Site ${procedure.implant_site}` : ""}
+                      <Text
+                        style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}
+                        numberOfLines={1}
+                      >
+                        {procedure.patient_name || "Patient Plan"}
+                        {procedure.implant_site
+                          ? ` · Site ${procedure.implant_site}`
+                          : ""}
                       </Text>
                     </View>
                     <View
@@ -4420,7 +4533,15 @@ export default function ProcedureDetailScreen() {
                         marginRight: 8,
                       }}
                     >
-                      <Text style={{ fontSize: 11, fontWeight: "700", color: badge.color }}>{badge.label}</Text>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "700",
+                          color: badge.color,
+                        }}
+                      >
+                        {badge.label}
+                      </Text>
                     </View>
                     <Ionicons
                       name={isOpen ? "chevron-up" : "chevron-down"}
@@ -4440,7 +4561,9 @@ export default function ProcedureDetailScreen() {
                           phaseAnchors.current["p1"] = e.nativeEvent.layout.y;
                         }}
                       >
-                        <Text style={styles.sectionTitle}>Patient Information</Text>
+                        <Text style={styles.sectionTitle}>
+                          Patient Information
+                        </Text>
                         <InfoRow
                           icon="person"
                           label="Patient Name"
@@ -4459,2389 +4582,2633 @@ export default function ProcedureDetailScreen() {
                       </View>
                       <PatientHistoryStrip procedure={procedure} />
 
-        {/* iter-Jun-2026 (v9, Chunk 2): Zygoma / Pterygoid Phase 1 read-only
+                      {/* iter-Jun-2026 (v9, Chunk 2): Zygoma / Pterygoid Phase 1 read-only
             review — visible to all roles (student / supervisor / in-charge /
             admin) so everyone reviews the same clinical data. Renders nothing
             when procedure_type is not a Zygoma/Pterygoid variant. */}
-        <ZygomaPterygoidPhase1Review procedure={procedure} />
+                      <ZygomaPterygoidPhase1Review procedure={procedure} />
 
-        {/* iter-Jun-2026 (v13, Chunk B, Ask 3): Advanced Clinical (Zygoma) is
+                      {/* iter-Jun-2026 (v13, Chunk B, Ask 3): Advanced Clinical (Zygoma) is
             now a standalone card on the Case Details page. It is NOT gated by
             Phase 2 submission — students can fill it independently, and it
             carries its own "Send for Approval" workflow (30-day follow-up). */}
-        <AdvancedClinicalCard procedure={procedure} onChanged={loadProcedure} currentUserRole={user?.role} />
+                      <AdvancedClinicalCard
+                        procedure={procedure}
+                        onChanged={loadProcedure}
+                        currentUserRole={user?.role}
+                      />
 
-        <AddImplantSection procedure={procedure} onChanged={loadProcedure} />
+                      <AddImplantSection
+                        procedure={procedure}
+                        onChanged={loadProcedure}
+                      />
 
-            <ClinicalEvaluationBanner procedureId={String(id)} />
+                      <ClinicalEvaluationBanner procedureId={String(id)} />
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Staff</Text>
-              {/* Once a referral-assign has happened (original_student_id
+                      <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Staff</Text>
+                        {/* Once a referral-assign has happened (original_student_id
                   backed up), show the originating and receiving department's
                   teams as two separate cards instead of one merged list —
                   a referred case has two distinct staff teams, not one. */}
-              {procedure.original_student_id ? (
-                <>
-                  <View
-                    style={{
-                      backgroundColor: "#F8FAFC",
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: "#E2E8F0",
-                      padding: 12,
-                      marginBottom: 10,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "700",
-                        color: "#334155",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {(activeReferral || procedure?.active_referral)
-                        ?.from_department_name || "Originating Department"}
-                    </Text>
-                    {!!procedure.original_student_name && (
-                      <InfoRow
-                        icon="school"
-                        label="Student"
-                        value={procedure.original_student_name}
-                      />
-                    )}
-                    {!!procedure.original_supervisor_name && (
-                      <InfoRow
-                        icon="school"
-                        label="Supervisor"
-                        value={procedure.original_supervisor_name}
-                      />
-                    )}
-                    {!!procedure.implant_incharge_name && (
-                      <InfoRow
-                        icon="medkit"
-                        label="Implant Incharge"
-                        value={procedure.implant_incharge_name}
-                      />
-                    )}
-                  </View>
-                  <View
-                    style={{
-                      backgroundColor: "#EFF6FF",
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: "#BFDBFE",
-                      padding: 12,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "700",
-                        color: "#1D4ED8",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {(activeReferral || procedure?.active_referral)
-                        ?.to_department_name || "Referred Department"}
-                    </Text>
-                    {!!procedure.student_name && (
-                      <InfoRow
-                        icon="school"
-                        label="Student"
-                        value={procedure.student_name}
-                      />
-                    )}
-                    {!!procedure.supervisor_name && (
-                      <InfoRow
-                        icon="school"
-                        label="Supervisor"
-                        value={procedure.supervisor_name}
-                      />
-                    )}
-                    {!!procedure.assigned_incharge_name && (
-                      <InfoRow
-                        icon="medkit"
-                        label="Implant Incharge"
-                        value={procedure.assigned_incharge_name}
-                      />
-                    )}
-                  </View>
-                </>
-              ) : user?.role === "nurse" ? (
-                // Nurse view — keep existing full-staff render, unchanged.
-                <>
-                  {procedure.original_student_name || procedure.student_name ? (
-                    <InfoRow
-                      icon="school"
-                      label="Student"
-                      value={
-                        procedure.original_student_name ||
-                        procedure.student_name
-                      }
-                    />
-                  ) : procedure.created_by_name &&
-                    procedure.created_by_role !== "student" ? (
-                    <InfoRow
-                      icon="person"
-                      label={
-                        procedure.created_by_role === "supervisor"
-                          ? "Operator (Supervisor)"
-                          : procedure.created_by_role === "implant_incharge"
-                            ? "Operator (Implant Incharge)"
-                            : "Operator"
-                      }
-                      value={procedure.created_by_name}
-                    />
-                  ) : null}
-                  <InfoRow
-                    icon="school"
-                    label="Supervisor"
-                    value={
-                      procedure.original_supervisor_name ||
-                      procedure.supervisor_name
-                    }
-                  />
-                  <InfoRow
-                    icon="medkit"
-                    label="Implant Incharge"
-                    value={procedure.implant_incharge_name}
-                  />
-                </>
-              ) : procedure.created_by_role === "implant_incharge" ? (
-                // In-Charge scheduled the case — show only Implant In-Charge.
-                <InfoRow
-                  icon="medkit"
-                  label="Implant Incharge"
-                  value={
-                    procedure.implant_incharge_name || procedure.created_by_name
-                  }
-                />
-              ) : procedure.created_by_role === "supervisor" ? (
-                // Supervisor scheduled the case — show Supervisor + Implant In-Charge only.
-                <>
-                  <InfoRow
-                    icon="school"
-                    label="Supervisor"
-                    value={
-                      procedure.original_supervisor_name ||
-                      procedure.supervisor_name ||
-                      procedure.created_by_name
-                    }
-                  />
-                  <InfoRow
-                    icon="medkit"
-                    label="Implant Incharge"
-                    value={procedure.implant_incharge_name}
-                  />
-                </>
-              ) : (
-                // Student-scheduled (default) — show Student + Supervisor + Implant In-Charge.
-                <>
-                  {procedure.original_student_name || procedure.student_name ? (
-                    <InfoRow
-                      icon="school"
-                      label="Student"
-                      value={
-                        procedure.original_student_name ||
-                        procedure.student_name
-                      }
-                    />
-                  ) : null}
-                  <InfoRow
-                    icon="school"
-                    label="Supervisor"
-                    value={
-                      procedure.original_supervisor_name ||
-                      procedure.supervisor_name
-                    }
-                  />
-                  <InfoRow
-                    icon="medkit"
-                    label="Implant Incharge"
-                    value={procedure.implant_incharge_name}
-                  />
-                </>
-              )}
-            </View>
+                        {procedure.original_student_id ? (
+                          <>
+                            <View
+                              style={{
+                                backgroundColor: "#F8FAFC",
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: "#E2E8F0",
+                                padding: 12,
+                                marginBottom: 10,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: "700",
+                                  color: "#334155",
+                                  marginBottom: 6,
+                                }}
+                              >
+                                {(activeReferral || procedure?.active_referral)
+                                  ?.from_department_name ||
+                                  "Originating Department"}
+                              </Text>
+                              {!!procedure.original_student_name && (
+                                <InfoRow
+                                  icon="school"
+                                  label="Student"
+                                  value={procedure.original_student_name}
+                                />
+                              )}
+                              {!!procedure.original_supervisor_name && (
+                                <InfoRow
+                                  icon="school"
+                                  label="Supervisor"
+                                  value={procedure.original_supervisor_name}
+                                />
+                              )}
+                              {!!procedure.implant_incharge_name && (
+                                <InfoRow
+                                  icon="medkit"
+                                  label="Implant Incharge"
+                                  value={procedure.implant_incharge_name}
+                                />
+                              )}
+                            </View>
+                            <View
+                              style={{
+                                backgroundColor: "#EFF6FF",
+                                borderRadius: 12,
+                                borderWidth: 1,
+                                borderColor: "#BFDBFE",
+                                padding: 12,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: "700",
+                                  color: "#1D4ED8",
+                                  marginBottom: 6,
+                                }}
+                              >
+                                {(activeReferral || procedure?.active_referral)
+                                  ?.to_department_name || "Referred Department"}
+                              </Text>
+                              {!!procedure.student_name && (
+                                <InfoRow
+                                  icon="school"
+                                  label="Student"
+                                  value={procedure.student_name}
+                                />
+                              )}
+                              {!!procedure.supervisor_name && (
+                                <InfoRow
+                                  icon="school"
+                                  label="Supervisor"
+                                  value={procedure.supervisor_name}
+                                />
+                              )}
+                              {!!procedure.assigned_incharge_name && (
+                                <InfoRow
+                                  icon="medkit"
+                                  label="Implant Incharge"
+                                  value={procedure.assigned_incharge_name}
+                                />
+                              )}
+                            </View>
+                          </>
+                        ) : user?.role === "nurse" ? (
+                          // Nurse view — keep existing full-staff render, unchanged.
+                          <>
+                            {procedure.original_student_name ||
+                            procedure.student_name ? (
+                              <InfoRow
+                                icon="school"
+                                label="Student"
+                                value={
+                                  procedure.original_student_name ||
+                                  procedure.student_name
+                                }
+                              />
+                            ) : procedure.created_by_name &&
+                              procedure.created_by_role !== "student" ? (
+                              <InfoRow
+                                icon="person"
+                                label={
+                                  procedure.created_by_role === "supervisor"
+                                    ? "Operator (Supervisor)"
+                                    : procedure.created_by_role ===
+                                        "implant_incharge"
+                                      ? "Operator (Implant Incharge)"
+                                      : "Operator"
+                                }
+                                value={procedure.created_by_name}
+                              />
+                            ) : null}
+                            <InfoRow
+                              icon="school"
+                              label="Supervisor"
+                              value={
+                                procedure.original_supervisor_name ||
+                                procedure.supervisor_name
+                              }
+                            />
+                            <InfoRow
+                              icon="medkit"
+                              label="Implant Incharge"
+                              value={procedure.implant_incharge_name}
+                            />
+                          </>
+                        ) : procedure.created_by_role === "implant_incharge" ? (
+                          // In-Charge scheduled the case — show only Implant In-Charge.
+                          <InfoRow
+                            icon="medkit"
+                            label="Implant Incharge"
+                            value={
+                              procedure.implant_incharge_name ||
+                              procedure.created_by_name
+                            }
+                          />
+                        ) : procedure.created_by_role === "supervisor" ? (
+                          // Supervisor scheduled the case — show Supervisor + Implant In-Charge only.
+                          <>
+                            <InfoRow
+                              icon="school"
+                              label="Supervisor"
+                              value={
+                                procedure.original_supervisor_name ||
+                                procedure.supervisor_name ||
+                                procedure.created_by_name
+                              }
+                            />
+                            <InfoRow
+                              icon="medkit"
+                              label="Implant Incharge"
+                              value={procedure.implant_incharge_name}
+                            />
+                          </>
+                        ) : (
+                          // Student-scheduled (default) — show Student + Supervisor + Implant In-Charge.
+                          <>
+                            {procedure.original_student_name ||
+                            procedure.student_name ? (
+                              <InfoRow
+                                icon="school"
+                                label="Student"
+                                value={
+                                  procedure.original_student_name ||
+                                  procedure.student_name
+                                }
+                              />
+                            ) : null}
+                            <InfoRow
+                              icon="school"
+                              label="Supervisor"
+                              value={
+                                procedure.original_supervisor_name ||
+                                procedure.supervisor_name
+                              }
+                            />
+                            <InfoRow
+                              icon="medkit"
+                              label="Implant Incharge"
+                              value={procedure.implant_incharge_name}
+                            />
+                          </>
+                        )}
+                      </View>
 
-            <View style={styles.section}>
-              <View style={resStyles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>Schedule</Text>
-                {(() => {
-                  // iter-269: surface a Reschedule pill in the Schedule
-                  // section header when the case is still pre-Phase-2 AND
-                  // the current user is either the creator or faculty.
-                  const eligibleStatuses = new Set([
-                    "draft",
-                    "pending_phase1",
-                    "rejected_phase1",
-                    "phase1_approved",
-                  ]);
-                  const isCreator =
-                    procedure.created_by_id === user?.id ||
-                    procedure.student_id === user?.id;
-                  const isFaculty =
-                    user?.role === "supervisor" ||
-                    user?.role === "implant_incharge" ||
-                    user?.role === "administrator" ||
-                    user?.role === "super_admin";
-                  if (!eligibleStatuses.has(procedure.status)) return null;
-                  if (!(isCreator || isFaculty)) return null;
-                  return (
-                    <TouchableOpacity
-                      style={resStyles.rescheduleBtn}
-                      onPress={() => setShowReschedule(true)}
-                      testID="open-reschedule-btn"
-                      data-testid="open-reschedule-btn"
-                    >
-                      <Ionicons
-                        name="calendar-outline"
-                        size={14}
-                        color="#1565C0"
-                      />
-                      <Text style={resStyles.rescheduleTxt}>Reschedule</Text>
-                    </TouchableOpacity>
-                  );
-                })()}
-              </View>
-              <InfoRow
-                icon="calendar"
-                label="Date"
-                value={
-                  procedure.procedure_date
-                    ? format(new Date(procedure.procedure_date), "MMM dd, yyyy")
-                    : "N/A"
-                }
-              />
-              <InfoRow
-                icon="time"
-                label="Time"
-                value={procedure.procedure_time}
-              />
+                      <View style={styles.section}>
+                        <View style={resStyles.sectionHeaderRow}>
+                          <Text style={styles.sectionTitle}>Schedule</Text>
+                          {(() => {
+                            // iter-269: surface a Reschedule pill in the Schedule
+                            // section header when the case is still pre-Phase-2 AND
+                            // the current user is either the creator or faculty.
+                            const eligibleStatuses = new Set([
+                              "draft",
+                              "pending_phase1",
+                              "rejected_phase1",
+                              "phase1_approved",
+                            ]);
+                            const isCreator =
+                              procedure.created_by_id === user?.id ||
+                              procedure.student_id === user?.id;
+                            const isFaculty =
+                              user?.role === "supervisor" ||
+                              user?.role === "implant_incharge" ||
+                              user?.role === "administrator" ||
+                              user?.role === "super_admin";
+                            if (!eligibleStatuses.has(procedure.status))
+                              return null;
+                            if (!(isCreator || isFaculty)) return null;
+                            return (
+                              <TouchableOpacity
+                                style={resStyles.rescheduleBtn}
+                                onPress={() => setShowReschedule(true)}
+                                testID="open-reschedule-btn"
+                                data-testid="open-reschedule-btn"
+                              >
+                                <Ionicons
+                                  name="calendar-outline"
+                                  size={14}
+                                  color="#1565C0"
+                                />
+                                <Text style={resStyles.rescheduleTxt}>
+                                  Reschedule
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })()}
+                        </View>
+                        <InfoRow
+                          icon="calendar"
+                          label="Date"
+                          value={
+                            procedure.procedure_date
+                              ? format(
+                                  new Date(procedure.procedure_date),
+                                  "MMM dd, yyyy",
+                                )
+                              : "N/A"
+                          }
+                        />
+                        <InfoRow
+                          icon="time"
+                          label="Time"
+                          value={procedure.procedure_time}
+                        />
 
-              {/* iter-269: reschedule audit trail */}
-              {Array.isArray(procedure.reschedule_history) &&
-              procedure.reschedule_history.length > 0 ? (
-                <View
-                  style={resStyles.historyWrap}
-                  data-testid="reschedule-history"
-                >
-                  <Text style={resStyles.historyTitle}>Reschedule history</Text>
-                  {procedure.reschedule_history.map((h: any, idx: number) => (
-                    <View key={h.id || idx} style={resStyles.historyItem}>
-                      <Ionicons
-                        name="swap-horizontal"
-                        size={14}
-                        color="#546E7A"
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={resStyles.historyLine}>
-                          <Text style={{ fontWeight: "700" }}>
-                            {h.from_date || "—"} {h.from_time || ""}
-                          </Text>
-                          <Text> → </Text>
-                          <Text style={{ fontWeight: "700" }}>
-                            {h.to_date} {h.to_time}
-                          </Text>
-                        </Text>
-                        <Text style={resStyles.historyMeta} numberOfLines={2}>
-                          by {h.by_user_name || "Unknown"}
-                          {h.by_user_role
-                            ? ` · ${String(h.by_user_role).replace(/_/g, " ")}`
-                            : ""}
-                          {h.at ? ` · ${new Date(h.at).toLocaleString()}` : ""}
-                        </Text>
-                        {h.reason ? (
-                          <Text style={resStyles.historyReason}>
-                            “{h.reason}”
-                          </Text>
+                        {/* iter-269: reschedule audit trail */}
+                        {Array.isArray(procedure.reschedule_history) &&
+                        procedure.reschedule_history.length > 0 ? (
+                          <View
+                            style={resStyles.historyWrap}
+                            data-testid="reschedule-history"
+                          >
+                            <Text style={resStyles.historyTitle}>
+                              Reschedule history
+                            </Text>
+                            {procedure.reschedule_history.map(
+                              (h: any, idx: number) => (
+                                <View
+                                  key={h.id || idx}
+                                  style={resStyles.historyItem}
+                                >
+                                  <Ionicons
+                                    name="swap-horizontal"
+                                    size={14}
+                                    color="#546E7A"
+                                  />
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={resStyles.historyLine}>
+                                      <Text style={{ fontWeight: "700" }}>
+                                        {h.from_date || "—"} {h.from_time || ""}
+                                      </Text>
+                                      <Text> → </Text>
+                                      <Text style={{ fontWeight: "700" }}>
+                                        {h.to_date} {h.to_time}
+                                      </Text>
+                                    </Text>
+                                    <Text
+                                      style={resStyles.historyMeta}
+                                      numberOfLines={2}
+                                    >
+                                      by {h.by_user_name || "Unknown"}
+                                      {h.by_user_role
+                                        ? ` · ${String(h.by_user_role).replace(/_/g, " ")}`
+                                        : ""}
+                                      {h.at
+                                        ? ` · ${new Date(h.at).toLocaleString()}`
+                                        : ""}
+                                    </Text>
+                                    {h.reason ? (
+                                      <Text style={resStyles.historyReason}>
+                                        “{h.reason}”
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                </View>
+                              ),
+                            )}
+                          </View>
                         ) : null}
                       </View>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
 
-            {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid Extended Workflow
+                      {/* iter-Jun-2026 (v10, Chunk 3): Zygoma/Pterygoid Extended Workflow
                 CTA has been retired. All cases (including advanced) now use the
                 standard Phase 2-5 screens with the new tabbed per-implant UI
                 (PhaseStep2TabbedView) — see /procedures/submit-phase2/[id]. */}
 
-            {/* Procedure Type & Plan */}
-            {procedure.implant_procedure_type && (
-              <View style={styles.section} data-testid="procedure-type-section">
-                {/* iter-331: Procedure Details title row with optional inline
+                      {/* Procedure Type & Plan */}
+                      {procedure.implant_procedure_type && (
+                        <View
+                          style={styles.section}
+                          data-testid="procedure-type-section"
+                        >
+                          {/* iter-331: Procedure Details title row with optional inline
                 PRE-OP BRIEFING button (Sinus Lift only). Moved here from
                 the bottom action bar so the EXPORT/PRINT pill is no
                 longer cramped, and so the briefing — which is generated
                 exclusively for sinus cases — lives next to the Sinus
                 Lift fields it documents. */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    flexWrap: "wrap",
-                    gap: 8,
-                  }}
-                >
-                  <Text style={styles.sectionTitle}>Procedure Details</Text>
-                  {procedure.implant_procedure_type === "Sinus Lift" &&
-                    user?.role !== "nurse" && (
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 6,
-                          backgroundColor: "#2E7D32",
-                          paddingHorizontal: 12,
-                          paddingVertical: 7,
-                          borderRadius: 18,
-                          opacity: preopLoading ? 0.6 : 1,
-                        }}
-                        disabled={preopLoading}
-                        onPress={async () => {
-                          setPreopLoading(true);
-                          try {
-                            await downloadPreopBriefing(
-                              procedure.id || procedure._id,
-                            );
-                          } finally {
-                            setPreopLoading(false);
-                          }
-                        }}
-                        data-testid="preop-briefing-btn"
-                        testID="preop-briefing-btn"
-                      >
-                        {preopLoading ? (
-                          <ActivityIndicator color="#FFF" size="small" />
-                        ) : (
-                          <>
-                            <Ionicons
-                              name="document-text"
-                              size={14}
-                              color="#FFF"
-                            />
-                            <Text
-                              style={{
-                                color: "#FFF",
-                                fontSize: 11,
-                                fontWeight: "800",
-                                letterSpacing: 0.3,
-                              }}
-                            >
-                              PRE-OP BRIEFING
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                </View>
-                <InfoRow
-                  icon="construct"
-                  label="Type of Implant Procedure"
-                  value={procedure.implant_procedure_type}
-                  fieldKey="implant_procedure_type"
-                />
-                {/* iter-387: surgical-approach cascade echoed on the case detail */}
-                {procedure.procedure_surgery_type && (
-                  <InfoRow
-                    icon="hand-left"
-                    label="Procedure Type"
-                    value={procedure.procedure_surgery_type}
-                  />
-                )}
-                {procedure.guided_surgery_type && (
-                  <InfoRow
-                    icon="navigate"
-                    label="Type of Guided Surgery"
-                    value={procedure.guided_surgery_type}
-                  />
-                )}
-                {procedure.static_guide_type && (
-                  <InfoRow
-                    icon="grid"
-                    label="Type of Static Guide"
-                    value={procedure.static_guide_type}
-                  />
-                )}
-                {procedure.sleeve_type && (
-                  <InfoRow
-                    icon="ellipse"
-                    label="Type of Sleeve"
-                    value={procedure.sleeve_type}
-                  />
-                )}
-                {procedure.dynamic_nav_system && (
-                  <InfoRow
-                    icon="compass"
-                    label="Dynamic Navigation System"
-                    value={procedure.dynamic_nav_system}
-                  />
-                )}
-                {/* iter-307: Echo the Number-of-Implants sub-choice (only set
-                for Immediate / PET / GBR / Guided Surgery) so faculty
-                can scan it from the case detail without opening Phase 1. */}
-                {procedure.num_implants && (
-                  <InfoRow
-                    icon="layers"
-                    label="Number of Implants"
-                    value={procedure.num_implants}
-                    fieldKey="num_implants"
-                  />
-                )}
-                {procedure.arch && (
-                  <InfoRow
-                    icon="tablet-landscape"
-                    label="Arch"
-                    value={procedure.arch}
-                    fieldKey="arch"
-                  />
-                )}
-                {procedure.loading_type?.length > 0 && (
-                  <InfoRow
-                    icon="flash"
-                    label="Loading Type"
-                    value={procedure.loading_type.join(", ")}
-                    fieldKey="loading_type"
-                  />
-                )}
-                {procedure.prosthetic_plan && (
-                  <InfoRow
-                    icon="build"
-                    label="Prosthetic Plan"
-                    value={procedure.prosthetic_plan}
-                    fieldKey="prosthetic_plan"
-                  />
-                )}
-                {procedure.prosthetic_plan_other && (
-                  <InfoRow
-                    icon="create"
-                    label="Prosthetic Plan (Other)"
-                    value={procedure.prosthetic_plan_other}
-                    fieldKey="prosthetic_plan_other"
-                  />
-                )}
-                {/* iter-Feb-2026 / -C — SC (pure or overlap-Single) plan fields. */}
-                {(() => {
-                  const _num = procedure?.num_implants || "";
-                  const _overlap = [
-                    "Immediate Implant",
-                    "Partial Extraction Therapy",
-                    "Implant Placement with Guided Bone Regeneration",
-                    "Guided Surgery",
-                    "Sinus Lift",
-                  ].includes(procedure?.implant_procedure_type);
-                  const isSCEff =
-                    procedure?.implant_procedure_type === "Single Conventional Implant" ||
-                    (_overlap && _num === "Single Implant");
-                  if (!isSCEff) return null;
-                  const rowVal = (val: string, other: string) =>
-                    val === "Other" && other ? `Other — ${other}` : val;
-                  return (
-                    <>
-                      {procedure.type_of_provisional && (
-                        <InfoRow
-                          icon="medkit"
-                          label="Type of Provisional"
-                          value={rowVal(
-                            procedure.type_of_provisional,
-                            procedure.type_of_provisional_other,
-                          )}
-                          fieldKey="type_of_provisional"
-                        />
-                      )}
-                      {procedure.sc_abutment_type && (
-                        <InfoRow
-                          icon="cube"
-                          label="Abutment Type"
-                          value={rowVal(
-                            procedure.sc_abutment_type,
-                            procedure.sc_abutment_type_other,
-                          )}
-                          fieldKey="sc_abutment_type"
-                        />
-                      )}
-                      {procedure.sc_retention_type && (
-                        <InfoRow
-                          icon="link"
-                          label="Type of Retention"
-                          value={rowVal(
-                            procedure.sc_retention_type,
-                            procedure.sc_retention_type_other,
-                          )}
-                          fieldKey="sc_retention_type"
-                        />
-                      )}
-                      {procedure.sc_crown_material && (
-                        <InfoRow
-                          icon="diamond"
-                          label="Crown Material"
-                          value={rowVal(
-                            procedure.sc_crown_material,
-                            procedure.sc_crown_material_other,
-                          )}
-                          fieldKey="sc_crown_material"
-                        />
-                      )}
-                    </>
-                  );
-                })()}
-                {/* iter-Feb-2026-B / -C — Multiple / Full-Arch / Zygoma workflow fields. */}
-                {(() => {
-                  const _num = procedure?.num_implants || "";
-                  const _overlap = [
-                    "Immediate Implant",
-                    "Partial Extraction Therapy",
-                    "Implant Placement with Guided Bone Regeneration",
-                    "Guided Surgery",
-                    "Sinus Lift",
-                  ].includes(procedure?.implant_procedure_type);
-                  const isSCEff =
-                    procedure?.implant_procedure_type === "Single Conventional Implant" ||
-                    (_overlap && _num === "Single Implant");
-                  if (isSCEff) return null;
-                  return (
-                    <>
-                      {procedure.type_of_provisional && (
-                        <InfoRow
-                          icon="medkit"
-                          label="Type of Provisional"
-                          value={
-                            procedure.type_of_provisional === "Other" &&
-                            procedure.type_of_provisional_other
-                              ? `Other — ${procedure.type_of_provisional_other}`
-                              : procedure.type_of_provisional
-                          }
-                          fieldKey="type_of_provisional"
-                        />
-                      )}
-                      {procedure.ma_prosthesis_type && (
-                        <InfoRow
-                          icon="cube"
-                          label="Prosthesis Type"
-                          value={
-                            procedure.ma_prosthesis_type === "Other" &&
-                            procedure.ma_prosthesis_type_other
-                              ? `Other — ${procedure.ma_prosthesis_type_other}`
-                              : procedure.ma_prosthesis_type
-                          }
-                          fieldKey="ma_prosthesis_type"
-                        />
-                      )}
-                      {procedure.ma_abutment_type && (
-                        <InfoRow
-                          icon="cube"
-                          label="Abutment Type"
-                          value={
-                            procedure.ma_abutment_type === "Other" &&
-                            procedure.ma_abutment_type_other
-                              ? `Other — ${procedure.ma_abutment_type_other}`
-                              : procedure.ma_abutment_type
-                          }
-                          fieldKey="ma_abutment_type"
-                        />
-                      )}
-                      {procedure.ma_retention_type && (
-                        <InfoRow
-                          icon="link"
-                          label="Type of Retention"
-                          value={
-                            procedure.ma_retention_type === "Other" &&
-                            procedure.ma_retention_type_other
-                              ? `Other — ${procedure.ma_retention_type_other}`
-                              : procedure.ma_retention_type
-                          }
-                          fieldKey="ma_retention_type"
-                        />
-                      )}
-                      {procedure.ma_crown_material && (
-                        <InfoRow
-                          icon="diamond"
-                          label="Crown/Bridge Material"
-                          value={
-                            procedure.ma_crown_material === "Other" &&
-                            procedure.ma_crown_material_other
-                              ? `Other — ${procedure.ma_crown_material_other}`
-                              : procedure.ma_crown_material
-                          }
-                          fieldKey="ma_crown_material"
-                        />
-                      )}
-                      {procedure.fa_prosthetic_plan && (
-                        <InfoRow
-                          icon="build"
-                          label="Prosthetic Plan"
-                          value={
-                            procedure.fa_prosthetic_plan === "Other" &&
-                            procedure.fa_prosthetic_plan_other
-                              ? `Other — ${procedure.fa_prosthetic_plan_other}`
-                              : procedure.fa_prosthetic_plan
-                          }
-                          fieldKey="fa_prosthetic_plan"
-                        />
-                      )}
-                      {procedure.zp_prosthetic_plan && (
-                        <InfoRow
-                          icon="build"
-                          label="Prosthetic Plan"
-                          value={
-                            procedure.zp_prosthetic_plan === "Other" &&
-                            procedure.zp_prosthetic_plan_other
-                              ? `Other — ${procedure.zp_prosthetic_plan_other}`
-                              : procedure.zp_prosthetic_plan
-                          }
-                          fieldKey="zp_prosthetic_plan"
-                        />
-                      )}
-                    </>
-                  );
-                })()}
-              </View>
-            )}
-
-            {/* ── Full-Arch Atrophy Treatment Plan (silent institutional guidance) ── */}
-            {procedure.atrophy_assessment &&
-              (procedure.atrophy_assessment.maxilla ||
-                procedure.atrophy_assessment.mandible) && (
-                <View
-                  style={[
-                    styles.section,
-                    { borderLeftWidth: 4, borderLeftColor: "#1E88E5" },
-                  ]}
-                  testID="atrophy-treatment-plan-section"
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 12,
-                    }}
-                  >
-                    <Ionicons name="layers" size={20} color="#0D47A1" />
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { marginBottom: 0, color: "#0D47A1", fontSize: 17 },
-                      ]}
-                    >
-                      Full-Arch Treatment Plan
-                    </Text>
-                  </View>
-                  {(["maxilla", "mandible"] as const).map((arch) => {
-                    const a = procedure.atrophy_assessment[arch];
-                    if (!a || !a.class) return null;
-                    const palette: Record<
-                      string,
-                      { bg: string; fg: string; border: string }
-                    > = {
-                      CCI: { bg: "#E8F5E9", fg: "#1B5E20", border: "#43A047" },
-                      CCII: { bg: "#E3F2FD", fg: "#0D47A1", border: "#1E88E5" },
-                      CCIII: {
-                        bg: "#FFF8E1",
-                        fg: "#E65100",
-                        border: "#FB8C00",
-                      },
-                      CCIV: { bg: "#FFEBEE", fg: "#B71C1C", border: "#E53935" },
-                      CCV: { bg: "#FCE4EC", fg: "#880E4F", border: "#C2185B" },
-                    };
-                    const p = palette[a.class] || palette.CCI;
-                    return (
-                      <View
-                        key={arch}
-                        style={{
-                          marginBottom: 14,
-                          padding: 12,
-                          backgroundColor: "#FAFCFF",
-                          borderRadius: 10,
-                        }}
-                        data-testid={`atrophy-detail-${arch}`}
-                      >
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            flexWrap: "wrap",
-                            gap: 8,
-                            alignItems: "center",
-                            marginBottom: 8,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: "700",
-                              color: "#0D47A1",
-                              textTransform: "capitalize",
-                            }}
-                          >
-                            {arch}
-                          </Text>
-                        </View>
-                        {/* Verbatim Carames bone definition */}
-                        {(a.anterior_definition || a.posterior_definition) && (
                           <View
                             style={{
-                              backgroundColor: p.bg,
-                              borderColor: p.border,
-                              borderLeftWidth: 4,
-                              borderRadius: 8,
-                              padding: 10,
-                              marginBottom: 8,
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              flexWrap: "wrap",
+                              gap: 8,
                             }}
-                            data-testid={`atrophy-definition-${arch}`}
                           >
-                            {a.anterior_definition ? (
-                              <>
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    color: p.fg,
-                                    fontWeight: "600",
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  {a.anterior_definition}
-                                </Text>
-                                {a.anterior_severity ? (
-                                  <CaramesSeverityStrip
-                                    region="anterior"
-                                    severity={a.anterior_severity}
-                                    measuredHeight={String(
-                                      a.inputs?.anterior_height_mm ?? "",
-                                    )}
-                                    measuredWidth={String(
-                                      a.inputs?.anterior_width_mm ?? "",
-                                    )}
-                                    testIdSuffix={`detail-${arch}-anterior`}
-                                  />
-                                ) : null}
-                              </>
-                            ) : null}
-                            {a.posterior_definition ? (
-                              <>
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    color: p.fg,
-                                    fontWeight: "600",
-                                  }}
-                                >
-                                  {a.posterior_definition}
-                                </Text>
-                                {a.posterior_severity ? (
-                                  <CaramesSeverityStrip
-                                    region="posterior"
-                                    severity={a.posterior_severity}
-                                    measuredHeight={String(
-                                      a.inputs?.posterior_height_mm ?? "",
-                                    )}
-                                    measuredWidth={String(
-                                      a.inputs?.posterior_width_mm ?? "",
-                                    )}
-                                    testIdSuffix={`detail-${arch}-posterior`}
-                                  />
-                                ) : null}
-                              </>
-                            ) : null}
-                          </View>
-                        )}
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: "#5C6BC0",
-                            marginBottom: 6,
-                          }}
-                        >
-                          Measurements — Anterior:{" "}
-                          {a.inputs?.anterior_height_mm ?? "—"} mm height,{" "}
-                          {a.inputs?.anterior_width_mm ?? "—"} mm width ·
-                          Posterior: {a.inputs?.posterior_height_mm ?? "—"} mm
-                          height, {a.inputs?.posterior_width_mm ?? "—"} mm width
-                        </Text>
-                        {/* Decision aid (how to choose between the three options) */}
-                        {Array.isArray(a.decision_aid) &&
-                          a.decision_aid.length > 0 && (
-                            <View
-                              style={{
-                                backgroundColor: "#F1F8E9",
-                                borderColor: "#7CB342",
-                                borderLeftWidth: 3,
-                                borderRadius: 8,
-                                padding: 10,
-                                marginBottom: 8,
-                              }}
-                              data-testid={`atrophy-detail-decision-aid-${arch}`}
-                            >
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 6,
-                                  marginBottom: 6,
-                                }}
-                              >
-                                <Ionicons
-                                  name="bulb-outline"
-                                  size={14}
-                                  color="#33691E"
-                                />
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    fontWeight: "700",
-                                    color: "#33691E",
-                                  }}
-                                >
-                                  How to choose between these options
-                                </Text>
-                              </View>
-                              {a.decision_aid.map((line: string, i: number) => {
-                                const isRec = a.recommended_option_index === i;
-                                return (
-                                  <Text
-                                    key={i}
-                                    style={{
-                                      fontSize: 12,
-                                      color: "#33691E",
-                                      lineHeight: 17,
-                                      marginBottom:
-                                        i === a.decision_aid.length - 1 ? 0 : 4,
-                                      fontWeight: isRec ? "800" : "400",
-                                    }}
-                                  >
-                                    {isRec ? "✓ " : "• "}
-                                    {line}
-                                  </Text>
-                                );
-                              })}
-                            </View>
-                          )}
-                        {(a.treatment_options || []).map(
-                          (opt: any, i: number) => {
-                            const isRec = a.recommended_option_index === i;
-                            return (
-                              <View
-                                key={i}
-                                style={{
-                                  marginBottom:
-                                    i === a.treatment_options.length - 1
-                                      ? 0
-                                      : 10,
-                                  paddingTop: i === 0 ? 0 : 10,
-                                  borderTopWidth: i === 0 ? 0 : 1,
-                                  borderTopColor: "#E1E7F0",
-                                  ...(isRec
-                                    ? {
-                                        backgroundColor: "#F1F8E9",
-                                        borderLeftWidth: 3,
-                                        borderLeftColor: "#33691E",
-                                        borderRadius: 6,
-                                        padding: 8,
-                                        marginLeft: -8,
-                                      }
-                                    : {}),
-                                }}
-                                data-testid={`atrophy-detail-option-${arch}-${i}${isRec ? "-recommended" : ""}`}
-                              >
-                                <View
+                            <Text style={styles.sectionTitle}>
+                              Procedure Details
+                            </Text>
+                            {procedure.implant_procedure_type ===
+                              "Sinus Lift" &&
+                              user?.role !== "nurse" && (
+                                <TouchableOpacity
                                   style={{
                                     flexDirection: "row",
                                     alignItems: "center",
-                                    flexWrap: "wrap",
                                     gap: 6,
+                                    backgroundColor: "#2E7D32",
+                                    paddingHorizontal: 12,
+                                    paddingVertical: 7,
+                                    borderRadius: 18,
+                                    opacity: preopLoading ? 0.6 : 1,
                                   }}
+                                  disabled={preopLoading}
+                                  onPress={async () => {
+                                    setPreopLoading(true);
+                                    try {
+                                      await downloadPreopBriefing(
+                                        procedure.id || procedure._id,
+                                      );
+                                    } finally {
+                                      setPreopLoading(false);
+                                    }
+                                  }}
+                                  data-testid="preop-briefing-btn"
+                                  testID="preop-briefing-btn"
+                                >
+                                  {preopLoading ? (
+                                    <ActivityIndicator
+                                      color="#FFF"
+                                      size="small"
+                                    />
+                                  ) : (
+                                    <>
+                                      <Ionicons
+                                        name="document-text"
+                                        size={14}
+                                        color="#FFF"
+                                      />
+                                      <Text
+                                        style={{
+                                          color: "#FFF",
+                                          fontSize: 11,
+                                          fontWeight: "800",
+                                          letterSpacing: 0.3,
+                                        }}
+                                      >
+                                        PRE-OP BRIEFING
+                                      </Text>
+                                    </>
+                                  )}
+                                </TouchableOpacity>
+                              )}
+                          </View>
+                          <InfoRow
+                            icon="construct"
+                            label="Type of Implant Procedure"
+                            value={procedure.implant_procedure_type}
+                            fieldKey="implant_procedure_type"
+                          />
+                          {procedure.overdenture_type && (
+                            <InfoRow
+                              icon="layers"
+                              label="Type of Overdenture"
+                              value={procedure.overdenture_type}
+                              fieldKey="overdenture_type"
+                            />
+                          )}
+                          {/* iter-387: surgical-approach cascade echoed on the case detail */}
+                          {procedure.procedure_surgery_type && (
+                            <InfoRow
+                              icon="hand-left"
+                              label="Procedure Type"
+                              value={procedure.procedure_surgery_type}
+                            />
+                          )}
+                          {procedure.guided_surgery_type && (
+                            <InfoRow
+                              icon="navigate"
+                              label="Type of Guided Surgery"
+                              value={procedure.guided_surgery_type}
+                            />
+                          )}
+                          {procedure.static_guide_type && (
+                            <InfoRow
+                              icon="grid"
+                              label="Type of Static Guide"
+                              value={procedure.static_guide_type}
+                            />
+                          )}
+                          {procedure.sleeve_type && (
+                            <InfoRow
+                              icon="ellipse"
+                              label="Type of Sleeve"
+                              value={procedure.sleeve_type}
+                            />
+                          )}
+                          {procedure.dynamic_nav_system && (
+                            <InfoRow
+                              icon="compass"
+                              label="Dynamic Navigation System"
+                              value={procedure.dynamic_nav_system}
+                            />
+                          )}
+                          {/* iter-307: Echo the Number-of-Implants sub-choice (only set
+                for Immediate / PET / GBR / Guided Surgery) so faculty
+                can scan it from the case detail without opening Phase 1. */}
+                          {procedure.num_implants && (
+                            <InfoRow
+                              icon="layers"
+                              label="Number of Implants"
+                              value={procedure.num_implants}
+                              fieldKey="num_implants"
+                            />
+                          )}
+                          {procedure.arch && (
+                            <InfoRow
+                              icon="tablet-landscape"
+                              label="Arch"
+                              value={procedure.arch}
+                              fieldKey="arch"
+                            />
+                          )}
+                          {procedure.loading_type?.length > 0 && (
+                            <InfoRow
+                              icon="flash"
+                              label="Loading Type"
+                              value={procedure.loading_type.join(", ")}
+                              fieldKey="loading_type"
+                            />
+                          )}
+                          {procedure.prosthetic_plan && (
+                            <InfoRow
+                              icon="build"
+                              label="Prosthetic Plan"
+                              value={procedure.prosthetic_plan}
+                              fieldKey="prosthetic_plan"
+                            />
+                          )}
+                          {procedure.prosthetic_plan_other && (
+                            <InfoRow
+                              icon="create"
+                              label="Prosthetic Plan (Other)"
+                              value={procedure.prosthetic_plan_other}
+                              fieldKey="prosthetic_plan_other"
+                            />
+                          )}
+                          {/* iter-Feb-2026 / -C — SC (pure or overlap-Single) plan fields. */}
+                          {(() => {
+                            const _num = procedure?.num_implants || "";
+                            const _overlap = [
+                              "Immediate Implant",
+                              "Partial Extraction Therapy",
+                              "Implant Placement with Guided Bone Regeneration",
+                              "Guided Surgery",
+                              "Sinus Lift",
+                            ].includes(procedure?.implant_procedure_type);
+                            const isSCEff =
+                              procedure?.implant_procedure_type ===
+                                "Single Conventional Implant" ||
+                              (_overlap && _num === "Single Implant");
+                            if (!isSCEff) return null;
+                            const rowVal = (val: string, other: string) =>
+                              val === "Other" && other
+                                ? `Other — ${other}`
+                                : val;
+                            return (
+                              <>
+                                {procedure.type_of_provisional && (
+                                  <InfoRow
+                                    icon="medkit"
+                                    label="Type of Provisional"
+                                    value={rowVal(
+                                      procedure.type_of_provisional,
+                                      procedure.type_of_provisional_other,
+                                    )}
+                                    fieldKey="type_of_provisional"
+                                  />
+                                )}
+                                {procedure.sc_abutment_type && (
+                                  <InfoRow
+                                    icon="cube"
+                                    label="Abutment Type"
+                                    value={rowVal(
+                                      procedure.sc_abutment_type,
+                                      procedure.sc_abutment_type_other,
+                                    )}
+                                    fieldKey="sc_abutment_type"
+                                  />
+                                )}
+                                {procedure.sc_retention_type && (
+                                  <InfoRow
+                                    icon="link"
+                                    label="Type of Retention"
+                                    value={rowVal(
+                                      procedure.sc_retention_type,
+                                      procedure.sc_retention_type_other,
+                                    )}
+                                    fieldKey="sc_retention_type"
+                                  />
+                                )}
+                                {procedure.sc_crown_material && (
+                                  <InfoRow
+                                    icon="diamond"
+                                    label="Crown Material"
+                                    value={rowVal(
+                                      procedure.sc_crown_material,
+                                      procedure.sc_crown_material_other,
+                                    )}
+                                    fieldKey="sc_crown_material"
+                                  />
+                                )}
+                              </>
+                            );
+                          })()}
+                          {/* iter-Feb-2026-B / -C — Multiple / Full-Arch / Zygoma workflow fields. */}
+                          {(() => {
+                            const _num = procedure?.num_implants || "";
+                            const _overlap = [
+                              "Immediate Implant",
+                              "Partial Extraction Therapy",
+                              "Implant Placement with Guided Bone Regeneration",
+                              "Guided Surgery",
+                              "Sinus Lift",
+                            ].includes(procedure?.implant_procedure_type);
+                            const isSCEff =
+                              procedure?.implant_procedure_type ===
+                                "Single Conventional Implant" ||
+                              (_overlap && _num === "Single Implant");
+                            if (isSCEff) return null;
+                            return (
+                              <>
+                                {procedure.type_of_provisional && (
+                                  <InfoRow
+                                    icon="medkit"
+                                    label="Type of Provisional"
+                                    value={
+                                      procedure.type_of_provisional ===
+                                        "Other" &&
+                                      procedure.type_of_provisional_other
+                                        ? `Other — ${procedure.type_of_provisional_other}`
+                                        : procedure.type_of_provisional
+                                    }
+                                    fieldKey="type_of_provisional"
+                                  />
+                                )}
+                                {procedure.ma_prosthesis_type && (
+                                  <InfoRow
+                                    icon="cube"
+                                    label="Prosthesis Type"
+                                    value={
+                                      procedure.ma_prosthesis_type ===
+                                        "Other" &&
+                                      procedure.ma_prosthesis_type_other
+                                        ? `Other — ${procedure.ma_prosthesis_type_other}`
+                                        : procedure.ma_prosthesis_type
+                                    }
+                                    fieldKey="ma_prosthesis_type"
+                                  />
+                                )}
+                                {procedure.ma_abutment_type && (
+                                  <InfoRow
+                                    icon="cube"
+                                    label="Abutment Type"
+                                    value={
+                                      procedure.ma_abutment_type === "Other" &&
+                                      procedure.ma_abutment_type_other
+                                        ? `Other — ${procedure.ma_abutment_type_other}`
+                                        : procedure.ma_abutment_type
+                                    }
+                                    fieldKey="ma_abutment_type"
+                                  />
+                                )}
+                                {procedure.ma_retention_type && (
+                                  <InfoRow
+                                    icon="link"
+                                    label="Type of Retention"
+                                    value={
+                                      procedure.ma_retention_type === "Other" &&
+                                      procedure.ma_retention_type_other
+                                        ? `Other — ${procedure.ma_retention_type_other}`
+                                        : procedure.ma_retention_type
+                                    }
+                                    fieldKey="ma_retention_type"
+                                  />
+                                )}
+                                {procedure.ma_crown_material && (
+                                  <InfoRow
+                                    icon="diamond"
+                                    label="Crown/Bridge Material"
+                                    value={
+                                      procedure.ma_crown_material === "Other" &&
+                                      procedure.ma_crown_material_other
+                                        ? `Other — ${procedure.ma_crown_material_other}`
+                                        : procedure.ma_crown_material
+                                    }
+                                    fieldKey="ma_crown_material"
+                                  />
+                                )}
+                                {procedure.fa_prosthetic_plan && (
+                                  <InfoRow
+                                    icon="build"
+                                    label="Prosthetic Plan"
+                                    value={
+                                      procedure.fa_prosthetic_plan ===
+                                        "Other" &&
+                                      procedure.fa_prosthetic_plan_other
+                                        ? `Other — ${procedure.fa_prosthetic_plan_other}`
+                                        : procedure.fa_prosthetic_plan
+                                    }
+                                    fieldKey="fa_prosthetic_plan"
+                                  />
+                                )}
+                                {procedure.zp_prosthetic_plan && (
+                                  <InfoRow
+                                    icon="build"
+                                    label="Prosthetic Plan"
+                                    value={
+                                      procedure.zp_prosthetic_plan ===
+                                        "Other" &&
+                                      procedure.zp_prosthetic_plan_other
+                                        ? `Other — ${procedure.zp_prosthetic_plan_other}`
+                                        : procedure.zp_prosthetic_plan
+                                    }
+                                    fieldKey="zp_prosthetic_plan"
+                                  />
+                                )}
+                              </>
+                            );
+                          })()}
+                        </View>
+                      )}
+
+                      {/* ── Full-Arch Atrophy Treatment Plan (silent institutional guidance) ── */}
+                      {procedure.atrophy_assessment &&
+                        (procedure.atrophy_assessment.maxilla ||
+                          procedure.atrophy_assessment.mandible) && (
+                          <View
+                            style={[
+                              styles.section,
+                              {
+                                borderLeftWidth: 4,
+                                borderLeftColor: "#1E88E5",
+                              },
+                            ]}
+                            testID="atrophy-treatment-plan-section"
+                          >
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 12,
+                              }}
+                            >
+                              <Ionicons
+                                name="layers"
+                                size={20}
+                                color="#0D47A1"
+                              />
+                              <Text
+                                style={[
+                                  styles.sectionTitle,
+                                  {
+                                    marginBottom: 0,
+                                    color: "#0D47A1",
+                                    fontSize: 17,
+                                  },
+                                ]}
+                              >
+                                Full-Arch Treatment Plan
+                              </Text>
+                            </View>
+                            {(["maxilla", "mandible"] as const).map((arch) => {
+                              const a = procedure.atrophy_assessment[arch];
+                              if (!a || !a.class) return null;
+                              const palette: Record<
+                                string,
+                                { bg: string; fg: string; border: string }
+                              > = {
+                                CCI: {
+                                  bg: "#E8F5E9",
+                                  fg: "#1B5E20",
+                                  border: "#43A047",
+                                },
+                                CCII: {
+                                  bg: "#E3F2FD",
+                                  fg: "#0D47A1",
+                                  border: "#1E88E5",
+                                },
+                                CCIII: {
+                                  bg: "#FFF8E1",
+                                  fg: "#E65100",
+                                  border: "#FB8C00",
+                                },
+                                CCIV: {
+                                  bg: "#FFEBEE",
+                                  fg: "#B71C1C",
+                                  border: "#E53935",
+                                },
+                                CCV: {
+                                  bg: "#FCE4EC",
+                                  fg: "#880E4F",
+                                  border: "#C2185B",
+                                },
+                              };
+                              const p = palette[a.class] || palette.CCI;
+                              return (
+                                <View
+                                  key={arch}
+                                  style={{
+                                    marginBottom: 14,
+                                    padding: 12,
+                                    backgroundColor: "#FAFCFF",
+                                    borderRadius: 10,
+                                  }}
+                                  data-testid={`atrophy-detail-${arch}`}
+                                >
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      flexWrap: "wrap",
+                                      gap: 8,
+                                      alignItems: "center",
+                                      marginBottom: 8,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        fontWeight: "700",
+                                        color: "#0D47A1",
+                                        textTransform: "capitalize",
+                                      }}
+                                    >
+                                      {arch}
+                                    </Text>
+                                  </View>
+                                  {/* Verbatim Carames bone definition */}
+                                  {(a.anterior_definition ||
+                                    a.posterior_definition) && (
+                                    <View
+                                      style={{
+                                        backgroundColor: p.bg,
+                                        borderColor: p.border,
+                                        borderLeftWidth: 4,
+                                        borderRadius: 8,
+                                        padding: 10,
+                                        marginBottom: 8,
+                                      }}
+                                      data-testid={`atrophy-definition-${arch}`}
+                                    >
+                                      {a.anterior_definition ? (
+                                        <>
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              color: p.fg,
+                                              fontWeight: "600",
+                                              marginBottom: 4,
+                                            }}
+                                          >
+                                            {a.anterior_definition}
+                                          </Text>
+                                          {a.anterior_severity ? (
+                                            <CaramesSeverityStrip
+                                              region="anterior"
+                                              severity={a.anterior_severity}
+                                              measuredHeight={String(
+                                                a.inputs?.anterior_height_mm ??
+                                                  "",
+                                              )}
+                                              measuredWidth={String(
+                                                a.inputs?.anterior_width_mm ??
+                                                  "",
+                                              )}
+                                              testIdSuffix={`detail-${arch}-anterior`}
+                                            />
+                                          ) : null}
+                                        </>
+                                      ) : null}
+                                      {a.posterior_definition ? (
+                                        <>
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              color: p.fg,
+                                              fontWeight: "600",
+                                            }}
+                                          >
+                                            {a.posterior_definition}
+                                          </Text>
+                                          {a.posterior_severity ? (
+                                            <CaramesSeverityStrip
+                                              region="posterior"
+                                              severity={a.posterior_severity}
+                                              measuredHeight={String(
+                                                a.inputs?.posterior_height_mm ??
+                                                  "",
+                                              )}
+                                              measuredWidth={String(
+                                                a.inputs?.posterior_width_mm ??
+                                                  "",
+                                              )}
+                                              testIdSuffix={`detail-${arch}-posterior`}
+                                            />
+                                          ) : null}
+                                        </>
+                                      ) : null}
+                                    </View>
+                                  )}
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      color: "#5C6BC0",
+                                      marginBottom: 6,
+                                    }}
+                                  >
+                                    Measurements — Anterior:{" "}
+                                    {a.inputs?.anterior_height_mm ?? "—"} mm
+                                    height, {a.inputs?.anterior_width_mm ?? "—"}{" "}
+                                    mm width · Posterior:{" "}
+                                    {a.inputs?.posterior_height_mm ?? "—"} mm
+                                    height,{" "}
+                                    {a.inputs?.posterior_width_mm ?? "—"} mm
+                                    width
+                                  </Text>
+                                  {/* Decision aid (how to choose between the three options) */}
+                                  {Array.isArray(a.decision_aid) &&
+                                    a.decision_aid.length > 0 && (
+                                      <View
+                                        style={{
+                                          backgroundColor: "#F1F8E9",
+                                          borderColor: "#7CB342",
+                                          borderLeftWidth: 3,
+                                          borderRadius: 8,
+                                          padding: 10,
+                                          marginBottom: 8,
+                                        }}
+                                        data-testid={`atrophy-detail-decision-aid-${arch}`}
+                                      >
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 6,
+                                            marginBottom: 6,
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name="bulb-outline"
+                                            size={14}
+                                            color="#33691E"
+                                          />
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              fontWeight: "700",
+                                              color: "#33691E",
+                                            }}
+                                          >
+                                            How to choose between these options
+                                          </Text>
+                                        </View>
+                                        {a.decision_aid.map(
+                                          (line: string, i: number) => {
+                                            const isRec =
+                                              a.recommended_option_index === i;
+                                            return (
+                                              <Text
+                                                key={i}
+                                                style={{
+                                                  fontSize: 12,
+                                                  color: "#33691E",
+                                                  lineHeight: 17,
+                                                  marginBottom:
+                                                    i ===
+                                                    a.decision_aid.length - 1
+                                                      ? 0
+                                                      : 4,
+                                                  fontWeight: isRec
+                                                    ? "800"
+                                                    : "400",
+                                                }}
+                                              >
+                                                {isRec ? "✓ " : "• "}
+                                                {line}
+                                              </Text>
+                                            );
+                                          },
+                                        )}
+                                      </View>
+                                    )}
+                                  {(a.treatment_options || []).map(
+                                    (opt: any, i: number) => {
+                                      const isRec =
+                                        a.recommended_option_index === i;
+                                      return (
+                                        <View
+                                          key={i}
+                                          style={{
+                                            marginBottom:
+                                              i ===
+                                              a.treatment_options.length - 1
+                                                ? 0
+                                                : 10,
+                                            paddingTop: i === 0 ? 0 : 10,
+                                            borderTopWidth: i === 0 ? 0 : 1,
+                                            borderTopColor: "#E1E7F0",
+                                            ...(isRec
+                                              ? {
+                                                  backgroundColor: "#F1F8E9",
+                                                  borderLeftWidth: 3,
+                                                  borderLeftColor: "#33691E",
+                                                  borderRadius: 6,
+                                                  padding: 8,
+                                                  marginLeft: -8,
+                                                }
+                                              : {}),
+                                          }}
+                                          data-testid={`atrophy-detail-option-${arch}-${i}${isRec ? "-recommended" : ""}`}
+                                        >
+                                          <View
+                                            style={{
+                                              flexDirection: "row",
+                                              alignItems: "center",
+                                              flexWrap: "wrap",
+                                              gap: 6,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 13,
+                                                fontWeight: "700",
+                                                color: p.fg,
+                                              }}
+                                            >
+                                              {opt.headline ||
+                                                `${opt.implant_count} implants (${opt.kind})`}
+                                            </Text>
+                                            {isRec ? (
+                                              <View
+                                                style={{
+                                                  backgroundColor: "#33691E",
+                                                  paddingHorizontal: 8,
+                                                  paddingVertical: 2,
+                                                  borderRadius: 999,
+                                                }}
+                                              >
+                                                <Text
+                                                  style={{
+                                                    fontSize: 10,
+                                                    color: "#FFFFFF",
+                                                    fontWeight: "800",
+                                                  }}
+                                                >
+                                                  RECOMMENDED FOR THIS PATIENT
+                                                </Text>
+                                              </View>
+                                            ) : null}
+                                          </View>
+                                          {isRec && a.recommendation_reason ? (
+                                            <Text
+                                              style={{
+                                                fontSize: 11,
+                                                color: "#33691E",
+                                                marginTop: 4,
+                                                fontStyle: "italic",
+                                              }}
+                                            >
+                                              Why: {a.recommendation_reason}
+                                            </Text>
+                                          ) : null}
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              color: "#37474F",
+                                              marginTop: 4,
+                                              lineHeight: 17,
+                                            }}
+                                          >
+                                            {opt.description_short ||
+                                              opt.description ||
+                                              opt.placement}
+                                          </Text>
+                                        </View>
+                                      );
+                                    },
+                                  )}
+                                  {a.loading_recommendation && (
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        color: "#455A64",
+                                        marginTop: 10,
+                                        fontStyle: "italic",
+                                      }}
+                                    >
+                                      Loading: {a.loading_recommendation}
+                                    </Text>
+                                  )}
+                                  {a.augmentation_note && (
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        color: "#455A64",
+                                        marginTop: 4,
+                                        fontStyle: "italic",
+                                      }}
+                                    >
+                                      Augmentation guidance:{" "}
+                                      {a.augmentation_note}
+                                    </Text>
+                                  )}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+
+                      {/* Clinical Examination */}
+                      {(procedure.occlusocervical_height ||
+                        procedure.mesiodistal_space ||
+                        procedure.edentulous_sites?.length > 0 ||
+                        procedure.edentulous_site ||
+                        procedure.arch_condition ||
+                        procedure.ridge_contour ||
+                        procedure.soft_tissue_thickness ||
+                        procedure.keratinized_mucosa ||
+                        procedure.periodontal_status) && (
+                        <View
+                          style={[
+                            styles.section,
+                            { borderLeftWidth: 4, borderLeftColor: "#1E88E5" },
+                          ]}
+                          data-testid="clinical-examination-section"
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                              marginBottom: 8,
+                            }}
+                          >
+                            <Ionicons name="search" size={20} color="#1E88E5" />
+                            <Text
+                              style={[
+                                styles.sectionTitle,
+                                { marginBottom: 0, color: "#1565C0" },
+                              ]}
+                            >
+                              Clinical Examination
+                            </Text>
+                          </View>
+                          {(procedure.occlusocervical_height ||
+                            procedure.mesiodistal_space) && (
+                            <View style={{ marginBottom: 6 }}>
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                  color: "#1565C0",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                Edentulous Site
+                              </Text>
+                              {procedure.occlusocervical_height && (
+                                <InfoRow
+                                  icon="resize"
+                                  label="Occlusocervical Height"
+                                  value={`${procedure.occlusocervical_height} mm`}
+                                />
+                              )}
+                              {procedure.mesiodistal_space && (
+                                <InfoRow
+                                  icon="resize"
+                                  label="Mesiodistal Space"
+                                  value={`${procedure.mesiodistal_space} mm`}
+                                />
+                              )}
+                            </View>
+                          )}
+                          {procedure.edentulous_sites?.length > 0 && (
+                            <InfoRow
+                              icon="grid"
+                              label="Edentulous Sites"
+                              value={procedure.edentulous_sites.join(", ")}
+                              fieldKey="edentulous_sites"
+                            />
+                          )}
+                          {procedure.edentulous_site &&
+                            !procedure.edentulous_sites?.length && (
+                              <InfoRow
+                                icon="grid"
+                                label="Edentulous Site"
+                                value={procedure.edentulous_site}
+                                fieldKey="edentulous_site"
+                              />
+                            )}
+                          {procedure.arch_condition && (
+                            <InfoRow
+                              icon="ellipse"
+                              label={
+                                procedure.arch === "Maxillary"
+                                  ? "Maxillary Arch Condition"
+                                  : procedure.arch === "Mandibular"
+                                    ? "Mandibular Arch Condition"
+                                    : "Arch Condition"
+                              }
+                              value={procedure.arch_condition}
+                              fieldKey="arch_condition"
+                            />
+                          )}
+                          {procedure.ridge_contour && (
+                            <InfoRow
+                              icon="analytics"
+                              label="Ridge Contour"
+                              value={procedure.ridge_contour}
+                              fieldKey="ridge_contour"
+                            />
+                          )}
+                          {procedure.soft_tissue_thickness && (
+                            <InfoRow
+                              icon="layers"
+                              label="Soft Tissue Thickness"
+                              value={procedure.soft_tissue_thickness}
+                              fieldKey="soft_tissue_thickness"
+                            />
+                          )}
+                          {procedure.keratinized_mucosa && (
+                            <InfoRow
+                              icon="resize"
+                              label="Keratinized Mucosa"
+                              value={procedure.keratinized_mucosa}
+                              fieldKey="keratinized_mucosa"
+                            />
+                          )}
+                          {procedure.periodontal_status && (
+                            <InfoRow
+                              icon="pulse"
+                              label="Periodontal Status"
+                              value={procedure.periodontal_status}
+                              fieldKey="periodontal_status"
+                            />
+                          )}
+                        </View>
+                      )}
+
+                      {/* Occlusal Analysis */}
+                      {(procedure.occlusal_scheme ||
+                        procedure.parafunction_habit ||
+                        procedure.vertical_dimension ||
+                        procedure.opposing_dentition ||
+                        procedure.vertical_dimension_mm ||
+                        procedure.available_interarch_space ||
+                        procedure.opposing_arch ||
+                        procedure.tmj) && (
+                        <View
+                          style={[
+                            styles.section,
+                            { borderLeftWidth: 4, borderLeftColor: "#7B1FA2" },
+                          ]}
+                          data-testid="occlusal-analysis-section"
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                              marginBottom: 8,
+                            }}
+                          >
+                            <Ionicons
+                              name="fitness"
+                              size={20}
+                              color="#7B1FA2"
+                            />
+                            <Text
+                              style={[
+                                styles.sectionTitle,
+                                { marginBottom: 0, color: "#6A1B9A" },
+                              ]}
+                            >
+                              Occlusal Analysis
+                            </Text>
+                          </View>
+                          {procedure.available_interarch_space && (
+                            <InfoRow
+                              icon="resize"
+                              label={
+                                procedure.arch === "Maxillary"
+                                  ? "Maxillary Restorative Space"
+                                  : procedure.arch === "Mandibular"
+                                    ? "Mandibular Restorative Space"
+                                    : "Restorative Space"
+                              }
+                              value={`${procedure.available_interarch_space} mm`}
+                            />
+                          )}
+                          {procedure.opposing_arch && (
+                            <InfoRow
+                              icon="people"
+                              label="Opposing Arch"
+                              value={procedure.opposing_arch}
+                              fieldKey="opposing_arch"
+                            />
+                          )}
+                          {procedure.occlusal_scheme && (
+                            <InfoRow
+                              icon="swap-horizontal"
+                              label="Occlusal Scheme"
+                              value={procedure.occlusal_scheme}
+                              fieldKey="occlusal_scheme"
+                            />
+                          )}
+                          {procedure.parafunction_habit && (
+                            <InfoRow
+                              icon="alert-circle"
+                              label="Parafunctional Habits"
+                              value={procedure.parafunction_habit}
+                              fieldKey="parafunction_habit"
+                            />
+                          )}
+                          {procedure.vertical_dimension && (
+                            <InfoRow
+                              icon="arrow-up"
+                              label="Vertical Dimension"
+                              value={procedure.vertical_dimension}
+                              fieldKey="vertical_dimension"
+                            />
+                          )}
+                          {procedure.vertical_dimension_mm && (
+                            <InfoRow
+                              icon="arrow-up"
+                              label="Vertical Dimension (mm)"
+                              value={procedure.vertical_dimension_mm}
+                              fieldKey="vertical_dimension_mm"
+                            />
+                          )}
+                          {procedure.opposing_dentition && (
+                            <InfoRow
+                              icon="git-compare"
+                              label="Opposing Dentition"
+                              value={procedure.opposing_dentition}
+                              fieldKey="opposing_dentition"
+                            />
+                          )}
+                          {procedure.tmj && (
+                            <InfoRow
+                              icon="pulse"
+                              label="TMJ Assessment"
+                              value={procedure.tmj}
+                              fieldKey="tmj"
+                            />
+                          )}
+                        </View>
+                      )}
+
+                      {/* Aesthetic Risk Assessment */}
+                      {(procedure.smile_line || procedure.gingival_biotype) && (
+                        <View
+                          style={[
+                            styles.section,
+                            { borderLeftWidth: 4, borderLeftColor: "#E91E63" },
+                          ]}
+                          data-testid="aesthetic-risk-section"
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                              marginBottom: 8,
+                            }}
+                          >
+                            <Ionicons name="happy" size={20} color="#E91E63" />
+                            <Text
+                              style={[
+                                styles.sectionTitle,
+                                { marginBottom: 0, color: "#C2185B" },
+                              ]}
+                            >
+                              Aesthetic Risk Assessment
+                            </Text>
+                          </View>
+                          {procedure.smile_line && (
+                            <InfoRow
+                              icon="eye"
+                              label="Smile Line"
+                              value={procedure.smile_line}
+                              fieldKey="smile_line"
+                            />
+                          )}
+                          {procedure.gingival_biotype && (
+                            <InfoRow
+                              icon="leaf"
+                              label="Gingival Biotype"
+                              value={procedure.gingival_biotype}
+                              fieldKey="gingival_biotype"
+                            />
+                          )}
+                        </View>
+                      )}
+
+                      {/* Medical Assessment */}
+                      {procedure.medical_assessment &&
+                        Object.keys(procedure.medical_assessment).length >
+                          0 && (
+                          <View
+                            style={[
+                              styles.section,
+                              {
+                                borderLeftWidth: 4,
+                                borderLeftColor: "#D32F2F",
+                              },
+                            ]}
+                            data-testid="medical-assessment-section"
+                          >
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 8,
+                              }}
+                            >
+                              <Ionicons
+                                name="heart"
+                                size={20}
+                                color="#D32F2F"
+                              />
+                              <Text
+                                style={[
+                                  styles.sectionTitle,
+                                  { marginBottom: 0, color: "#B71C1C" },
+                                ]}
+                              >
+                                Medical Assessment
+                              </Text>
+                              {procedure.medical_risk_level && (
+                                <View
+                                  style={{
+                                    backgroundColor:
+                                      procedure.medical_risk_level ===
+                                      "Low Risk"
+                                        ? "#E8F5E9"
+                                        : procedure.medical_risk_level ===
+                                            "Moderate Risk"
+                                          ? "#FFF3E0"
+                                          : "#FFEBEE",
+                                    borderRadius: 8,
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 4,
+                                  }}
+                                >
+                                  <Text
+                                    style={{
+                                      fontSize: 11,
+                                      fontWeight: "700",
+                                      color:
+                                        procedure.medical_risk_level ===
+                                        "Low Risk"
+                                          ? "#4CAF50"
+                                          : procedure.medical_risk_level ===
+                                              "Moderate Risk"
+                                            ? "#FF9800"
+                                            : "#F44336",
+                                    }}
+                                  >
+                                    {procedure.medical_risk_level}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                            {Object.entries(procedure.medical_assessment)
+                              .filter(
+                                ([key]) =>
+                                  ![
+                                    "hb",
+                                    "tlc",
+                                    "bleeding_time",
+                                    "clotting_time",
+                                    "prothrombin_time",
+                                    "inr",
+                                    "hba1c",
+                                  ].includes(key),
+                              )
+                              .map(([key, value]) => {
+                                const isNoRisk = (value as string) === "No";
+                                const isHighRisk =
+                                  ["Uncontrolled", "Heavy (>10/day)"].some(
+                                    (h) => (value as string).includes?.(h),
+                                  ) ||
+                                  (["osteoporosis", "radiation"].includes(
+                                    key,
+                                  ) &&
+                                    (value as string) === "Yes");
+                                const iconName = isNoRisk
+                                  ? "checkmark-circle"
+                                  : isHighRisk
+                                    ? "warning"
+                                    : "alert-circle";
+                                const iconColor = isNoRisk
+                                  ? "#4CAF50"
+                                  : isHighRisk
+                                    ? "#F44336"
+                                    : "#FF9800";
+                                const factor = MEDICAL_RISK_FACTORS.find(
+                                  (f) => f.id === key,
+                                );
+                                const factorLabel =
+                                  factor?.label || key.replace(/_/g, " ");
+                                const medFieldKey = `medical_assessment.${key}`;
+                                const rowEditing = editingField === medFieldKey;
+                                const rowEditValue =
+                                  editValues[medFieldKey] ?? value;
+
+                                const handleStartRowEdit = () => {
+                                  if (!factor) return;
+                                  startEdit(medFieldKey, value);
+                                };
+                                const handleSaveRow = async () => {
+                                  const updatedMedical = {
+                                    ...procedure.medical_assessment,
+                                    [key]: rowEditValue,
+                                  };
+                                  const riskInfo =
+                                    calculateMedicalRisk(updatedMedical);
+                                  setSaving(true);
+                                  try {
+                                    const res = await api.patch(
+                                      `/procedures/${id}/edit-fields`,
+                                      {
+                                        fields: {
+                                          medical_assessment: updatedMedical,
+                                          medical_risk_level: riskInfo.level,
+                                        },
+                                      },
+                                    );
+                                    setProcedure(res.data);
+                                    setEditingField(null);
+                                    Alert.alert(
+                                      "Saved",
+                                      "Medical assessment updated",
+                                    );
+                                  } catch (e: any) {
+                                    Alert.alert(
+                                      "Error",
+                                      e.response?.data?.detail ||
+                                        "Failed to save",
+                                    );
+                                  } finally {
+                                    setSaving(false);
+                                  }
+                                };
+
+                                return (
+                                  <View
+                                    key={key}
+                                    style={{
+                                      paddingVertical: 8,
+                                      borderBottomWidth: 1,
+                                      borderBottomColor: "#F0F0F0",
+                                    }}
+                                  >
+                                    <View
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name={iconName}
+                                        size={20}
+                                        color={iconColor}
+                                      />
+                                      <View style={{ marginLeft: 12, flex: 1 }}>
+                                        <Text
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#666",
+                                            textTransform: "capitalize",
+                                          }}
+                                        >
+                                          {factorLabel}
+                                        </Text>
+                                        <Text
+                                          style={{
+                                            fontSize: 14,
+                                            color: "#1A1A1A",
+                                            fontWeight: "500",
+                                          }}
+                                        >
+                                          {value as string}
+                                        </Text>
+                                      </View>
+                                      {!isNoRisk && !rowEditing && (
+                                        <View
+                                          style={{
+                                            backgroundColor: isHighRisk
+                                              ? "#FFEBEE"
+                                              : "#FFF3E0",
+                                            borderRadius: 6,
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 2,
+                                            marginRight: 6,
+                                          }}
+                                        >
+                                          <Text
+                                            style={{
+                                              fontSize: 10,
+                                              fontWeight: "600",
+                                              color: isHighRisk
+                                                ? "#F44336"
+                                                : "#FF9800",
+                                            }}
+                                          >
+                                            {isHighRisk ? "HIGH" : "MODERATE"}
+                                          </Text>
+                                        </View>
+                                      )}
+                                      {canEditField() &&
+                                        !rowEditing &&
+                                        factor && (
+                                          <TouchableOpacity
+                                            onPress={handleStartRowEdit}
+                                            style={{ padding: 4 }}
+                                            data-testid={`edit-medical-${key}`}
+                                          >
+                                            <Ionicons
+                                              name="pencil"
+                                              size={14}
+                                              color="#1565C0"
+                                            />
+                                          </TouchableOpacity>
+                                        )}
+                                    </View>
+                                    {rowEditing && factor && (
+                                      <View
+                                        style={{ marginTop: 8, marginLeft: 32 }}
+                                      >
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            flexWrap: "wrap",
+                                            gap: 6,
+                                          }}
+                                        >
+                                          {factor.options.map((opt) => {
+                                            const selected =
+                                              rowEditValue === opt;
+                                            return (
+                                              <TouchableOpacity
+                                                key={opt}
+                                                onPress={() =>
+                                                  setEditValues((prev) => ({
+                                                    ...prev,
+                                                    [medFieldKey]: opt,
+                                                  }))
+                                                }
+                                                style={{
+                                                  paddingHorizontal: 12,
+                                                  paddingVertical: 6,
+                                                  borderRadius: 16,
+                                                  borderWidth: 1,
+                                                  borderColor: selected
+                                                    ? "#1565C0"
+                                                    : "#CFD8DC",
+                                                  backgroundColor: selected
+                                                    ? "#1565C0"
+                                                    : "#FFF",
+                                                }}
+                                              >
+                                                <Text
+                                                  style={{
+                                                    fontSize: 12,
+                                                    fontWeight: "600",
+                                                    color: selected
+                                                      ? "#FFF"
+                                                      : "#37474F",
+                                                  }}
+                                                >
+                                                  {opt}
+                                                </Text>
+                                              </TouchableOpacity>
+                                            );
+                                          })}
+                                        </View>
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            gap: 6,
+                                            marginTop: 8,
+                                          }}
+                                        >
+                                          <TouchableOpacity
+                                            onPress={handleSaveRow}
+                                            disabled={saving}
+                                            style={{
+                                              backgroundColor: "#4CAF50",
+                                              borderRadius: 6,
+                                              paddingHorizontal: 10,
+                                              paddingVertical: 6,
+                                              flexDirection: "row",
+                                              alignItems: "center",
+                                              gap: 4,
+                                            }}
+                                          >
+                                            {saving ? (
+                                              <ActivityIndicator
+                                                size="small"
+                                                color="#FFF"
+                                              />
+                                            ) : (
+                                              <Ionicons
+                                                name="checkmark"
+                                                size={14}
+                                                color="#FFF"
+                                              />
+                                            )}
+                                            <Text
+                                              style={{
+                                                color: "#FFF",
+                                                fontSize: 12,
+                                                fontWeight: "700",
+                                              }}
+                                            >
+                                              Save
+                                            </Text>
+                                          </TouchableOpacity>
+                                          <TouchableOpacity
+                                            onPress={cancelEdit}
+                                            style={{
+                                              backgroundColor: "#F44336",
+                                              borderRadius: 6,
+                                              paddingHorizontal: 10,
+                                              paddingVertical: 6,
+                                              flexDirection: "row",
+                                              alignItems: "center",
+                                              gap: 4,
+                                            }}
+                                          >
+                                            <Ionicons
+                                              name="close"
+                                              size={14}
+                                              color="#FFF"
+                                            />
+                                            <Text
+                                              style={{
+                                                color: "#FFF",
+                                                fontSize: 12,
+                                                fontWeight: "700",
+                                              }}
+                                            >
+                                              Cancel
+                                            </Text>
+                                          </TouchableOpacity>
+                                        </View>
+                                      </View>
+                                    )}
+                                  </View>
+                                );
+                              })}
+                            {/* Read-only Haematology Examination + HbA1c display block.
+                Phase-1 lab values captured at case-creation time. Not part
+                of the risk-scoring above; surfaced separately so reviewers
+                can compare to clinical thresholds (e.g. HbA1c > 9 % hard
+                blocks immediate loading via the clinical-rule engine). */}
+                            {(() => {
+                              const ma: any =
+                                procedure.medical_assessment || {};
+                              const labRows: {
+                                id: string;
+                                label: string;
+                                suffix?: string;
+                              }[] = [
+                                { id: "hba1c", label: "HbA1c", suffix: "%" },
+                                {
+                                  id: "hb",
+                                  label: "Haemoglobin (Hb)",
+                                  suffix: "g/dL",
+                                },
+                                {
+                                  id: "tlc",
+                                  label: "Total Leucocyte Count",
+                                  suffix: "/cumm",
+                                },
+                                {
+                                  id: "bleeding_time",
+                                  label: "Bleeding Time",
+                                  suffix: "min",
+                                },
+                                {
+                                  id: "clotting_time",
+                                  label: "Clotting Time",
+                                  suffix: "min",
+                                },
+                                {
+                                  id: "prothrombin_time",
+                                  label: "Prothrombin Time",
+                                  suffix: "sec",
+                                },
+                                {
+                                  id: "inr",
+                                  label: "International Normalised Ratio (INR)",
+                                },
+                              ];
+                              const present = labRows.filter(
+                                (r) =>
+                                  ma[r.id] !== undefined &&
+                                  ma[r.id] !== "" &&
+                                  ma[r.id] !== null,
+                              );
+                              if (present.length === 0) return null;
+                              return (
+                                <View
+                                  style={{
+                                    marginTop: 10,
+                                    paddingTop: 10,
+                                    borderTopWidth: 1,
+                                    borderTopColor: "#E0E7EE",
+                                  }}
+                                  testID="haematology-readonly"
+                                  data-testid="haematology-readonly"
                                 >
                                   <Text
                                     style={{
                                       fontSize: 13,
                                       fontWeight: "700",
-                                      color: p.fg,
+                                      color: "#1E3A5F",
+                                      marginBottom: 6,
                                     }}
                                   >
-                                    {opt.headline ||
-                                      `${opt.implant_count} implants (${opt.kind})`}
+                                    Haematology Examination
                                   </Text>
-                                  {isRec ? (
+                                  {present.map((r) => (
                                     <View
+                                      key={r.id}
                                       style={{
-                                        backgroundColor: "#33691E",
-                                        paddingHorizontal: 8,
-                                        paddingVertical: 2,
-                                        borderRadius: 999,
+                                        flexDirection: "row",
+                                        justifyContent: "space-between",
+                                        paddingVertical: 4,
                                       }}
+                                      testID={`haematology-readonly-${r.id}`}
+                                      data-testid={`haematology-readonly-${r.id}`}
                                     >
                                       <Text
                                         style={{
-                                          fontSize: 10,
-                                          color: "#FFFFFF",
-                                          fontWeight: "800",
+                                          fontSize: 13,
+                                          color: "#37474F",
                                         }}
                                       >
-                                        RECOMMENDED FOR THIS PATIENT
+                                        {r.label}
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 13,
+                                          color: "#1A1A1A",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        {String(ma[r.id])}
+                                        {r.suffix ? ` ${r.suffix}` : ""}
                                       </Text>
                                     </View>
-                                  ) : null}
+                                  ))}
                                 </View>
-                                {isRec && a.recommendation_reason ? (
-                                  <Text
-                                    style={{
-                                      fontSize: 11,
-                                      color: "#33691E",
-                                      marginTop: 4,
-                                      fontStyle: "italic",
-                                    }}
-                                  >
-                                    Why: {a.recommendation_reason}
-                                  </Text>
-                                ) : null}
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#37474F",
-                                    marginTop: 4,
-                                    lineHeight: 17,
-                                  }}
-                                >
-                                  {opt.description_short ||
-                                    opt.description ||
-                                    opt.placement}
-                                </Text>
-                              </View>
-                            );
-                          },
+                              );
+                            })()}
+                          </View>
                         )}
-                        {a.loading_recommendation && (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: "#455A64",
-                              marginTop: 10,
-                              fontStyle: "italic",
-                            }}
-                          >
-                            Loading: {a.loading_recommendation}
-                          </Text>
-                        )}
-                        {a.augmentation_note && (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: "#455A64",
-                              marginTop: 4,
-                              fontStyle: "italic",
-                            }}
-                          >
-                            Augmentation guidance: {a.augmentation_note}
-                          </Text>
-                        )}
+
+                      <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Payment</Text>
+                        <InfoRow
+                          icon="receipt"
+                          label="Receipt Number"
+                          value={procedure.receipt_number}
+                        />
+                        <InfoRow
+                          icon="cash"
+                          label="Amount Paid"
+                          value={`₹${procedure.amount_paid}`}
+                        />
                       </View>
-                    );
-                  })}
-                </View>
-              )}
 
-            {/* Clinical Examination */}
-            {(procedure.occlusocervical_height ||
-              procedure.mesiodistal_space ||
-              procedure.edentulous_sites?.length > 0 ||
-              procedure.edentulous_site ||
-              procedure.arch_condition ||
-              procedure.ridge_contour ||
-              procedure.soft_tissue_thickness ||
-              procedure.keratinized_mucosa ||
-              procedure.periodontal_status) && (
-              <View
-                style={[
-                  styles.section,
-                  { borderLeftWidth: 4, borderLeftColor: "#1E88E5" },
-                ]}
-                data-testid="clinical-examination-section"
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Ionicons name="search" size={20} color="#1E88E5" />
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { marginBottom: 0, color: "#1565C0" },
-                    ]}
-                  >
-                    Clinical Examination
-                  </Text>
-                </View>
-                {(procedure.occlusocervical_height ||
-                  procedure.mesiodistal_space) && (
-                  <View style={{ marginBottom: 6 }}>
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "700",
-                        color: "#1565C0",
-                        marginBottom: 4,
-                      }}
-                    >
-                      Edentulous Site
-                    </Text>
-                    {procedure.occlusocervical_height && (
-                      <InfoRow
-                        icon="resize"
-                        label="Occlusocervical Height"
-                        value={`${procedure.occlusocervical_height} mm`}
-                      />
-                    )}
-                    {procedure.mesiodistal_space && (
-                      <InfoRow
-                        icon="resize"
-                        label="Mesiodistal Space"
-                        value={`${procedure.mesiodistal_space} mm`}
-                      />
-                    )}
-                  </View>
-                )}
-                {procedure.edentulous_sites?.length > 0 && (
-                  <InfoRow
-                    icon="grid"
-                    label="Edentulous Sites"
-                    value={procedure.edentulous_sites.join(", ")}
-                    fieldKey="edentulous_sites"
-                  />
-                )}
-                {procedure.edentulous_site &&
-                  !procedure.edentulous_sites?.length && (
-                    <InfoRow
-                      icon="grid"
-                      label="Edentulous Site"
-                      value={procedure.edentulous_site}
-                      fieldKey="edentulous_site"
-                    />
-                  )}
-                {procedure.arch_condition && (
-                  <InfoRow
-                    icon="ellipse"
-                    label={
-                      procedure.arch === "Maxillary"
-                        ? "Maxillary Arch Condition"
-                        : procedure.arch === "Mandibular"
-                          ? "Mandibular Arch Condition"
-                          : "Arch Condition"
-                    }
-                    value={procedure.arch_condition}
-                    fieldKey="arch_condition"
-                  />
-                )}
-                {procedure.ridge_contour && (
-                  <InfoRow
-                    icon="analytics"
-                    label="Ridge Contour"
-                    value={procedure.ridge_contour}
-                    fieldKey="ridge_contour"
-                  />
-                )}
-                {procedure.soft_tissue_thickness && (
-                  <InfoRow
-                    icon="layers"
-                    label="Soft Tissue Thickness"
-                    value={procedure.soft_tissue_thickness}
-                    fieldKey="soft_tissue_thickness"
-                  />
-                )}
-                {procedure.keratinized_mucosa && (
-                  <InfoRow
-                    icon="resize"
-                    label="Keratinized Mucosa"
-                    value={procedure.keratinized_mucosa}
-                    fieldKey="keratinized_mucosa"
-                  />
-                )}
-                {procedure.periodontal_status && (
-                  <InfoRow
-                    icon="pulse"
-                    label="Periodontal Status"
-                    value={procedure.periodontal_status}
-                    fieldKey="periodontal_status"
-                  />
-                )}
-              </View>
-            )}
+                      {(procedure.implant_region ||
+                        procedure.implant_company) && (
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitle}>
+                            Implant Details
+                          </Text>
+                          {procedure.implant_region && (
+                            <View style={styles.detailRow}>
+                              <Text style={styles.detailLabel}>Region:</Text>
+                              <Text style={styles.specText}>
+                                {procedure.implant_region}
+                              </Text>
+                            </View>
+                          )}
+                          {procedure.implant_company && (
+                            <View style={styles.detailRow}>
+                              <Text style={styles.detailLabel}>Company:</Text>
+                              <Text style={styles.specText}>
+                                {procedure.implant_company}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
 
-            {/* Occlusal Analysis */}
-            {(procedure.occlusal_scheme ||
-              procedure.parafunction_habit ||
-              procedure.vertical_dimension ||
-              procedure.opposing_dentition ||
-              procedure.vertical_dimension_mm ||
-              procedure.available_interarch_space ||
-              procedure.opposing_arch ||
-              procedure.tmj) && (
-              <View
-                style={[
-                  styles.section,
-                  { borderLeftWidth: 4, borderLeftColor: "#7B1FA2" },
-                ]}
-                data-testid="occlusal-analysis-section"
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Ionicons name="fitness" size={20} color="#7B1FA2" />
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { marginBottom: 0, color: "#6A1B9A" },
-                    ]}
-                  >
-                    Occlusal Analysis
-                  </Text>
-                </View>
-                {procedure.available_interarch_space && (
-                  <InfoRow
-                    icon="resize"
-                    label={
-                      procedure.arch === "Maxillary"
-                        ? "Maxillary Restorative Space"
-                        : procedure.arch === "Mandibular"
-                          ? "Mandibular Restorative Space"
-                          : "Restorative Space"
-                    }
-                    value={`${procedure.available_interarch_space} mm`}
-                  />
-                )}
-                {procedure.opposing_arch && (
-                  <InfoRow
-                    icon="people"
-                    label="Opposing Arch"
-                    value={procedure.opposing_arch}
-                    fieldKey="opposing_arch"
-                  />
-                )}
-                {procedure.occlusal_scheme && (
-                  <InfoRow
-                    icon="swap-horizontal"
-                    label="Occlusal Scheme"
-                    value={procedure.occlusal_scheme}
-                    fieldKey="occlusal_scheme"
-                  />
-                )}
-                {procedure.parafunction_habit && (
-                  <InfoRow
-                    icon="alert-circle"
-                    label="Parafunctional Habits"
-                    value={procedure.parafunction_habit}
-                    fieldKey="parafunction_habit"
-                  />
-                )}
-                {procedure.vertical_dimension && (
-                  <InfoRow
-                    icon="arrow-up"
-                    label="Vertical Dimension"
-                    value={procedure.vertical_dimension}
-                    fieldKey="vertical_dimension"
-                  />
-                )}
-                {procedure.vertical_dimension_mm && (
-                  <InfoRow
-                    icon="arrow-up"
-                    label="Vertical Dimension (mm)"
-                    value={procedure.vertical_dimension_mm}
-                    fieldKey="vertical_dimension_mm"
-                  />
-                )}
-                {procedure.opposing_dentition && (
-                  <InfoRow
-                    icon="git-compare"
-                    label="Opposing Dentition"
-                    value={procedure.opposing_dentition}
-                    fieldKey="opposing_dentition"
-                  />
-                )}
-                {procedure.tmj && (
-                  <InfoRow
-                    icon="pulse"
-                    label="TMJ Assessment"
-                    value={procedure.tmj}
-                    fieldKey="tmj"
-                  />
-                )}
-              </View>
-            )}
+                      {procedure.bone_graft_specifications && (
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitle}>
+                            Bone Graft/Membrane
+                          </Text>
+                          <Text style={styles.specText}>
+                            {procedure.bone_graft_specifications}
+                          </Text>
+                        </View>
+                      )}
 
-            {/* Aesthetic Risk Assessment */}
-            {(procedure.smile_line || procedure.gingival_biotype) && (
-              <View
-                style={[
-                  styles.section,
-                  { borderLeftWidth: 4, borderLeftColor: "#E91E63" },
-                ]}
-                data-testid="aesthetic-risk-section"
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Ionicons name="happy" size={20} color="#E91E63" />
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { marginBottom: 0, color: "#C2185B" },
-                    ]}
-                  >
-                    Aesthetic Risk Assessment
-                  </Text>
-                </View>
-                {procedure.smile_line && (
-                  <InfoRow
-                    icon="eye"
-                    label="Smile Line"
-                    value={procedure.smile_line}
-                    fieldKey="smile_line"
-                  />
-                )}
-                {procedure.gingival_biotype && (
-                  <InfoRow
-                    icon="leaf"
-                    label="Gingival Biotype"
-                    value={procedure.gingival_biotype}
-                    fieldKey="gingival_biotype"
-                  />
-                )}
-              </View>
-            )}
-
-            {/* Medical Assessment */}
-            {procedure.medical_assessment &&
-              Object.keys(procedure.medical_assessment).length > 0 && (
-                <View
-                  style={[
-                    styles.section,
-                    { borderLeftWidth: 4, borderLeftColor: "#D32F2F" },
-                  ]}
-                  data-testid="medical-assessment-section"
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Ionicons name="heart" size={20} color="#D32F2F" />
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { marginBottom: 0, color: "#B71C1C" },
-                      ]}
-                    >
-                      Medical Assessment
-                    </Text>
-                    {procedure.medical_risk_level && (
-                      <View
-                        style={{
-                          backgroundColor:
-                            procedure.medical_risk_level === "Low Risk"
-                              ? "#E8F5E9"
-                              : procedure.medical_risk_level === "Moderate Risk"
-                                ? "#FFF3E0"
-                                : "#FFEBEE",
-                          borderRadius: 8,
-                          paddingHorizontal: 10,
-                          paddingVertical: 4,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            fontWeight: "700",
-                            color:
-                              procedure.medical_risk_level === "Low Risk"
-                                ? "#4CAF50"
-                                : procedure.medical_risk_level ===
-                                    "Moderate Risk"
-                                  ? "#FF9800"
-                                  : "#F44336",
-                          }}
-                        >
-                          {procedure.medical_risk_level}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {Object.entries(procedure.medical_assessment)
-                    .filter(
-                      ([key]) =>
-                        ![
-                          "hb",
-                          "tlc",
-                          "bleeding_time",
-                          "clotting_time",
-                          "prothrombin_time",
-                          "inr",
-                          "hba1c",
-                        ].includes(key),
-                    )
-                    .map(([key, value]) => {
-                      const isNoRisk = (value as string) === "No";
-                      const isHighRisk =
-                        ["Uncontrolled", "Heavy (>10/day)"].some((h) =>
-                          (value as string).includes?.(h),
-                        ) ||
-                        (["osteoporosis", "radiation"].includes(key) &&
-                          (value as string) === "Yes");
-                      const iconName = isNoRisk
-                        ? "checkmark-circle"
-                        : isHighRisk
-                          ? "warning"
-                          : "alert-circle";
-                      const iconColor = isNoRisk
-                        ? "#4CAF50"
-                        : isHighRisk
-                          ? "#F44336"
-                          : "#FF9800";
-                      const factor = MEDICAL_RISK_FACTORS.find(
-                        (f) => f.id === key,
-                      );
-                      const factorLabel =
-                        factor?.label || key.replace(/_/g, " ");
-                      const medFieldKey = `medical_assessment.${key}`;
-                      const rowEditing = editingField === medFieldKey;
-                      const rowEditValue = editValues[medFieldKey] ?? value;
-
-                      const handleStartRowEdit = () => {
-                        if (!factor) return;
-                        startEdit(medFieldKey, value);
-                      };
-                      const handleSaveRow = async () => {
-                        const updatedMedical = {
-                          ...procedure.medical_assessment,
-                          [key]: rowEditValue,
-                        };
-                        const riskInfo = calculateMedicalRisk(updatedMedical);
-                        setSaving(true);
-                        try {
-                          const res = await api.patch(
-                            `/procedures/${id}/edit-fields`,
-                            {
-                              fields: {
-                                medical_assessment: updatedMedical,
-                                medical_risk_level: riskInfo.level,
-                              },
-                            },
-                          );
-                          setProcedure(res.data);
-                          setEditingField(null);
-                          Alert.alert("Saved", "Medical assessment updated");
-                        } catch (e: any) {
-                          Alert.alert(
-                            "Error",
-                            e.response?.data?.detail || "Failed to save",
-                          );
-                        } finally {
-                          setSaving(false);
-                        }
-                      };
-
-                      return (
+                      {/* Final Prosthetic Plan - always visible to everyone when set */}
+                      {procedure.final_prosthetic_plan && (
                         <View
-                          key={key}
-                          style={{
-                            paddingVertical: 8,
-                            borderBottomWidth: 1,
-                            borderBottomColor: "#F0F0F0",
-                          }}
+                          style={[
+                            styles.section,
+                            { borderLeftWidth: 4, borderLeftColor: "#FF9800" },
+                          ]}
+                          data-testid="final-prosthetic-plan-section"
                         >
                           <View
                             style={{
                               flexDirection: "row",
                               alignItems: "center",
+                              gap: 8,
+                              marginBottom: 8,
                             }}
                           >
                             <Ionicons
-                              name={iconName}
+                              name="construct"
                               size={20}
-                              color={iconColor}
+                              color="#FF9800"
                             />
-                            <View style={{ marginLeft: 12, flex: 1 }}>
+                            <Text
+                              style={[
+                                styles.sectionTitle,
+                                { marginBottom: 0, color: "#E65100" },
+                              ]}
+                            >
+                              Final Prosthetic Plan
+                            </Text>
+                          </View>
+                          <View
+                            style={{
+                              backgroundColor: "#FFF8E1",
+                              borderRadius: 8,
+                              padding: 12,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 15,
+                                fontWeight: "600",
+                                color: "#333",
+                              }}
+                            >
+                              {procedure.final_prosthetic_plan}
+                            </Text>
+                            {/* iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
+                      When the case is Single Conventional Implant AND Phase 4 Step 1
+                      captured the 3-part breakdown, surface each field so reviewers
+                      see the exact abutment / retention / material chosen. */}
+                            {(() => {
+                              const _num = procedure?.num_implants || "";
+                              const _overlap = [
+                                "Immediate Implant",
+                                "Partial Extraction Therapy",
+                                "Implant Placement with Guided Bone Regeneration",
+                                "Guided Surgery",
+                                "Sinus Lift",
+                              ].includes(procedure?.implant_procedure_type);
+                              const isSCEff =
+                                procedure?.implant_procedure_type ===
+                                  "Single Conventional Implant" ||
+                                (_overlap && _num === "Single Implant");
+                              const p4 = procedure.phase4_step1_data || {};
+                              if (!isSCEff) return null;
+                              if (
+                                !p4.sc_final_abutment_type &&
+                                !p4.sc_final_retention_type &&
+                                !p4.sc_final_crown_material
+                              )
+                                return null;
+                              const rowVal = (v: string, o: string) =>
+                                v === "Other" && o ? `Other — ${o}` : v;
+                              return (
+                                <View
+                                  style={{
+                                    marginTop: 10,
+                                    paddingTop: 10,
+                                    borderTopWidth: StyleSheet.hairlineWidth,
+                                    borderTopColor: "#FFE082",
+                                  }}
+                                >
+                                  {!!p4.sc_final_abutment_type && (
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        color: "#4E342E",
+                                        marginTop: 4,
+                                      }}
+                                    >
+                                      <Text style={{ fontWeight: "700" }}>
+                                        Abutment:{" "}
+                                      </Text>
+                                      {rowVal(
+                                        p4.sc_final_abutment_type,
+                                        p4.sc_final_abutment_type_other,
+                                      )}
+                                    </Text>
+                                  )}
+                                  {!!p4.sc_final_retention_type && (
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        color: "#4E342E",
+                                        marginTop: 4,
+                                      }}
+                                    >
+                                      <Text style={{ fontWeight: "700" }}>
+                                        Retention:{" "}
+                                      </Text>
+                                      {rowVal(
+                                        p4.sc_final_retention_type,
+                                        p4.sc_final_retention_type_other,
+                                      )}
+                                    </Text>
+                                  )}
+                                  {!!p4.sc_final_crown_material && (
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        color: "#4E342E",
+                                        marginTop: 4,
+                                      }}
+                                    >
+                                      <Text style={{ fontWeight: "700" }}>
+                                        Crown Material:{" "}
+                                      </Text>
+                                      {rowVal(
+                                        p4.sc_final_crown_material,
+                                        p4.sc_final_crown_material_other,
+                                      )}
+                                    </Text>
+                                  )}
+                                </View>
+                              );
+                            })()}
+                            {/* iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan breakdown. */}
+                            {procedure.phase4_step1_data &&
+                              (procedure.phase4_step1_data
+                                .ma_final_prosthesis_type ||
+                                procedure.phase4_step1_data
+                                  .ma_final_abutment_type ||
+                                procedure.phase4_step1_data
+                                  .ma_final_retention_type ||
+                                procedure.phase4_step1_data
+                                  .ma_final_crown_material ||
+                                procedure.phase4_step1_data
+                                  .fa_final_prosthetic_plan ||
+                                procedure.phase4_step1_data
+                                  .zp_final_prosthetic_plan) && (
+                                <View
+                                  style={{
+                                    marginTop: 10,
+                                    paddingTop: 10,
+                                    borderTopWidth: StyleSheet.hairlineWidth,
+                                    borderTopColor: "#FFE082",
+                                  }}
+                                >
+                                  {[
+                                    [
+                                      "Prosthesis Type",
+                                      procedure.phase4_step1_data
+                                        .ma_final_prosthesis_type_other ||
+                                        procedure.phase4_step1_data
+                                          .ma_final_prosthesis_type,
+                                    ],
+                                    [
+                                      "Abutment Type",
+                                      procedure.phase4_step1_data
+                                        .ma_final_abutment_type_other ||
+                                        procedure.phase4_step1_data
+                                          .ma_final_abutment_type,
+                                    ],
+                                    [
+                                      "Type of Retention",
+                                      procedure.phase4_step1_data
+                                        .ma_final_retention_type_other ||
+                                        procedure.phase4_step1_data
+                                          .ma_final_retention_type,
+                                    ],
+                                    [
+                                      "Crown/Bridge Material",
+                                      procedure.phase4_step1_data
+                                        .ma_final_crown_material_other ||
+                                        procedure.phase4_step1_data
+                                          .ma_final_crown_material,
+                                    ],
+                                    [
+                                      "Prosthetic Plan",
+                                      procedure.phase4_step1_data
+                                        .fa_final_prosthetic_plan_other ||
+                                        procedure.phase4_step1_data
+                                          .fa_final_prosthetic_plan,
+                                    ],
+                                    [
+                                      "Prosthetic Plan",
+                                      procedure.phase4_step1_data
+                                        .zp_final_prosthetic_plan_other ||
+                                        procedure.phase4_step1_data
+                                          .zp_final_prosthetic_plan,
+                                    ],
+                                  ]
+                                    .filter(([, v]) => !!v)
+                                    .map(([lbl, v]) => (
+                                      <Text
+                                        key={String(lbl) + String(v)}
+                                        style={{
+                                          fontSize: 13,
+                                          color: "#4E342E",
+                                          marginTop: 4,
+                                        }}
+                                      >
+                                        <Text style={{ fontWeight: "700" }}>
+                                          {lbl}:{" "}
+                                        </Text>
+                                        {v}
+                                      </Text>
+                                    ))}
+                                </View>
+                              )}
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Torque Values Achieved - visible to supervisors during approval and to students after approval */}
+                      {user?.role !== "nurse" && (
+                        <ImplantTraceabilityCard
+                          traceability={
+                            procedure.phase2_data?.implant_traceability
+                          }
+                          labelFor={(pos) => `Implant ${pos}`}
+                        />
+                      )}
+
+                      {procedure.torque_values &&
+                        procedure.torque_values.length > 0 && (
+                          <View
+                            style={styles.section}
+                            data-testid="torque-values-section"
+                          >
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 12,
+                              }}
+                            >
+                              <Ionicons
+                                name="speedometer"
+                                size={20}
+                                color="#FF6D00"
+                              />
+                              <Text
+                                style={[
+                                  styles.sectionTitle,
+                                  { marginBottom: 0, color: "#E65100" },
+                                ]}
+                              >
+                                Torque Values Achieved
+                              </Text>
+                            </View>
+                            {procedure.torque_values.map(
+                              (tv: number, idx: number) => {
+                                const toothLabel = procedure.implant_plans?.[
+                                  idx
+                                ]?.position
+                                  ? `Implant ${procedure.implant_plans[idx].position}`
+                                  : `Implant ${idx + 1}`;
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      paddingVertical: 8,
+                                      borderBottomWidth:
+                                        idx < procedure.torque_values.length - 1
+                                          ? 1
+                                          : 0,
+                                      borderBottomColor: "#F0F0F0",
+                                    }}
+                                  >
+                                    <View
+                                      style={{
+                                        backgroundColor: "#FFF3E0",
+                                        borderRadius: 8,
+                                        paddingHorizontal: 10,
+                                        paddingVertical: 6,
+                                        marginRight: 12,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 13,
+                                          fontWeight: "600",
+                                          color: "#BF360C",
+                                        }}
+                                      >
+                                        {toothLabel}
+                                      </Text>
+                                    </View>
+                                    <Text
+                                      style={{
+                                        fontSize: 18,
+                                        fontWeight: "700",
+                                        color: "#E65100",
+                                      }}
+                                    >
+                                      {tv}
+                                    </Text>
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        color: "#888",
+                                        marginLeft: 4,
+                                      }}
+                                    >
+                                      Ncm
+                                    </Text>
+                                  </View>
+                                );
+                              },
+                            )}
+                          </View>
+                        )}
+
+                      {procedure.ios_file && (
+                        <View
+                          style={styles.section}
+                          data-testid="ios-file-section"
+                        >
+                          <Text style={styles.sectionTitle}>
+                            IOS or Intra-oral Photos
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.cbctFileRow}
+                            onPress={async () => {
+                              try {
+                                const fileUrl = await mintFileToken(
+                                  procedure.ios_file,
+                                );
+                                await openDocument(fileUrl, procedure.ios_file);
+                              } catch (e) {
+                                Alert.alert("Error", "Could not open file");
+                              }
+                            }}
+                            data-testid="ios-file-download"
+                          >
+                            <Ionicons name="camera" size={22} color="#007AFF" />
+                            <Text style={styles.cbctFileName} numberOfLines={1}>
+                              {procedure.ios_original_name ||
+                                "Intra-oral Photo"}
+                            </Text>
+                            <Ionicons
+                              name="download-outline"
+                              size={20}
+                              color="#007AFF"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {/* CBCT Reports - Thumbnails */}
+                      {(procedure.cbct_files?.length > 0 ||
+                        procedure.cbct_file) && (
+                        <View
+                          style={styles.section}
+                          data-testid="cbct-file-section"
+                        >
+                          <Text style={styles.sectionTitle}>CBCT Reports</Text>
+                          {procedure.cbct_files?.length > 0 ? (
+                            procedure.cbct_files.map((f: any, idx: number) => {
+                              const fileUrl = cbctToken
+                                ? cbctFileUrl(cbctToken, f.filename)
+                                : "";
+                              const isImage =
+                                f.filename?.match(/\.(png|jpg|jpeg)$/i);
+                              return (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    marginBottom: 10,
+                                    gap: 10,
+                                    backgroundColor: "#E3F2FD",
+                                    padding: 8,
+                                    borderRadius: 10,
+                                  }}
+                                  data-testid={`cbct-thumb-${idx}`}
+                                >
+                                  {isImage && fileUrl ? (
+                                    <Image
+                                      source={{ uri: fileUrl }}
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: "#90CAF9",
+                                      }}
+                                      resizeMode="cover"
+                                    />
+                                  ) : (
+                                    <View
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        borderRadius: 8,
+                                        backgroundColor: "#BBDEFB",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name="document-attach"
+                                        size={24}
+                                        color="#1565C0"
+                                      />
+                                    </View>
+                                  )}
+                                  <View style={{ flex: 1 }}>
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        fontWeight: "700",
+                                        color: "#333",
+                                      }}
+                                    >
+                                      CBCT Report {idx + 1}
+                                    </Text>
+                                    <Text
+                                      style={{ fontSize: 11, color: "#888" }}
+                                      numberOfLines={1}
+                                    >
+                                      {f.original_name}
+                                    </Text>
+                                  </View>
+                                  <TouchableOpacity
+                                    style={{
+                                      backgroundColor: "#4CAF50",
+                                      borderRadius: 8,
+                                      paddingVertical: 6,
+                                      paddingHorizontal: 12,
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 4,
+                                    }}
+                                    onPress={async () => {
+                                      try {
+                                        const t =
+                                          cbctToken ||
+                                          (await mintCbctToken(id as string));
+                                        if (!cbctToken) setCbctToken(t);
+                                        await Linking.openURL(
+                                          cbctViewUrl(t, f.filename),
+                                        );
+                                      } catch {
+                                        Alert.alert(
+                                          "Error",
+                                          "Could not open file",
+                                        );
+                                      }
+                                    }}
+                                    data-testid={`view-cbct-detail-${idx}`}
+                                  >
+                                    <Ionicons
+                                      name="open-outline"
+                                      size={14}
+                                      color="#FFF"
+                                    />
+                                    <Text
+                                      style={{
+                                        color: "#FFF",
+                                        fontSize: 12,
+                                        fontWeight: "700",
+                                      }}
+                                    >
+                                      View
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              );
+                            })
+                          ) : (
+                            <TouchableOpacity
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 8,
+                                backgroundColor: "#4CAF50",
+                                borderRadius: 10,
+                                paddingVertical: 14,
+                                paddingHorizontal: 20,
+                              }}
+                              onPress={async () => {
+                                try {
+                                  const t =
+                                    cbctToken ||
+                                    (await mintCbctToken(id as string));
+                                  if (!cbctToken) setCbctToken(t);
+                                  await Linking.openURL(
+                                    cbctViewUrl(t, procedure.cbct_file),
+                                  );
+                                } catch (e) {
+                                  Alert.alert("Error", "Could not open file");
+                                }
+                              }}
+                              data-testid="cbct-file-download"
+                            >
+                              <Ionicons
+                                name="document-attach"
+                                size={20}
+                                color="#FFF"
+                              />
                               <Text
                                 style={{
-                                  fontSize: 12,
-                                  color: "#666",
-                                  textTransform: "capitalize",
+                                  color: "#FFF",
+                                  fontSize: 15,
+                                  fontWeight: "700",
+                                  flex: 1,
                                 }}
                               >
-                                {factorLabel}
+                                View CBCT Report
+                              </Text>
+                              <Ionicons
+                                name="open-outline"
+                                size={18}
+                                color="#FFF"
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Patient Intra-oral Photograph Section — visible to student,
+                supervisor, in-charge, administrator (same as CBCT). Renders
+                as a list with thumbnails. Slot labels come from the Phase-1
+                upload (Occlusal, Lateral/Frontal, or extras). */}
+                      {Array.isArray(procedure.intraoral_photos) &&
+                        procedure.intraoral_photos.length > 0 && (
+                          <View
+                            style={styles.section}
+                            data-testid="intraoral-photos-section"
+                          >
+                            <Text style={styles.sectionTitle}>
+                              Patient Intra-oral Photograph
+                            </Text>
+                            {procedure.intraoral_photos.map(
+                              (f: any, idx: number) => {
+                                const baseUrl = api.defaults.baseURL || "";
+                                const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      marginBottom: 10,
+                                      gap: 10,
+                                      backgroundColor: "#FFF8E1",
+                                      padding: 8,
+                                      borderRadius: 10,
+                                    }}
+                                    data-testid={`intraoral-thumb-${idx}`}
+                                  >
+                                    <Image
+                                      source={{ uri: fileUrl }}
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: "#FFD54F",
+                                      }}
+                                      resizeMode="cover"
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                      <Text
+                                        style={{
+                                          fontSize: 13,
+                                          fontWeight: "700",
+                                          color: "#333",
+                                        }}
+                                      >
+                                        {f.label || `Photo ${idx + 1}`}
+                                      </Text>
+                                      <Text
+                                        style={{ fontSize: 11, color: "#888" }}
+                                        numberOfLines={1}
+                                      >
+                                        {f.original_name}
+                                      </Text>
+                                    </View>
+                                    <TouchableOpacity
+                                      style={{
+                                        backgroundColor: "#F57C00",
+                                        borderRadius: 8,
+                                        paddingVertical: 6,
+                                        paddingHorizontal: 12,
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        gap: 4,
+                                      }}
+                                      onPress={() =>
+                                        Linking.openURL(fileUrl).catch(() =>
+                                          Alert.alert(
+                                            "Error",
+                                            "Could not open file",
+                                          ),
+                                        )
+                                      }
+                                      data-testid={`view-intraoral-detail-${idx}`}
+                                    >
+                                      <Ionicons
+                                        name="open-outline"
+                                        size={14}
+                                        color="#FFF"
+                                      />
+                                      <Text
+                                        style={{
+                                          color: "#FFF",
+                                          fontSize: 12,
+                                          fontWeight: "700",
+                                        }}
+                                      >
+                                        View
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                );
+                              },
+                            )}
+                          </View>
+                        )}
+
+                      {procedure.remark && (
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitle}>
+                            Phase 1 Remarks
+                          </Text>
+                          <Text style={styles.specText}>
+                            {procedure.remark}
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* iter-248: Phase 1 approval comments — shown after either or
+            both approvers leave a note. Supervisor first, In-Charge
+            second, matching the Phase 4 layout already in the app. Each
+            block only renders if that role left a comment. */}
+                      {(procedure.phase1_supervisor_notes ||
+                        procedure.phase1_incharge_notes) && (
+                        <View
+                          style={styles.section}
+                          data-testid="phase1-approval-comments"
+                        >
+                          <Text style={styles.sectionTitle}>
+                            Phase 1 Approval Comments
+                          </Text>
+                          {procedure.phase1_supervisor_notes && (
+                            <View
+                              style={{
+                                marginBottom: 8,
+                                backgroundColor: "#F3E5F5",
+                                borderRadius: 8,
+                                padding: 12,
+                              }}
+                              data-testid="phase1-supervisor-comment"
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                  color: "#6A1B9A",
+                                  marginBottom: 8,
+                                }}
+                              >
+                                Supervisor Comment
                               </Text>
                               <Text
                                 style={{
                                   fontSize: 14,
-                                  color: "#1A1A1A",
-                                  fontWeight: "500",
+                                  color: "#333",
+                                  lineHeight: 20,
                                 }}
                               >
-                                {value as string}
+                                {procedure.phase1_supervisor_notes}
                               </Text>
                             </View>
-                            {!isNoRisk && !rowEditing && (
-                              <View
+                          )}
+                          {procedure.phase1_incharge_notes && (
+                            <View
+                              style={{
+                                marginBottom: 8,
+                                backgroundColor: "#E8F5E9",
+                                borderRadius: 8,
+                                padding: 12,
+                              }}
+                              data-testid="phase1-incharge-comment"
+                            >
+                              <Text
                                 style={{
-                                  backgroundColor: isHighRisk
-                                    ? "#FFEBEE"
-                                    : "#FFF3E0",
-                                  borderRadius: 6,
-                                  paddingHorizontal: 8,
-                                  paddingVertical: 2,
-                                  marginRight: 6,
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                  color: "#2E7D32",
+                                  marginBottom: 8,
                                 }}
                               >
-                                <Text
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: "600",
-                                    color: isHighRisk ? "#F44336" : "#FF9800",
-                                  }}
-                                >
-                                  {isHighRisk ? "HIGH" : "MODERATE"}
-                                </Text>
-                              </View>
-                            )}
-                            {canEditField() && !rowEditing && factor && (
-                              <TouchableOpacity
-                                onPress={handleStartRowEdit}
-                                style={{ padding: 4 }}
-                                data-testid={`edit-medical-${key}`}
-                              >
-                                <Ionicons
-                                  name="pencil"
-                                  size={14}
-                                  color="#1565C0"
-                                />
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                          {rowEditing && factor && (
-                            <View style={{ marginTop: 8, marginLeft: 32 }}>
-                              <View
+                                Implant In-Charge Comment
+                              </Text>
+                              <Text
                                 style={{
-                                  flexDirection: "row",
-                                  flexWrap: "wrap",
-                                  gap: 6,
+                                  fontSize: 14,
+                                  color: "#333",
+                                  lineHeight: 20,
                                 }}
                               >
-                                {factor.options.map((opt) => {
-                                  const selected = rowEditValue === opt;
-                                  return (
-                                    <TouchableOpacity
-                                      key={opt}
-                                      onPress={() =>
-                                        setEditValues((prev) => ({
-                                          ...prev,
-                                          [medFieldKey]: opt,
-                                        }))
-                                      }
-                                      style={{
-                                        paddingHorizontal: 12,
-                                        paddingVertical: 6,
-                                        borderRadius: 16,
-                                        borderWidth: 1,
-                                        borderColor: selected
-                                          ? "#1565C0"
-                                          : "#CFD8DC",
-                                        backgroundColor: selected
-                                          ? "#1565C0"
-                                          : "#FFF",
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          fontSize: 12,
-                                          fontWeight: "600",
-                                          color: selected ? "#FFF" : "#37474F",
-                                        }}
-                                      >
-                                        {opt}
-                                      </Text>
-                                    </TouchableOpacity>
-                                  );
-                                })}
-                              </View>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  gap: 6,
-                                  marginTop: 8,
-                                }}
-                              >
-                                <TouchableOpacity
-                                  onPress={handleSaveRow}
-                                  disabled={saving}
-                                  style={{
-                                    backgroundColor: "#4CAF50",
-                                    borderRadius: 6,
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 6,
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
-                                >
-                                  {saving ? (
-                                    <ActivityIndicator
-                                      size="small"
-                                      color="#FFF"
-                                    />
-                                  ) : (
-                                    <Ionicons
-                                      name="checkmark"
-                                      size={14}
-                                      color="#FFF"
-                                    />
-                                  )}
-                                  <Text
-                                    style={{
-                                      color: "#FFF",
-                                      fontSize: 12,
-                                      fontWeight: "700",
-                                    }}
-                                  >
-                                    Save
-                                  </Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  onPress={cancelEdit}
-                                  style={{
-                                    backgroundColor: "#F44336",
-                                    borderRadius: 6,
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 6,
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
-                                >
-                                  <Ionicons
-                                    name="close"
-                                    size={14}
-                                    color="#FFF"
-                                  />
-                                  <Text
-                                    style={{
-                                      color: "#FFF",
-                                      fontSize: 12,
-                                      fontWeight: "700",
-                                    }}
-                                  >
-                                    Cancel
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
+                                {procedure.phase1_incharge_notes}
+                              </Text>
                             </View>
                           )}
                         </View>
-                      );
-                    })}
-                  {/* Read-only Haematology Examination + HbA1c display block.
-                Phase-1 lab values captured at case-creation time. Not part
-                of the risk-scoring above; surfaced separately so reviewers
-                can compare to clinical thresholds (e.g. HbA1c > 9 % hard
-                blocks immediate loading via the clinical-rule engine). */}
-                  {(() => {
-                    const ma: any = procedure.medical_assessment || {};
-                    const labRows: {
-                      id: string;
-                      label: string;
-                      suffix?: string;
-                    }[] = [
-                      { id: "hba1c", label: "HbA1c", suffix: "%" },
-                      { id: "hb", label: "Haemoglobin (Hb)", suffix: "g/dL" },
-                      {
-                        id: "tlc",
-                        label: "Total Leucocyte Count",
-                        suffix: "/cumm",
-                      },
-                      {
-                        id: "bleeding_time",
-                        label: "Bleeding Time",
-                        suffix: "min",
-                      },
-                      {
-                        id: "clotting_time",
-                        label: "Clotting Time",
-                        suffix: "min",
-                      },
-                      {
-                        id: "prothrombin_time",
-                        label: "Prothrombin Time",
-                        suffix: "sec",
-                      },
-                      {
-                        id: "inr",
-                        label: "International Normalised Ratio (INR)",
-                      },
-                    ];
-                    const present = labRows.filter(
-                      (r) =>
-                        ma[r.id] !== undefined &&
-                        ma[r.id] !== "" &&
-                        ma[r.id] !== null,
-                    );
-                    if (present.length === 0) return null;
-                    return (
-                      <View
-                        style={{
-                          marginTop: 10,
-                          paddingTop: 10,
-                          borderTopWidth: 1,
-                          borderTopColor: "#E0E7EE",
-                        }}
-                        testID="haematology-readonly"
-                        data-testid="haematology-readonly"
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: "700",
-                            color: "#1E3A5F",
-                            marginBottom: 6,
-                          }}
-                        >
-                          Haematology Examination
-                        </Text>
-                        {present.map((r) => (
-                          <View
-                            key={r.id}
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "space-between",
-                              paddingVertical: 4,
-                            }}
-                            testID={`haematology-readonly-${r.id}`}
-                            data-testid={`haematology-readonly-${r.id}`}
-                          >
-                            <Text style={{ fontSize: 13, color: "#37474F" }}>
-                              {r.label}
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                color: "#1A1A1A",
-                                fontWeight: "600",
-                              }}
-                            >
-                              {String(ma[r.id])}
-                              {r.suffix ? ` ${r.suffix}` : ""}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    );
-                  })()}
-                </View>
-              )}
+                      )}
 
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Payment</Text>
-              <InfoRow
-                icon="receipt"
-                label="Receipt Number"
-                value={procedure.receipt_number}
-              />
-              <InfoRow
-                icon="cash"
-                label="Amount Paid"
-                value={`₹${procedure.amount_paid}`}
-              />
-            </View>
-
-            {(procedure.implant_region || procedure.implant_company) && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Implant Details</Text>
-                {procedure.implant_region && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Region:</Text>
-                    <Text style={styles.specText}>
-                      {procedure.implant_region}
-                    </Text>
-                  </View>
-                )}
-                {procedure.implant_company && (
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Company:</Text>
-                    <Text style={styles.specText}>
-                      {procedure.implant_company}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {procedure.bone_graft_specifications && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Bone Graft/Membrane</Text>
-                <Text style={styles.specText}>
-                  {procedure.bone_graft_specifications}
-                </Text>
-              </View>
-            )}
-
-            {/* Final Prosthetic Plan - always visible to everyone when set */}
-            {procedure.final_prosthetic_plan && (
-              <View
-                style={[
-                  styles.section,
-                  { borderLeftWidth: 4, borderLeftColor: "#FF9800" },
-                ]}
-                data-testid="final-prosthetic-plan-section"
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Ionicons name="construct" size={20} color="#FF9800" />
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { marginBottom: 0, color: "#E65100" },
-                    ]}
-                  >
-                    Final Prosthetic Plan
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    backgroundColor: "#FFF8E1",
-                    borderRadius: 8,
-                    padding: 12,
-                  }}
-                >
-                  <Text
-                    style={{ fontSize: 15, fontWeight: "600", color: "#333" }}
-                  >
-                    {procedure.final_prosthetic_plan}
-                  </Text>
-                  {/* iter-Feb-2026 — Single-Conventional-Implant granular Final Plan.
-                      When the case is Single Conventional Implant AND Phase 4 Step 1
-                      captured the 3-part breakdown, surface each field so reviewers
-                      see the exact abutment / retention / material chosen. */}
-                  {(() => {
-                    const _num = procedure?.num_implants || "";
-                    const _overlap = [
-                      "Immediate Implant",
-                      "Partial Extraction Therapy",
-                      "Implant Placement with Guided Bone Regeneration",
-                      "Guided Surgery",
-                      "Sinus Lift",
-                    ].includes(procedure?.implant_procedure_type);
-                    const isSCEff =
-                      procedure?.implant_procedure_type === "Single Conventional Implant" ||
-                      (_overlap && _num === "Single Implant");
-                    const p4 = procedure.phase4_step1_data || {};
-                    if (!isSCEff) return null;
-                    if (
-                      !p4.sc_final_abutment_type &&
-                      !p4.sc_final_retention_type &&
-                      !p4.sc_final_crown_material
-                    )
-                      return null;
-                    const rowVal = (v: string, o: string) =>
-                      v === "Other" && o ? `Other — ${o}` : v;
-                    return (
-                      <View
-                        style={{
-                          marginTop: 10,
-                          paddingTop: 10,
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                          borderTopColor: "#FFE082",
-                        }}
-                      >
-                        {!!p4.sc_final_abutment_type && (
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              color: "#4E342E",
-                              marginTop: 4,
-                            }}
-                          >
-                            <Text style={{ fontWeight: "700" }}>Abutment: </Text>
-                            {rowVal(
-                              p4.sc_final_abutment_type,
-                              p4.sc_final_abutment_type_other,
-                            )}
-                          </Text>
-                        )}
-                        {!!p4.sc_final_retention_type && (
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              color: "#4E342E",
-                              marginTop: 4,
-                            }}
-                          >
-                            <Text style={{ fontWeight: "700" }}>Retention: </Text>
-                            {rowVal(
-                              p4.sc_final_retention_type,
-                              p4.sc_final_retention_type_other,
-                            )}
-                          </Text>
-                        )}
-                        {!!p4.sc_final_crown_material && (
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              color: "#4E342E",
-                              marginTop: 4,
-                            }}
-                          >
-                            <Text style={{ fontWeight: "700" }}>Crown Material: </Text>
-                            {rowVal(
-                              p4.sc_final_crown_material,
-                              p4.sc_final_crown_material_other,
-                            )}
-                          </Text>
-                        )}
-                      </View>
-                    );
-                  })()}
-                  {/* iter-Feb-2026-B — Multiple / Full-Arch / Zygoma Final Plan breakdown. */}
-                  {procedure.phase4_step1_data &&
-                    (procedure.phase4_step1_data.ma_final_prosthesis_type ||
-                      procedure.phase4_step1_data.ma_final_abutment_type ||
-                      procedure.phase4_step1_data.ma_final_retention_type ||
-                      procedure.phase4_step1_data.ma_final_crown_material ||
-                      procedure.phase4_step1_data.fa_final_prosthetic_plan ||
-                      procedure.phase4_step1_data.zp_final_prosthetic_plan) && (
-                      <View
-                        style={{
-                          marginTop: 10,
-                          paddingTop: 10,
-                          borderTopWidth: StyleSheet.hairlineWidth,
-                          borderTopColor: "#FFE082",
-                        }}
-                      >
-                        {[
-                          [
-                            "Prosthesis Type",
-                            procedure.phase4_step1_data
-                              .ma_final_prosthesis_type_other ||
-                              procedure.phase4_step1_data
-                                .ma_final_prosthesis_type,
-                          ],
-                          [
-                            "Abutment Type",
-                            procedure.phase4_step1_data
-                              .ma_final_abutment_type_other ||
-                              procedure.phase4_step1_data
-                                .ma_final_abutment_type,
-                          ],
-                          [
-                            "Type of Retention",
-                            procedure.phase4_step1_data
-                              .ma_final_retention_type_other ||
-                              procedure.phase4_step1_data
-                                .ma_final_retention_type,
-                          ],
-                          [
-                            "Crown/Bridge Material",
-                            procedure.phase4_step1_data
-                              .ma_final_crown_material_other ||
-                              procedure.phase4_step1_data
-                                .ma_final_crown_material,
-                          ],
-                          [
-                            "Prosthetic Plan",
-                            procedure.phase4_step1_data
-                              .fa_final_prosthetic_plan_other ||
-                              procedure.phase4_step1_data
-                                .fa_final_prosthetic_plan,
-                          ],
-                          [
-                            "Prosthetic Plan",
-                            procedure.phase4_step1_data
-                              .zp_final_prosthetic_plan_other ||
-                              procedure.phase4_step1_data
-                                .zp_final_prosthetic_plan,
-                          ],
-                        ]
-                          .filter(([, v]) => !!v)
-                          .map(([lbl, v]) => (
-                            <Text
-                              key={String(lbl) + String(v)}
-                              style={{
-                                fontSize: 13,
-                                color: "#4E342E",
-                                marginTop: 4,
-                              }}
-                            >
-                              <Text style={{ fontWeight: "700" }}>{lbl}: </Text>
-                              {v}
-                            </Text>
-                          ))}
-                      </View>
-                    )}
-                </View>
-              </View>
-            )}
-
-            {/* Torque Values Achieved - visible to supervisors during approval and to students after approval */}
-            {procedure.torque_values && procedure.torque_values.length > 0 && (
-              <View style={styles.section} data-testid="torque-values-section">
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 12,
-                  }}
-                >
-                  <Ionicons name="speedometer" size={20} color="#FF6D00" />
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      { marginBottom: 0, color: "#E65100" },
-                    ]}
-                  >
-                    Torque Values Achieved
-                  </Text>
-                </View>
-                {procedure.torque_values.map((tv: number, idx: number) => {
-                  const toothLabel = procedure.implant_plans?.[idx]?.position
-                    ? `Implant ${procedure.implant_plans[idx].position}`
-                    : `Implant ${idx + 1}`;
-                  return (
-                    <View
-                      key={idx}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        paddingVertical: 8,
-                        borderBottomWidth:
-                          idx < procedure.torque_values.length - 1 ? 1 : 0,
-                        borderBottomColor: "#F0F0F0",
-                      }}
-                    >
-                      <View
-                        style={{
-                          backgroundColor: "#FFF3E0",
-                          borderRadius: 8,
-                          paddingHorizontal: 10,
-                          paddingVertical: 6,
-                          marginRight: 12,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: "600",
-                            color: "#BF360C",
-                          }}
-                        >
-                          {toothLabel}
-                        </Text>
-                      </View>
-                      <Text
-                        style={{
-                          fontSize: 18,
-                          fontWeight: "700",
-                          color: "#E65100",
-                        }}
-                      >
-                        {tv}
-                      </Text>
-                      <Text
-                        style={{ fontSize: 13, color: "#888", marginLeft: 4 }}
-                      >
-                        Ncm
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-
-            {procedure.ios_file && (
-              <View style={styles.section} data-testid="ios-file-section">
-                <Text style={styles.sectionTitle}>
-                  IOS or Intra-oral Photos
-                </Text>
-                <TouchableOpacity
-                  style={styles.cbctFileRow}
-                  onPress={async () => {
-                    try {
-                      const fileUrl = await mintFileToken(procedure.ios_file);
-                      await openDocument(fileUrl, procedure.ios_file);
-                    } catch (e) {
-                      Alert.alert("Error", "Could not open file");
-                    }
-                  }}
-                  data-testid="ios-file-download"
-                >
-                  <Ionicons name="camera" size={22} color="#007AFF" />
-                  <Text style={styles.cbctFileName} numberOfLines={1}>
-                    {procedure.ios_original_name || "Intra-oral Photo"}
-                  </Text>
-                  <Ionicons name="download-outline" size={20} color="#007AFF" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {/* CBCT Reports - Thumbnails */}
-            {(procedure.cbct_files?.length > 0 || procedure.cbct_file) && (
-              <View style={styles.section} data-testid="cbct-file-section">
-                <Text style={styles.sectionTitle}>CBCT Reports</Text>
-                {procedure.cbct_files?.length > 0 ? (
-                  procedure.cbct_files.map((f: any, idx: number) => {
-                    const fileUrl = cbctToken
-                      ? cbctFileUrl(cbctToken, f.filename)
-                      : "";
-                    const isImage = f.filename?.match(/\.(png|jpg|jpeg)$/i);
-                    return (
-                      <View
-                        key={idx}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          marginBottom: 10,
-                          gap: 10,
-                          backgroundColor: "#E3F2FD",
-                          padding: 8,
-                          borderRadius: 10,
-                        }}
-                        data-testid={`cbct-thumb-${idx}`}
-                      >
-                        {isImage && fileUrl ? (
-                          <Image
-                            source={{ uri: fileUrl }}
-                            style={{
-                              width: 50,
-                              height: 50,
-                              borderRadius: 8,
-                              borderWidth: 1,
-                              borderColor: "#90CAF9",
-                            }}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View
-                            style={{
-                              width: 50,
-                              height: 50,
-                              borderRadius: 8,
-                              backgroundColor: "#BBDEFB",
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <Ionicons
-                              name="document-attach"
-                              size={24}
-                              color="#1565C0"
-                            />
-                          </View>
-                        )}
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: "700",
-                              color: "#333",
-                            }}
-                          >
-                            CBCT Report {idx + 1}
-                          </Text>
-                          <Text
-                            style={{ fontSize: 11, color: "#888" }}
-                            numberOfLines={1}
-                          >
-                            {f.original_name}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={{
-                            backgroundColor: "#4CAF50",
-                            borderRadius: 8,
-                            paddingVertical: 6,
-                            paddingHorizontal: 12,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 4,
-                          }}
-                          onPress={async () => {
-                            try {
-                              const t =
-                                cbctToken ||
-                                (await mintCbctToken(id as string));
-                              if (!cbctToken) setCbctToken(t);
-                              await Linking.openURL(cbctViewUrl(t, f.filename));
-                            } catch {
-                              Alert.alert("Error", "Could not open file");
-                            }
-                          }}
-                          data-testid={`view-cbct-detail-${idx}`}
-                        >
-                          <Ionicons
-                            name="open-outline"
-                            size={14}
-                            color="#FFF"
-                          />
-                          <Text
-                            style={{
-                              color: "#FFF",
-                              fontSize: 12,
-                              fontWeight: "700",
-                            }}
-                          >
-                            View
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })
-                ) : (
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      backgroundColor: "#4CAF50",
-                      borderRadius: 10,
-                      paddingVertical: 14,
-                      paddingHorizontal: 20,
-                    }}
-                    onPress={async () => {
-                      try {
-                        const t =
-                          cbctToken || (await mintCbctToken(id as string));
-                        if (!cbctToken) setCbctToken(t);
-                        await Linking.openURL(
-                          cbctViewUrl(t, procedure.cbct_file),
-                        );
-                      } catch (e) {
-                        Alert.alert("Error", "Could not open file");
-                      }
-                    }}
-                    data-testid="cbct-file-download"
-                  >
-                    <Ionicons name="document-attach" size={20} color="#FFF" />
-                    <Text
-                      style={{
-                        color: "#FFF",
-                        fontSize: 15,
-                        fontWeight: "700",
-                        flex: 1,
-                      }}
-                    >
-                      View CBCT Report
-                    </Text>
-                    <Ionicons name="open-outline" size={18} color="#FFF" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* Patient Intra-oral Photograph Section — visible to student,
-                supervisor, in-charge, administrator (same as CBCT). Renders
-                as a list with thumbnails. Slot labels come from the Phase-1
-                upload (Occlusal, Lateral/Frontal, or extras). */}
-            {Array.isArray(procedure.intraoral_photos) &&
-              procedure.intraoral_photos.length > 0 && (
-                <View
-                  style={styles.section}
-                  data-testid="intraoral-photos-section"
-                >
-                  <Text style={styles.sectionTitle}>
-                    Patient Intra-oral Photograph
-                  </Text>
-                  {procedure.intraoral_photos.map((f: any, idx: number) => {
-                    const baseUrl = api.defaults.baseURL || "";
-                    const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
-                    return (
-                      <View
-                        key={idx}
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          marginBottom: 10,
-                          gap: 10,
-                          backgroundColor: "#FFF8E1",
-                          padding: 8,
-                          borderRadius: 10,
-                        }}
-                        data-testid={`intraoral-thumb-${idx}`}
-                      >
-                        <Image
-                          source={{ uri: fileUrl }}
-                          style={{
-                            width: 50,
-                            height: 50,
-                            borderRadius: 8,
-                            borderWidth: 1,
-                            borderColor: "#FFD54F",
-                          }}
-                          resizeMode="cover"
-                        />
-                        <View style={{ flex: 1 }}>
-                          <Text
-                            style={{
-                              fontSize: 13,
-                              fontWeight: "700",
-                              color: "#333",
-                            }}
-                          >
-                            {f.label || `Photo ${idx + 1}`}
-                          </Text>
-                          <Text
-                            style={{ fontSize: 11, color: "#888" }}
-                            numberOfLines={1}
-                          >
-                            {f.original_name}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          style={{
-                            backgroundColor: "#F57C00",
-                            borderRadius: 8,
-                            paddingVertical: 6,
-                            paddingHorizontal: 12,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 4,
-                          }}
-                          onPress={() =>
-                            Linking.openURL(fileUrl).catch(() =>
-                              Alert.alert("Error", "Could not open file"),
-                            )
-                          }
-                          data-testid={`view-intraoral-detail-${idx}`}
-                        >
-                          <Ionicons
-                            name="open-outline"
-                            size={14}
-                            color="#FFF"
-                          />
-                          <Text
-                            style={{
-                              color: "#FFF",
-                              fontSize: 12,
-                              fontWeight: "700",
-                            }}
-                          >
-                            View
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-
-            {procedure.remark && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Phase 1 Remarks</Text>
-                <Text style={styles.specText}>{procedure.remark}</Text>
-              </View>
-            )}
-
-            {/* iter-248: Phase 1 approval comments — shown after either or
-            both approvers leave a note. Supervisor first, In-Charge
-            second, matching the Phase 4 layout already in the app. Each
-            block only renders if that role left a comment. */}
-            {(procedure.phase1_supervisor_notes ||
-              procedure.phase1_incharge_notes) && (
-              <View
-                style={styles.section}
-                data-testid="phase1-approval-comments"
-              >
-                <Text style={styles.sectionTitle}>
-                  Phase 1 Approval Comments
-                </Text>
-                {procedure.phase1_supervisor_notes && (
-                  <View
-                    style={{
-                      marginBottom: 8,
-                      backgroundColor: "#F3E5F5",
-                      borderRadius: 8,
-                      padding: 12,
-                    }}
-                    data-testid="phase1-supervisor-comment"
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "700",
-                        color: "#6A1B9A",
-                        marginBottom: 8,
-                      }}
-                    >
-                      Supervisor Comment
-                    </Text>
-                    <Text
-                      style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                    >
-                      {procedure.phase1_supervisor_notes}
-                    </Text>
-                  </View>
-                )}
-                {procedure.phase1_incharge_notes && (
-                  <View
-                    style={{
-                      marginBottom: 8,
-                      backgroundColor: "#E8F5E9",
-                      borderRadius: 8,
-                      padding: 12,
-                    }}
-                    data-testid="phase1-incharge-comment"
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "700",
-                        color: "#2E7D32",
-                        marginBottom: 8,
-                      }}
-                    >
-                      Implant In-Charge Comment
-                    </Text>
-                    <Text
-                      style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                    >
-                      {procedure.phase1_incharge_notes}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Phase 1 Pre-Surgical Checklist — shown right after Phase 1 data */}
-            {procedure.checklist?.pre_surgical && (
-              <>
-                {renderChecklistSection(
-                  "pre_surgical",
-                  "Phase 1: Pre-Surgical Protocol",
-                )}
-              </>
-            )}
+                      {/* Phase 1 Pre-Surgical Checklist — shown right after Phase 1 data */}
+                      {procedure.checklist?.pre_surgical && (
+                        <>
+                          {renderChecklistSection(
+                            "pre_surgical",
+                            "Phase 1: Pre-Surgical Protocol",
+                          )}
+                        </>
+                      )}
                     </>
                   )}
                 </>
@@ -6851,7 +7218,8 @@ export default function ProcedureDetailScreen() {
             {/* ═══════════ PHASE 2: SURGICAL PROTOCOLS - Full Data Display ═══════════ */}
             {user?.role !== "nurse" &&
               procedure.phase2_data &&
-              Object.keys(procedure.phase2_data).length > 0 && (() => {
+              Object.keys(procedure.phase2_data).length > 0 &&
+              (() => {
                 const badge2 = getPhaseBadge("p2", procedure.status);
                 const isOpen2 = !collapsedPhases.p2;
                 return (
@@ -6894,13 +7262,31 @@ export default function ProcedureDetailScreen() {
                           marginRight: 12,
                         }}
                       >
-                        <Ionicons name="medkit-outline" size={18} color="#0D9488" />
+                        <Ionicons
+                          name="medkit-outline"
+                          size={18}
+                          color="#0D9488"
+                        />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                        <Text
+                          style={{
+                            fontSize: 14.5,
+                            fontWeight: "700",
+                            color: "#0F172A",
+                            letterSpacing: 0.2,
+                          }}
+                        >
                           Phase 2 — Implant Surgery
                         </Text>
-                        <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: "#64748B",
+                            marginTop: 2,
+                          }}
+                          numberOfLines={1}
+                        >
                           {procedure.phase2_data?.implant_systems?.length > 0
                             ? `${procedure.phase2_data.implant_systems.length} implant system(s) recorded`
                             : "Surgical Protocols & Placement"}
@@ -6915,9 +7301,21 @@ export default function ProcedureDetailScreen() {
                           marginRight: 8,
                         }}
                       >
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: badge2.color }}>{badge2.label}</Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: badge2.color,
+                          }}
+                        >
+                          {badge2.label}
+                        </Text>
                       </View>
-                      <Ionicons name={isOpen2 ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+                      <Ionicons
+                        name={isOpen2 ? "chevron-up" : "chevron-down"}
+                        size={18}
+                        color="#64748B"
+                      />
                     </TouchableOpacity>
 
                     {/* Phase 2 Content */}
@@ -6940,699 +7338,741 @@ export default function ProcedureDetailScreen() {
                           phaseAnchors.current["p2"] = e.nativeEvent.layout.y;
                         }}
                       >
+                        {/* Pre-Surgery Checklist */}
+                        {procedure.phase2_data.pre_surgery_checklist &&
+                          Object.keys(
+                            procedure.phase2_data.pre_surgery_checklist,
+                          ).length > 0 && (
+                            <View style={{ marginBottom: 16 }}>
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                  color: "#1565C0",
+                                  marginBottom: 8,
+                                }}
+                              >
+                                Pre-Surgery Checklist
+                              </Text>
+                              {Object.entries(
+                                procedure.phase2_data.pre_surgery_checklist,
+                              ).map(([key, val]) => (
+                                <View
+                                  key={key}
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    paddingVertical: 6,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: "#F5F5F5",
+                                  }}
+                                >
+                                  <Ionicons
+                                    name={val ? "checkbox" : "square-outline"}
+                                    size={20}
+                                    color={val ? "#4CAF50" : "#999"}
+                                  />
+                                  <Text
+                                    style={{
+                                      marginLeft: 10,
+                                      fontSize: 13,
+                                      color: "#333",
+                                      textTransform: "capitalize",
+                                    }}
+                                  >
+                                    {key.replace(/_/g, " ")}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
 
-                  {/* Pre-Surgery Checklist */}
-                  {procedure.phase2_data.pre_surgery_checklist &&
-                    Object.keys(procedure.phase2_data.pre_surgery_checklist)
-                      .length > 0 && (
-                      <View style={{ marginBottom: 16 }}>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            fontWeight: "700",
-                            color: "#1565C0",
-                            marginBottom: 8,
-                          }}
-                        >
-                          Pre-Surgery Checklist
-                        </Text>
-                        {Object.entries(
-                          procedure.phase2_data.pre_surgery_checklist,
-                        ).map(([key, val]) => (
-                          <View
-                            key={key}
+                        {/* Surgical Procedure Details */}
+                        <View style={{ marginBottom: 16 }}>
+                          <Text
                             style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              paddingVertical: 6,
-                              borderBottomWidth: 1,
-                              borderBottomColor: "#F5F5F5",
+                              fontSize: 14,
+                              fontWeight: "700",
+                              color: "#1565C0",
+                              marginBottom: 8,
                             }}
                           >
-                            <Ionicons
-                              name={val ? "checkbox" : "square-outline"}
-                              size={20}
-                              color={val ? "#4CAF50" : "#999"}
+                            Surgical Procedure
+                          </Text>
+                          {procedure.phase2_data.anesthesia_adequate && (
+                            <InfoRow
+                              icon="water"
+                              label="Anaesthesia Adequate"
+                              value={procedure.phase2_data.anesthesia_adequate}
+                              fieldKey="phase2_data.anesthesia_adequate"
                             />
-                            <Text
-                              style={{
-                                marginLeft: 10,
-                                fontSize: 13,
-                                color: "#333",
-                                textTransform: "capitalize",
-                              }}
-                            >
-                              {key.replace(/_/g, " ")}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                  {/* Surgical Procedure Details */}
-                  <View style={{ marginBottom: 16 }}>
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "700",
-                        color: "#1565C0",
-                        marginBottom: 8,
-                      }}
-                    >
-                      Surgical Procedure
-                    </Text>
-                    {procedure.phase2_data.anesthesia_adequate && (
-                      <InfoRow
-                        icon="water"
-                        label="Anaesthesia Adequate"
-                        value={procedure.phase2_data.anesthesia_adequate}
-                        fieldKey="phase2_data.anesthesia_adequate"
-                      />
-                    )}
-                    {procedure.phase2_data.anesthesia_details && (
-                      <InfoRow
-                        icon="alert"
-                        label="Anaesthesia Notes"
-                        value={procedure.phase2_data.anesthesia_details}
-                        fieldKey="phase2_data.anesthesia_details"
-                      />
-                    )}
-                    {procedure.phase2_data.flap_design && (
-                      <InfoRow
-                        icon="cut"
-                        label="Incision / Flap Design"
-                        value={procedure.phase2_data.flap_design}
-                        fieldKey="phase2_data.flap_design"
-                      />
-                    )}
-                    {procedure.phase2_data.drilling_type && (
-                      <InfoRow
-                        icon="hardware-chip"
-                        label="Drilling Type"
-                        value={procedure.phase2_data.drilling_type}
-                        fieldKey="phase2_data.drilling_type"
-                      />
-                    )}
-                    {/* iter-391: actual drilling cascade + plan-vs-actual comparison */}
-                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
-                      procedure.phase2_data.drilling_guided_surgery_type && (
-                        <InfoRow
-                          icon="navigate"
-                          label="Type of Guided Surgery (actual)"
-                          value={
-                            procedure.phase2_data.drilling_guided_surgery_type
-                          }
-                        />
-                      )}
-                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
-                      procedure.phase2_data.drilling_static_guide_type && (
-                        <InfoRow
-                          icon="layers"
-                          label="Type of Static Guide (actual)"
-                          value={
-                            procedure.phase2_data.drilling_static_guide_type
-                          }
-                        />
-                      )}
-                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
-                      procedure.phase2_data.drilling_sleeve_type && (
-                        <InfoRow
-                          icon="ellipse-outline"
-                          label="Type of Sleeve (actual)"
-                          value={procedure.phase2_data.drilling_sleeve_type}
-                        />
-                      )}
-                    {isGuidedApproach(procedure.phase2_data.drilling_type) &&
-                      procedure.phase2_data.drilling_dynamic_nav_system && (
-                        <InfoRow
-                          icon="compass"
-                          label="Dynamic Navigation System (actual)"
-                          value={
-                            procedure.phase2_data.drilling_dynamic_nav_system
-                          }
-                        />
-                      )}
-                    {(() => {
-                      const p2: any = procedure.phase2_data;
-                      const plannedApproach = normalizeSurgeryApproach(
-                        procedure.procedure_surgery_type,
-                      );
-                      if (!plannedApproach || !p2.drilling_type) return null;
-                      const diffs: string[] = [];
-                      if (p2.drilling_type !== plannedApproach)
-                        diffs.push(
-                          `Drilling Type: ${plannedApproach} → ${p2.drilling_type}`,
-                        );
-                      if (isGuidedApproach(p2.drilling_type)) {
-                        if (
-                          p2.drilling_guided_surgery_type &&
-                          p2.drilling_guided_surgery_type !==
-                            (procedure.guided_surgery_type || "")
-                        )
-                          diffs.push(
-                            `Guided Surgery: ${procedure.guided_surgery_type || "—"} → ${p2.drilling_guided_surgery_type}`,
-                          );
-                        if (
-                          p2.drilling_static_guide_type &&
-                          p2.drilling_static_guide_type !==
-                            (procedure.static_guide_type || "")
-                        )
-                          diffs.push(
-                            `Static Guide: ${procedure.static_guide_type || "—"} → ${p2.drilling_static_guide_type}`,
-                          );
-                        if (
-                          p2.drilling_sleeve_type &&
-                          p2.drilling_sleeve_type !==
-                            (procedure.sleeve_type || "")
-                        )
-                          diffs.push(
-                            `Sleeve: ${procedure.sleeve_type || "—"} → ${p2.drilling_sleeve_type}`,
-                          );
-                        if (
-                          p2.drilling_dynamic_nav_system &&
-                          p2.drilling_dynamic_nav_system !==
-                            (procedure.dynamic_nav_system || "")
-                        )
-                          diffs.push(
-                            `Dynamic Nav System: ${procedure.dynamic_nav_system || "—"} → ${p2.drilling_dynamic_nav_system}`,
-                          );
-                      }
-                      if (diffs.length === 0) {
-                        return (
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 6,
-                              backgroundColor: "#E8F5E9",
-                              borderRadius: 8,
-                              borderWidth: 1,
-                              borderColor: "#A5D6A7",
-                              padding: 8,
-                              marginVertical: 6,
-                            }}
-                            testID="drilling-as-planned-tag"
-                          >
-                            <Ionicons
-                              name="checkmark-circle"
-                              size={16}
-                              color="#1B5E20"
+                          )}
+                          {procedure.phase2_data.anesthesia_details && (
+                            <InfoRow
+                              icon="alert"
+                              label="Anaesthesia Notes"
+                              value={procedure.phase2_data.anesthesia_details}
+                              fieldKey="phase2_data.anesthesia_details"
                             />
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: "700",
-                                color: "#1B5E20",
-                                flex: 1,
-                              }}
-                            >
-                              Drilling performed as planned in Phase 1
-                            </Text>
-                          </View>
-                        );
-                      }
-                      return (
-                        <View
-                          style={{
-                            backgroundColor: "#FFF3E0",
-                            borderRadius: 8,
-                            borderWidth: 1,
-                            borderColor: "#FFB74D",
-                            padding: 8,
-                            marginVertical: 6,
-                          }}
-                          testID="drilling-protocol-changed-tag"
-                        >
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 6,
-                              marginBottom: 2,
-                            }}
-                          >
-                            <Ionicons
-                              name="warning"
-                              size={15}
-                              color="#E65100"
+                          )}
+                          {procedure.phase2_data.flap_design && (
+                            <InfoRow
+                              icon="cut"
+                              label="Incision / Flap Design"
+                              value={procedure.phase2_data.flap_design}
+                              fieldKey="phase2_data.flap_design"
                             />
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: "800",
-                                color: "#E65100",
-                              }}
-                            >
-                              Protocol changed vs Phase 1 plan
-                            </Text>
-                          </View>
-                          {diffs.map((d, i) => (
-                            <Text
-                              key={i}
-                              style={{
-                                fontSize: 11.5,
-                                color: "#5D4037",
-                                marginTop: 1,
-                              }}
-                            >
-                              {d}
-                            </Text>
-                          ))}
-                        </View>
-                      );
-                    })()}
-                    {procedure.phase2_data.implant_seated_correctly !==
-                      undefined && (
-                      <InfoRow
-                        icon="checkmark-done"
-                        label="Implant Seated Correctly"
-                        value={
-                          procedure.phase2_data.implant_seated_correctly
-                            ? "Yes"
-                            : "No"
-                        }
-                        fieldKey="phase2_data.implant_seated_correctly"
-                      />
-                    )}
-                    {procedure.phase2_data.implant_seated_comment && (
-                      <InfoRow
-                        icon="chatbox"
-                        label="Implant Seating Notes"
-                        value={procedure.phase2_data.implant_seated_comment}
-                        fieldKey="phase2_data.implant_seated_comment"
-                      />
-                    )}
-                    {/* iter-210: removed the duplicate Torque Values chips from the
+                          )}
+                          {procedure.phase2_data.drilling_type && (
+                            <InfoRow
+                              icon="hardware-chip"
+                              label="Drilling Type"
+                              value={procedure.phase2_data.drilling_type}
+                              fieldKey="phase2_data.drilling_type"
+                            />
+                          )}
+                          {/* iter-391: actual drilling cascade + plan-vs-actual comparison */}
+                          {isGuidedApproach(
+                            procedure.phase2_data.drilling_type,
+                          ) &&
+                            procedure.phase2_data
+                              .drilling_guided_surgery_type && (
+                              <InfoRow
+                                icon="navigate"
+                                label="Type of Guided Surgery (actual)"
+                                value={
+                                  procedure.phase2_data
+                                    .drilling_guided_surgery_type
+                                }
+                              />
+                            )}
+                          {isGuidedApproach(
+                            procedure.phase2_data.drilling_type,
+                          ) &&
+                            procedure.phase2_data
+                              .drilling_static_guide_type && (
+                              <InfoRow
+                                icon="layers"
+                                label="Type of Static Guide (actual)"
+                                value={
+                                  procedure.phase2_data
+                                    .drilling_static_guide_type
+                                }
+                              />
+                            )}
+                          {isGuidedApproach(
+                            procedure.phase2_data.drilling_type,
+                          ) &&
+                            procedure.phase2_data.drilling_sleeve_type && (
+                              <InfoRow
+                                icon="ellipse-outline"
+                                label="Type of Sleeve (actual)"
+                                value={
+                                  procedure.phase2_data.drilling_sleeve_type
+                                }
+                              />
+                            )}
+                          {isGuidedApproach(
+                            procedure.phase2_data.drilling_type,
+                          ) &&
+                            procedure.phase2_data
+                              .drilling_dynamic_nav_system && (
+                              <InfoRow
+                                icon="compass"
+                                label="Dynamic Navigation System (actual)"
+                                value={
+                                  procedure.phase2_data
+                                    .drilling_dynamic_nav_system
+                                }
+                              />
+                            )}
+                          {(() => {
+                            const p2: any = procedure.phase2_data;
+                            const plannedApproach = normalizeSurgeryApproach(
+                              procedure.procedure_surgery_type,
+                            );
+                            if (!plannedApproach || !p2.drilling_type)
+                              return null;
+                            const diffs: string[] = [];
+                            if (p2.drilling_type !== plannedApproach)
+                              diffs.push(
+                                `Drilling Type: ${plannedApproach} → ${p2.drilling_type}`,
+                              );
+                            if (isGuidedApproach(p2.drilling_type)) {
+                              if (
+                                p2.drilling_guided_surgery_type &&
+                                p2.drilling_guided_surgery_type !==
+                                  (procedure.guided_surgery_type || "")
+                              )
+                                diffs.push(
+                                  `Guided Surgery: ${procedure.guided_surgery_type || "—"} → ${p2.drilling_guided_surgery_type}`,
+                                );
+                              if (
+                                p2.drilling_static_guide_type &&
+                                p2.drilling_static_guide_type !==
+                                  (procedure.static_guide_type || "")
+                              )
+                                diffs.push(
+                                  `Static Guide: ${procedure.static_guide_type || "—"} → ${p2.drilling_static_guide_type}`,
+                                );
+                              if (
+                                p2.drilling_sleeve_type &&
+                                p2.drilling_sleeve_type !==
+                                  (procedure.sleeve_type || "")
+                              )
+                                diffs.push(
+                                  `Sleeve: ${procedure.sleeve_type || "—"} → ${p2.drilling_sleeve_type}`,
+                                );
+                              if (
+                                p2.drilling_dynamic_nav_system &&
+                                p2.drilling_dynamic_nav_system !==
+                                  (procedure.dynamic_nav_system || "")
+                              )
+                                diffs.push(
+                                  `Dynamic Nav System: ${procedure.dynamic_nav_system || "—"} → ${p2.drilling_dynamic_nav_system}`,
+                                );
+                            }
+                            if (diffs.length === 0) {
+                              return (
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    backgroundColor: "#E8F5E9",
+                                    borderRadius: 8,
+                                    borderWidth: 1,
+                                    borderColor: "#A5D6A7",
+                                    padding: 8,
+                                    marginVertical: 6,
+                                  }}
+                                  testID="drilling-as-planned-tag"
+                                >
+                                  <Ionicons
+                                    name="checkmark-circle"
+                                    size={16}
+                                    color="#1B5E20"
+                                  />
+                                  <Text
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: "700",
+                                      color: "#1B5E20",
+                                      flex: 1,
+                                    }}
+                                  >
+                                    Drilling performed as planned in Phase 1
+                                  </Text>
+                                </View>
+                              );
+                            }
+                            return (
+                              <View
+                                style={{
+                                  backgroundColor: "#FFF3E0",
+                                  borderRadius: 8,
+                                  borderWidth: 1,
+                                  borderColor: "#FFB74D",
+                                  padding: 8,
+                                  marginVertical: 6,
+                                }}
+                                testID="drilling-protocol-changed-tag"
+                              >
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    marginBottom: 2,
+                                  }}
+                                >
+                                  <Ionicons
+                                    name="warning"
+                                    size={15}
+                                    color="#E65100"
+                                  />
+                                  <Text
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: "800",
+                                      color: "#E65100",
+                                    }}
+                                  >
+                                    Protocol changed vs Phase 1 plan
+                                  </Text>
+                                </View>
+                                {diffs.map((d, i) => (
+                                  <Text
+                                    key={i}
+                                    style={{
+                                      fontSize: 11.5,
+                                      color: "#5D4037",
+                                      marginTop: 1,
+                                    }}
+                                  >
+                                    {d}
+                                  </Text>
+                                ))}
+                              </View>
+                            );
+                          })()}
+                          {procedure.phase2_data.implant_seated_correctly !==
+                            undefined && (
+                            <InfoRow
+                              icon="checkmark-done"
+                              label="Implant Seated Correctly"
+                              value={
+                                procedure.phase2_data.implant_seated_correctly
+                                  ? "Yes"
+                                  : "No"
+                              }
+                              fieldKey="phase2_data.implant_seated_correctly"
+                            />
+                          )}
+                          {procedure.phase2_data.implant_seated_comment && (
+                            <InfoRow
+                              icon="chatbox"
+                              label="Implant Seating Notes"
+                              value={
+                                procedure.phase2_data.implant_seated_comment
+                              }
+                              fieldKey="phase2_data.implant_seated_comment"
+                            />
+                          )}
+                          {/* iter-210: removed the duplicate Torque Values chips from the
                   Phase 2 readback. The dedicated orange "Torque Values
                   Achieved" card (rendered above, near the Final Prosthetic
                   Plan) is the single source of truth so the value isn't
                   displayed twice on the case page. */}
-                    {procedure.phase2_data.augmentation ? (
-                      <>
-                        <InfoRow
-                          icon="fitness"
-                          label="Bone & Soft Tissue Augmentation"
-                          value="Yes"
-                        />
-                        {(
-                          procedure.phase2_data.augmentation
-                            .procedures_performed || []
-                        ).length > 0 && (
-                          <InfoRow
-                            icon="construct"
-                            label="Augmentation Procedure"
-                            value={procedure.phase2_data.augmentation.procedures_performed.join(
-                              ", ",
-                            )}
-                          />
-                        )}
-                        {(() => {
-                          const a = procedure.phase2_data.augmentation;
-                          const mats = [
-                            ...(a.autogenous_used === "Yes"
-                              ? [
-                                  `Autogenous${(a.autogenous_sites || []).length ? ` (${a.autogenous_sites.join(", ")})` : ""}`,
-                                ]
-                              : []),
-                            ...(a.allograft_used === "Yes"
-                              ? ["Allograft"]
-                              : []),
-                            ...(a.other_graft_materials || []),
-                          ];
-                          return mats.length ? (
-                            <InfoRow
-                              icon="flask"
-                              label="Graft Materials"
-                              value={mats.join(", ")}
-                            />
-                          ) : null;
-                        })()}
-                        {procedure.phase2_data.augmentation.membrane_used ===
-                          "Yes" && (
-                          <InfoRow
-                            icon="layers"
-                            label="Membrane"
-                            value={
-                              (
+                          {procedure.phase2_data.augmentation ? (
+                            <>
+                              <InfoRow
+                                icon="fitness"
+                                label="Bone & Soft Tissue Augmentation"
+                                value="Yes"
+                              />
+                              {(
                                 procedure.phase2_data.augmentation
-                                  .membrane_types || []
-                              ).join(", ") || "Yes"
-                            }
-                          />
-                        )}
-                        {(procedure.phase2_data.augmentation.fixation || [])
-                          .length > 0 && (
-                          <InfoRow
-                            icon="hardware-chip"
-                            label="Fixation"
-                            value={procedure.phase2_data.augmentation.fixation.join(
-                              ", ",
-                            )}
-                          />
-                        )}
-                        {procedure.phase2_data.augmentation
-                          .soft_tissue_graft === "Yes" && (
-                          <InfoRow
-                            icon="leaf"
-                            label="Soft Tissue Graft"
-                            value={
-                              (
-                                procedure.phase2_data.augmentation
-                                  .soft_tissue_types || []
-                              ).join(", ") || "Yes"
-                            }
-                          />
-                        )}
-                        {!!procedure.phase2_data.augmentation
-                          .healing_protocol && (
-                          <InfoRow
-                            icon="hourglass"
-                            label="Healing Protocol"
-                            value={
-                              procedure.phase2_data.augmentation
-                                .healing_protocol === "Custom"
-                                ? procedure.phase2_data.augmentation
-                                    .healing_custom_text
-                                : procedure.phase2_data.augmentation
-                                    .healing_protocol
-                            }
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        {procedure.phase2_data.bone_graft_used !==
-                          undefined && (
-                          <InfoRow
-                            icon="fitness"
-                            label="Bone & Soft Tissue Augmentation"
-                            value={
-                              procedure.phase2_data.bone_graft_used
-                                ? "Yes"
-                                : "No"
-                            }
-                          />
-                        )}
-                        {procedure.phase2_data.bone_graft_used &&
-                          procedure.phase2_data.bone_graft_details && (
+                                  .procedures_performed || []
+                              ).length > 0 && (
+                                <InfoRow
+                                  icon="construct"
+                                  label="Augmentation Procedure"
+                                  value={procedure.phase2_data.augmentation.procedures_performed.join(
+                                    ", ",
+                                  )}
+                                />
+                              )}
+                              {(() => {
+                                const a = procedure.phase2_data.augmentation;
+                                const mats = [
+                                  ...(a.autogenous_used === "Yes"
+                                    ? [
+                                        `Autogenous${(a.autogenous_sites || []).length ? ` (${a.autogenous_sites.join(", ")})` : ""}`,
+                                      ]
+                                    : []),
+                                  ...(a.allograft_used === "Yes"
+                                    ? ["Allograft"]
+                                    : []),
+                                  ...(a.other_graft_materials || []),
+                                ];
+                                return mats.length ? (
+                                  <InfoRow
+                                    icon="flask"
+                                    label="Graft Materials"
+                                    value={mats.join(", ")}
+                                  />
+                                ) : null;
+                              })()}
+                              {procedure.phase2_data.augmentation
+                                .membrane_used === "Yes" && (
+                                <InfoRow
+                                  icon="layers"
+                                  label="Membrane"
+                                  value={
+                                    (
+                                      procedure.phase2_data.augmentation
+                                        .membrane_types || []
+                                    ).join(", ") || "Yes"
+                                  }
+                                />
+                              )}
+                              {(
+                                procedure.phase2_data.augmentation.fixation ||
+                                []
+                              ).length > 0 && (
+                                <InfoRow
+                                  icon="hardware-chip"
+                                  label="Fixation"
+                                  value={procedure.phase2_data.augmentation.fixation.join(
+                                    ", ",
+                                  )}
+                                />
+                              )}
+                              {procedure.phase2_data.augmentation
+                                .soft_tissue_graft === "Yes" && (
+                                <InfoRow
+                                  icon="leaf"
+                                  label="Soft Tissue Graft"
+                                  value={
+                                    (
+                                      procedure.phase2_data.augmentation
+                                        .soft_tissue_types || []
+                                    ).join(", ") || "Yes"
+                                  }
+                                />
+                              )}
+                              {!!procedure.phase2_data.augmentation
+                                .healing_protocol && (
+                                <InfoRow
+                                  icon="hourglass"
+                                  label="Healing Protocol"
+                                  value={
+                                    procedure.phase2_data.augmentation
+                                      .healing_protocol === "Custom"
+                                      ? procedure.phase2_data.augmentation
+                                          .healing_custom_text
+                                      : procedure.phase2_data.augmentation
+                                          .healing_protocol
+                                  }
+                                />
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {procedure.phase2_data.bone_graft_used !==
+                                undefined && (
+                                <InfoRow
+                                  icon="fitness"
+                                  label="Bone & Soft Tissue Augmentation"
+                                  value={
+                                    procedure.phase2_data.bone_graft_used
+                                      ? "Yes"
+                                      : "No"
+                                  }
+                                />
+                              )}
+                              {procedure.phase2_data.bone_graft_used &&
+                                procedure.phase2_data.bone_graft_details && (
+                                  <InfoRow
+                                    icon="document-text"
+                                    label="Bone Graft Details"
+                                    value={
+                                      procedure.phase2_data.bone_graft_details
+                                    }
+                                  />
+                                )}
+                            </>
+                          )}
+                          {procedure.phase2_data.implant_other_notes && (
                             <InfoRow
                               icon="document-text"
-                              label="Bone Graft Details"
-                              value={procedure.phase2_data.bone_graft_details}
+                              label="Other Implant Notes"
+                              value={procedure.phase2_data.implant_other_notes}
                             />
                           )}
-                      </>
-                    )}
-                    {procedure.phase2_data.implant_other_notes && (
-                      <InfoRow
-                        icon="document-text"
-                        label="Other Implant Notes"
-                        value={procedure.phase2_data.implant_other_notes}
-                      />
-                    )}
-                    {/* Per-implant Prosthetic Component readback. When
+                          {/* Per-implant Prosthetic Component readback. When
                         Phase 2 stored `prosthetic_components[]` (multi-implant
                         per-implant flow), render one card per implant showing
                         its FDI-labelled component + only the sub-info that
                         belongs to that implant's chosen component. Cover
                         Screw shows no cuff height; Healing Abutment shows the
                         mm; Immediate Loading shows the prosthesis type. */}
-                    {(() => {
-                      const perImplant =
-                        procedure.phase2_data.prosthetic_components;
-                      const cuffs =
-                        procedure.phase2_data.healing_abutment_cuff_height;
-                      const singleComponent =
-                        procedure.phase2_data.prosthetic_component;
-                      // iter-Jun-2026 (v13, Chunk E, Ask 2): "Prosthesis Type" and
-                      // "Prosthetic Plan" are conceptually the same. Source BOTH
-                      // labels from procedure.prosthetic_plan so they always show
-                      // the same detailed value across Phase 2 + Phase 3 views.
-                      const _plan = procedure.prosthetic_plan;
-                      const _planOther = procedure.prosthetic_plan_other;
-                      const prosthesisType =
-                        _plan || procedure.phase2_data.prosthesis_type;
-                      const prosthesisTypeOther = _planOther;
-                      const plans =
-                        procedure.implant_plans || procedure.implants || [];
-                      const _fdi = (i: number) => {
-                        const p = plans[i] || {};
-                        const t = p.tooth_number || p.tooth || p.position;
-                        return t ? `Implant ${t}` : "Implant —";
-                      };
-                      // iter-Jun-2026 (v13, Chunk D, Ask 2): color outline per
-                      // implant type — Orange = Zygoma, Blue = Pterygoid,
-                      // Yellow = Conventional. Only the border color changes;
-                      // header text + status chip stay neutral.
-                      const _outlineFor = (i: number) => {
-                        const p = plans[i] || {};
-                        const t = String(p.implant_type || "").toLowerCase();
-                        if (t === "zygoma") return { border: "#F57C00", width: 2 };
-                        if (t === "pterygoid") return { border: "#1565C0", width: 2 };
-                        if (t === "conventional") return { border: "#F9A825", width: 2 };
-                        return { border: "#E0E0E0", width: 1 };
-                      };
-                      const _hasAnyImmediateLoading = Array.isArray(perImplant)
-                        ? perImplant.includes("Immediate Loading Done")
-                        : singleComponent === "Immediate Loading Done";
-                      if (Array.isArray(perImplant) && perImplant.length > 0) {
-                        return (
-                          <View
-                            style={{ marginTop: 8, marginBottom: 8 }}
-                            data-testid="phase2-per-implant-readback"
-                          >
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                fontWeight: "700",
-                                color: "#37474F",
-                                marginBottom: 6,
-                                marginLeft: 4,
-                              }}
-                            >
-                              Prosthetic Component (per implant)
-                            </Text>
-                            {/* iter-Jun-2026 (v13, Chunk D, Ask 3): Global Prosthesis
+                          {(() => {
+                            const perImplant =
+                              procedure.phase2_data.prosthetic_components;
+                            const cuffs =
+                              procedure.phase2_data
+                                .healing_abutment_cuff_height;
+                            const singleComponent =
+                              procedure.phase2_data.prosthetic_component;
+                            // iter-Jun-2026 (v13, Chunk E, Ask 2): "Prosthesis Type" and
+                            // "Prosthetic Plan" are conceptually the same. Source BOTH
+                            // labels from procedure.prosthetic_plan so they always show
+                            // the same detailed value across Phase 2 + Phase 3 views.
+                            const _plan = procedure.prosthetic_plan;
+                            const _planOther = procedure.prosthetic_plan_other;
+                            const prosthesisType =
+                              _plan || procedure.phase2_data.prosthesis_type;
+                            const prosthesisTypeOther = _planOther;
+                            const plans =
+                              procedure.implant_plans ||
+                              procedure.implants ||
+                              [];
+                            const _fdi = (i: number) => {
+                              const p = plans[i] || {};
+                              const t = p.tooth_number || p.tooth || p.position;
+                              return t ? `Implant ${t}` : "Implant —";
+                            };
+                            // iter-Jun-2026 (v13, Chunk D, Ask 2): color outline per
+                            // implant type — Orange = Zygoma, Blue = Pterygoid,
+                            // Yellow = Conventional. Only the border color changes;
+                            // header text + status chip stay neutral.
+                            const _outlineFor = (i: number) => {
+                              const p = plans[i] || {};
+                              const t = String(
+                                p.implant_type || "",
+                              ).toLowerCase();
+                              if (t === "zygoma")
+                                return { border: "#F57C00", width: 2 };
+                              if (t === "pterygoid")
+                                return { border: "#1565C0", width: 2 };
+                              if (t === "conventional")
+                                return { border: "#F9A825", width: 2 };
+                              return { border: "#E0E0E0", width: 1 };
+                            };
+                            const _hasAnyImmediateLoading = Array.isArray(
+                              perImplant,
+                            )
+                              ? perImplant.includes("Immediate Loading Done")
+                              : singleComponent === "Immediate Loading Done";
+                            if (
+                              Array.isArray(perImplant) &&
+                              perImplant.length > 0
+                            ) {
+                              return (
+                                <View
+                                  style={{ marginTop: 8, marginBottom: 8 }}
+                                  data-testid="phase2-per-implant-readback"
+                                >
+                                  <Text
+                                    style={{
+                                      fontSize: 13,
+                                      fontWeight: "700",
+                                      color: "#37474F",
+                                      marginBottom: 6,
+                                      marginLeft: 4,
+                                    }}
+                                  >
+                                    Prosthetic Component (per implant)
+                                  </Text>
+                                  {/* iter-Jun-2026 (v13, Chunk D, Ask 3): Global Prosthesis
                                 Type summary row — surfaced at the top of the review
                                 when any implant had Immediate Loading Done, so the
                                 value the operator picked in Phase 2 Step 2 is
                                 visible at a glance (previously only appeared inline
                                 on each implant chip). */}
-                            {_hasAnyImmediateLoading && (
-                              <View
-                                style={{
-                                  borderWidth: 1,
-                                  borderColor: "#FFCC80",
-                                  backgroundColor: "#FFF8E1",
-                                  borderRadius: 8,
-                                  padding: 10,
-                                  marginBottom: 8,
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 8,
-                                }}
-                                data-testid="phase2-prosthesis-type-summary"
-                              >
-                                <Ionicons name="cube-outline" size={16} color="#E65100" />
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#6D4C41",
-                                    fontWeight: "700",
-                                  }}
-                                >
-                                  Prosthesis Type:
-                                </Text>
-                                <Text
-                                  style={{
-                                    fontSize: 12.5,
-                                    color: "#37474F",
-                                    fontWeight: "700",
-                                    flex: 1,
-                                  }}
-                                >
-                                  {prosthesisType
-                                    ? prosthesisType === "Other"
-                                      ? prosthesisTypeOther || "Other"
-                                      : prosthesisType
-                                    : "— (not recorded)"}
-                                </Text>
-                              </View>
-                            )}
-                            {perImplant.map((pc: string, idx: number) => {
-                              const cuff = Array.isArray(cuffs)
-                                ? cuffs[idx]
-                                : null;
-                              const chipColor =
-                                pc === "Cover Screw Placed"
-                                  ? "#6A1B9A"
-                                  : pc === "Healing Abutment Placed"
-                                    ? "#00695C"
-                                    : pc === "Immediate Loading Done"
-                                      ? "#E65100"
-                                      : "#546E7A";
-                              const chipBg =
-                                pc === "Cover Screw Placed"
-                                  ? "#F3E5F5"
-                                  : pc === "Healing Abutment Placed"
-                                    ? "#E0F2F1"
-                                    : pc === "Immediate Loading Done"
-                                      ? "#FFF3E0"
-                                      : "#ECEFF1";
-                              const outline = _outlineFor(idx);
-                              return (
-                                <View
-                                  key={idx}
-                                  style={{
-                                    borderWidth: outline.width,
-                                    borderColor: outline.border,
-                                    borderRadius: 8,
-                                    backgroundColor: "#FAFAFA",
-                                    padding: 10,
-                                    marginBottom: 8,
-                                  }}
-                                  data-testid={`phase2-implant-card-${idx}`}
-                                >
-                                  <View
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      flexWrap: "wrap",
-                                      gap: 6,
-                                    }}
-                                  >
-                                    <Text
-                                      style={{
-                                        fontSize: 13,
-                                        fontWeight: "800",
-                                        color: "#1A2332",
-                                      }}
-                                    >
-                                      {_fdi(idx)}
-                                    </Text>
+                                  {_hasAnyImmediateLoading && (
                                     <View
                                       style={{
-                                        backgroundColor: chipBg,
-                                        borderColor: chipColor,
                                         borderWidth: 1,
-                                        paddingHorizontal: 8,
-                                        paddingVertical: 2,
-                                        borderRadius: 999,
+                                        borderColor: "#FFCC80",
+                                        backgroundColor: "#FFF8E1",
+                                        borderRadius: 8,
+                                        padding: 10,
+                                        marginBottom: 8,
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        gap: 8,
                                       }}
+                                      data-testid="phase2-prosthesis-type-summary"
                                     >
+                                      <Ionicons
+                                        name="cube-outline"
+                                        size={16}
+                                        color="#E65100"
+                                      />
                                       <Text
                                         style={{
-                                          fontSize: 10,
+                                          fontSize: 12,
+                                          color: "#6D4C41",
                                           fontWeight: "700",
-                                          color: chipColor,
-                                          letterSpacing: 0.3,
-                                          textTransform: "uppercase",
                                         }}
                                       >
-                                        {pc || "—"}
+                                        Prosthesis Type:
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 12.5,
+                                          color: "#37474F",
+                                          fontWeight: "700",
+                                          flex: 1,
+                                        }}
+                                      >
+                                        {prosthesisType
+                                          ? prosthesisType === "Other"
+                                            ? prosthesisTypeOther || "Other"
+                                            : prosthesisType
+                                          : "— (not recorded)"}
                                       </Text>
                                     </View>
-                                  </View>
-                                  {pc === "Healing Abutment Placed" &&
-                                    cuff !== undefined &&
-                                    cuff !== null &&
-                                    String(cuff).trim() !== "" && (
-                                      <Text
+                                  )}
+                                  {perImplant.map((pc: string, idx: number) => {
+                                    const cuff = Array.isArray(cuffs)
+                                      ? cuffs[idx]
+                                      : null;
+                                    const chipColor =
+                                      pc === "Cover Screw Placed"
+                                        ? "#6A1B9A"
+                                        : pc === "Healing Abutment Placed"
+                                          ? "#00695C"
+                                          : pc === "Immediate Loading Done"
+                                            ? "#E65100"
+                                            : "#546E7A";
+                                    const chipBg =
+                                      pc === "Cover Screw Placed"
+                                        ? "#F3E5F5"
+                                        : pc === "Healing Abutment Placed"
+                                          ? "#E0F2F1"
+                                          : pc === "Immediate Loading Done"
+                                            ? "#FFF3E0"
+                                            : "#ECEFF1";
+                                    const outline = _outlineFor(idx);
+                                    return (
+                                      <View
+                                        key={idx}
                                         style={{
-                                          marginTop: 4,
-                                          fontSize: 12.5,
-                                          color: "#37474F",
+                                          borderWidth: outline.width,
+                                          borderColor: outline.border,
+                                          borderRadius: 8,
+                                          backgroundColor: "#FAFAFA",
+                                          padding: 10,
+                                          marginBottom: 8,
                                         }}
+                                        data-testid={`phase2-implant-card-${idx}`}
                                       >
-                                        Healing abutment cuff height:{" "}
-                                        <Text
+                                        <View
                                           style={{
-                                            fontWeight: "700",
-                                            color: "#00695C",
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            flexWrap: "wrap",
+                                            gap: 6,
                                           }}
                                         >
-                                          {cuff} mm
-                                        </Text>
-                                      </Text>
-                                    )}
-                                  {pc === "Immediate Loading Done" &&
-                                    prosthesisType && (
-                                      <Text
-                                        style={{
-                                          marginTop: 4,
-                                          fontSize: 12.5,
-                                          color: "#37474F",
-                                        }}
-                                      >
-                                        Prosthesis type:{" "}
-                                        <Text
-                                          style={{
-                                            fontWeight: "700",
-                                            color: "#E65100",
-                                          }}
-                                        >
-                                          {prosthesisType === "Other"
-                                            ? prosthesisTypeOther || "Other"
-                                            : prosthesisType}
-                                        </Text>
-                                      </Text>
-                                    )}
+                                          <Text
+                                            style={{
+                                              fontSize: 13,
+                                              fontWeight: "800",
+                                              color: "#1A2332",
+                                            }}
+                                          >
+                                            {_fdi(idx)}
+                                          </Text>
+                                          <View
+                                            style={{
+                                              backgroundColor: chipBg,
+                                              borderColor: chipColor,
+                                              borderWidth: 1,
+                                              paddingHorizontal: 8,
+                                              paddingVertical: 2,
+                                              borderRadius: 999,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 10,
+                                                fontWeight: "700",
+                                                color: chipColor,
+                                                letterSpacing: 0.3,
+                                                textTransform: "uppercase",
+                                              }}
+                                            >
+                                              {pc || "—"}
+                                            </Text>
+                                          </View>
+                                        </View>
+                                        {pc === "Healing Abutment Placed" &&
+                                          cuff !== undefined &&
+                                          cuff !== null &&
+                                          String(cuff).trim() !== "" && (
+                                            <Text
+                                              style={{
+                                                marginTop: 4,
+                                                fontSize: 12.5,
+                                                color: "#37474F",
+                                              }}
+                                            >
+                                              Healing abutment cuff height:{" "}
+                                              <Text
+                                                style={{
+                                                  fontWeight: "700",
+                                                  color: "#00695C",
+                                                }}
+                                              >
+                                                {cuff} mm
+                                              </Text>
+                                            </Text>
+                                          )}
+                                        {pc === "Immediate Loading Done" &&
+                                          prosthesisType && (
+                                            <Text
+                                              style={{
+                                                marginTop: 4,
+                                                fontSize: 12.5,
+                                                color: "#37474F",
+                                              }}
+                                            >
+                                              Prosthesis type:{" "}
+                                              <Text
+                                                style={{
+                                                  fontWeight: "700",
+                                                  color: "#E65100",
+                                                }}
+                                              >
+                                                {prosthesisType === "Other"
+                                                  ? prosthesisTypeOther ||
+                                                    "Other"
+                                                  : prosthesisType}
+                                              </Text>
+                                            </Text>
+                                          )}
+                                      </View>
+                                    );
+                                  })}
                                 </View>
                               );
-                            })}
-                          </View>
-                        );
-                      }
-                      // Legacy single-component flow (single implant / full-arch).
-                      return (
-                        <>
-                          {singleComponent && (
-                            <InfoRow
-                              icon="cube"
-                              label="Prosthetic Component"
-                              value={singleComponent}
-                              fieldKey="phase2_data.prosthetic_component"
-                            />
-                          )}
-                          {/* Global Prosthesis Type summary for the legacy flow. */}
-                          {singleComponent === "Immediate Loading Done" && prosthesisType && (
-                            <InfoRow
-                              icon="cube-outline"
-                              label="Prosthesis Type"
-                              value={
-                                prosthesisType === "Other"
-                                  ? prosthesisTypeOther || "Other"
-                                  : prosthesisType
-                              }
-                              fieldKey="phase2_data.prosthesis_type"
-                            />
-                          )}
-                          {cuffs &&
-                            (Array.isArray(cuffs) ? (
-                              cuffs.map((val: string, idx: number) =>
-                                val !== undefined &&
-                                val !== null &&
-                                String(val).trim() !== "" ? (
+                            }
+                            // Legacy single-component flow (single implant / full-arch).
+                            return (
+                              <>
+                                {singleComponent && (
                                   <InfoRow
-                                    key={idx}
-                                    icon="resize"
-                                    label={`Healing Abutment Cuff Height (${_fdi(idx)})`}
-                                    value={`${val} mm`}
+                                    icon="cube"
+                                    label="Prosthetic Component"
+                                    value={singleComponent}
+                                    fieldKey="phase2_data.prosthetic_component"
                                   />
-                                ) : null,
-                              )
-                            ) : (
-                              <InfoRow
-                                icon="resize"
-                                label="Healing Abutment Cuff Height"
-                                value={`${cuffs} mm`}
-                                fieldKey="phase2_data.healing_abutment_cuff_height"
-                              />
-                            ))}
-                        </>
-                      );
-                    })()}
-                    {/* iter-311: empty-state placeholder rows so the operator
+                                )}
+                                {/* Global Prosthesis Type summary for the legacy flow. */}
+                                {singleComponent === "Immediate Loading Done" &&
+                                  prosthesisType && (
+                                    <InfoRow
+                                      icon="cube-outline"
+                                      label="Prosthesis Type"
+                                      value={
+                                        prosthesisType === "Other"
+                                          ? prosthesisTypeOther || "Other"
+                                          : prosthesisType
+                                      }
+                                      fieldKey="phase2_data.prosthesis_type"
+                                    />
+                                  )}
+                                {cuffs &&
+                                  (Array.isArray(cuffs) ? (
+                                    cuffs.map((val: string, idx: number) =>
+                                      val !== undefined &&
+                                      val !== null &&
+                                      String(val).trim() !== "" ? (
+                                        <InfoRow
+                                          key={idx}
+                                          icon="resize"
+                                          label={`Healing Abutment Cuff Height (${_fdi(idx)})`}
+                                          value={`${val} mm`}
+                                        />
+                                      ) : null,
+                                    )
+                                  ) : (
+                                    <InfoRow
+                                      icon="resize"
+                                      label="Healing Abutment Cuff Height"
+                                      value={`${cuffs} mm`}
+                                      fieldKey="phase2_data.healing_abutment_cuff_height"
+                                    />
+                                  ))}
+                              </>
+                            );
+                          })()}
+                          {/* iter-311: empty-state placeholder rows so the operator
                   can populate the child field after switching the parent
                   via inline edit.  Parent change triggers backend-side
                   cascade clearing, then these rows surface the missing
@@ -7643,602 +8083,638 @@ export default function ProcedureDetailScreen() {
                   Multi-implant Cuff Heights are handled by Phase2EditModal
                   (richer per-implant inputs); we only fast-path the
                   single-implant case here. */}
-                    {/* iter-Jun-2026 (v13, Chunk D, Ask 3): The per-implant
+                          {/* iter-Jun-2026 (v13, Chunk D, Ask 3): The per-implant
                     (multi) flow renders its own inline chips + a summary
                     banner just above — do NOT surface the single-implant
                     "Tap to add" placeholders in that case, otherwise the
                     review shows a stray "Prosthesis Type: Tap to add" row
                     under the per-implant list. */}
-                    {!Array.isArray(procedure.phase2_data.prosthetic_components) &&
-                      procedure.phase2_data.prosthetic_component ===
-                        "Healing Abutment Placed" &&
-                      !procedure.phase2_data.healing_abutment_cuff_height &&
-                      (procedure.implant_plans?.length || 0) <= 1 && (
-                        <InfoRow
-                          icon="resize"
-                          label="Healing Abutment Cuff Height (mm)"
-                          value="Tap to add"
-                          fieldKey="phase2_data.healing_abutment_cuff_height"
-                        />
-                      )}
-                    {!Array.isArray(procedure.phase2_data.prosthetic_components) &&
-                      procedure.phase2_data.prosthetic_component ===
-                        "Immediate Loading Done" &&
-                      !procedure.phase2_data.prosthesis_type && (
-                        <InfoRow
-                          icon="cube"
-                          label="Prosthesis Type"
-                          value="Tap to add"
-                          fieldKey="phase2_data.prosthesis_type"
-                        />
-                      )}
-                    {/* iter-139: Multi-unit Abutment read-only summary (full-arch Immediate Loading) */}
-                    {(procedure.phase2_data.multi_unit_abutment_placed ===
-                      "yes" ||
-                      procedure.phase2_data.multi_unit_abutment_placed ===
-                        "no") && (
-                      <View
-                        style={{
-                          marginTop: 10,
-                          marginBottom: 10,
-                          backgroundColor: "#E1F5FE",
-                          borderColor: "#B3E5FC",
-                          borderWidth: 1.5,
-                          borderRadius: 12,
-                          padding: 12,
-                        }}
-                        data-testid="mua-readonly-section"
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: "700",
-                            color: "#0277BD",
-                            marginBottom: 6,
-                            letterSpacing: 0.3,
-                          }}
-                        >
-                          Multi-unit Abutment Placed:{" "}
-                          {procedure.phase2_data.multi_unit_abutment_placed ===
-                          "yes"
-                            ? "Yes"
-                            : "No"}
-                        </Text>
-                        {procedure.phase2_data.multi_unit_abutment_placed ===
-                          "yes" &&
-                          Array.isArray(
-                            procedure.phase2_data.multi_unit_abutment_details,
+                          {!Array.isArray(
+                            procedure.phase2_data.prosthetic_components,
                           ) &&
-                          procedure.phase2_data.multi_unit_abutment_details
-                            .length > 0 && (
-                            <View style={{ marginTop: 4 }}>
-                              {procedure.phase2_data.multi_unit_abutment_details.map(
-                                (row: any, idx: number) => (
-                                  <View
-                                    key={idx}
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      gap: 8,
-                                      paddingVertical: 6,
-                                      borderBottomWidth:
-                                        idx <
-                                        procedure.phase2_data
-                                          .multi_unit_abutment_details.length -
-                                          1
-                                          ? 1
-                                          : 0,
-                                      borderBottomColor: "#B3E5FC",
-                                    }}
-                                    data-testid={`mua-readonly-row-${idx}`}
-                                  >
-                                    <View
-                                      style={{
-                                        backgroundColor: "#B3E5FC",
-                                        paddingHorizontal: 10,
-                                        paddingVertical: 6,
-                                        borderRadius: 8,
-                                        minWidth: 70,
-                                        alignItems: "center",
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          fontSize: 12,
-                                          fontWeight: "700",
-                                          color: "#01579B",
-                                        }}
-                                      >
-                                        Implant {row?.tooth ?? "—"}
-                                      </Text>
-                                    </View>
-                                    <View
-                                      style={{
-                                        flex: 1,
-                                        flexDirection: "row",
-                                        gap: 10,
-                                        flexWrap: "wrap",
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          fontSize: 13,
-                                          color: "#01579B",
-                                        }}
-                                      >
-                                        <Text style={{ fontWeight: "600" }}>
-                                          Angulation:{" "}
-                                        </Text>
-                                        {(row?.angulation || "")
-                                          .toString()
-                                          .trim() !== ""
-                                          ? `${row.angulation}°`
-                                          : "—"}
-                                      </Text>
-                                      <Text
-                                        style={{
-                                          fontSize: 13,
-                                          color: "#01579B",
-                                        }}
-                                      >
-                                        <Text style={{ fontWeight: "600" }}>
-                                          Cuff Height:{" "}
-                                        </Text>
-                                        {(row?.cuff_height || "")
-                                          .toString()
-                                          .trim() !== ""
-                                          ? `${row.cuff_height} mm`
-                                          : "—"}
-                                      </Text>
-                                    </View>
-                                  </View>
-                                ),
-                              )}
-                            </View>
-                          )}
-                      </View>
-                    )}
-                    {procedure.phase2_data.sutures_placed !== undefined && (
-                      <InfoRow
-                        icon="bandage"
-                        label="Sutures Placed"
-                        value={
-                          procedure.phase2_data.sutures_placed ? "Yes" : "No"
-                        }
-                        fieldKey="phase2_data.sutures_placed"
-                      />
-                    )}
-                    {procedure.phase2_data.hemostasis_achieved !==
-                      undefined && (
-                      <InfoRow
-                        icon="water"
-                        label="Hemostasis Achieved"
-                        value={
-                          procedure.phase2_data.hemostasis_achieved
-                            ? "Yes"
-                            : "No"
-                        }
-                        fieldKey="phase2_data.hemostasis_achieved"
-                      />
-                    )}
-
-                    {/* Post Surgical Radiographs - IOPA Thumbnails */}
-                    {procedure.phase2_data.iopa_files &&
-                      procedure.phase2_data.iopa_files.length > 0 && (
-                        <View
-                          style={{ marginTop: 12, marginBottom: 8 }}
-                          data-testid="iopa-files-section"
-                        >
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              fontWeight: "700",
-                              color: "#1565C0",
-                              marginBottom: 10,
-                            }}
-                          >
-                            {procedure.phase2_data.iopa_files.length === 1
-                              ? "Post Surgical Radiograph"
-                              : "Post Surgical Radiographs"}{" "}
-                            - IOPA
-                          </Text>
-                          {procedure.phase2_data.iopa_files.map(
-                            (f: any, idx: number) => {
-                              const baseUrl = api.defaults.baseURL || "";
-                              const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
-                              const isImage =
-                                f.filename?.match(/\.(png|jpg|jpeg)$/i);
-                              return (
-                                <View
-                                  key={idx}
-                                  style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    marginBottom: 10,
-                                    gap: 10,
-                                    backgroundColor: "#E3F2FD",
-                                    padding: 8,
-                                    borderRadius: 10,
-                                  }}
-                                  data-testid={`iopa-thumb-${idx}`}
-                                >
-                                  {isImage ? (
-                                    <Image
-                                      source={{ uri: fileUrl }}
-                                      style={{
-                                        width: 60,
-                                        height: 60,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: "#90CAF9",
-                                      }}
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <View
-                                      style={{
-                                        width: 60,
-                                        height: 60,
-                                        borderRadius: 8,
-                                        backgroundColor: "#BBDEFB",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <Ionicons
-                                        name="document-attach"
-                                        size={28}
-                                        color="#1565C0"
-                                      />
-                                    </View>
-                                  )}
-                                  <View style={{ flex: 1 }}>
-                                    <Text
-                                      style={{
-                                        fontSize: 13,
-                                        fontWeight: "700",
-                                        color: "#333",
-                                      }}
-                                    >
-                                      {f.tooth_label
-                                        ? f.tooth_label.startsWith("Implant")
-                                          ? f.tooth_label
-                                          : `Implant ${f.tooth_label}`
-                                        : `Implant ${idx + 1}`}
-                                    </Text>
-                                    <Text
-                                      style={{ fontSize: 11, color: "#888" }}
-                                      numberOfLines={1}
-                                    >
-                                      {f.original_name}
-                                    </Text>
-                                  </View>
-                                  <TouchableOpacity
-                                    style={{
-                                      backgroundColor: "#4CAF50",
-                                      borderRadius: 8,
-                                      paddingVertical: 6,
-                                      paddingHorizontal: 12,
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      gap: 4,
-                                    }}
-                                    onPress={async () => {
-                                      // Thumbnail above uses the (possibly stale) authToken —
-                                      // fine for a best-effort preview. The View tap mints a
-                                      // fresh scoped token so opening the full file doesn't
-                                      // depend on how long ago the screen loaded.
-                                      try {
-                                        const freshUrl = await mintFileToken(
-                                          f.filename,
-                                        );
-                                        await openDocument(
-                                          freshUrl,
-                                          f.filename,
-                                        );
-                                      } catch {
-                                        Alert.alert(
-                                          "Error",
-                                          "Could not open file",
-                                        );
-                                      }
-                                    }}
-                                    data-testid={`view-iopa-detail-${idx}`}
-                                  >
-                                    <Ionicons
-                                      name="open-outline"
-                                      size={14}
-                                      color="#FFF"
-                                    />
-                                    <Text
-                                      style={{
-                                        color: "#FFF",
-                                        fontSize: 12,
-                                        fontWeight: "700",
-                                      }}
-                                    >
-                                      View
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              );
-                            },
-                          )}
-                        </View>
-                      )}
-
-                    {/* OPG Thumbnail */}
-                    {procedure.phase2_data.opg_file &&
-                      procedure.phase2_data.opg_file.filename && (
-                        <View
-                          style={{ marginTop: 8, marginBottom: 8 }}
-                          data-testid="opg-file-section"
-                        >
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              fontWeight: "700",
-                              color: "#1565C0",
-                              marginBottom: 10,
-                            }}
-                          >
-                            OPG Radiograph
-                          </Text>
-                          {(() => {
-                            const baseUrl = api.defaults.baseURL || "";
-                            const fileUrl = `${baseUrl}/uploads/${procedure.phase2_data.opg_file.filename}?token=${authToken}`;
-                            const isImage =
-                              procedure.phase2_data.opg_file.filename?.match(
-                                /\.(png|jpg|jpeg)$/i,
-                              );
-                            return (
-                              <View
+                            procedure.phase2_data.prosthetic_component ===
+                              "Healing Abutment Placed" &&
+                            !procedure.phase2_data
+                              .healing_abutment_cuff_height &&
+                            (procedure.implant_plans?.length || 0) <= 1 && (
+                              <InfoRow
+                                icon="resize"
+                                label="Healing Abutment Cuff Height (mm)"
+                                value="Tap to add"
+                                fieldKey="phase2_data.healing_abutment_cuff_height"
+                              />
+                            )}
+                          {!Array.isArray(
+                            procedure.phase2_data.prosthetic_components,
+                          ) &&
+                            procedure.phase2_data.prosthetic_component ===
+                              "Immediate Loading Done" &&
+                            !procedure.phase2_data.prosthesis_type && (
+                              <InfoRow
+                                icon="cube"
+                                label="Prosthesis Type"
+                                value="Tap to add"
+                                fieldKey="phase2_data.prosthesis_type"
+                              />
+                            )}
+                          {/* iter-139: Multi-unit Abutment read-only summary (full-arch Immediate Loading) */}
+                          {(procedure.phase2_data.multi_unit_abutment_placed ===
+                            "yes" ||
+                            procedure.phase2_data.multi_unit_abutment_placed ===
+                              "no") && (
+                            <View
+                              style={{
+                                marginTop: 10,
+                                marginBottom: 10,
+                                backgroundColor: "#E1F5FE",
+                                borderColor: "#B3E5FC",
+                                borderWidth: 1.5,
+                                borderRadius: 12,
+                                padding: 12,
+                              }}
+                              data-testid="mua-readonly-section"
+                            >
+                              <Text
                                 style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 10,
-                                  backgroundColor: "#E3F2FD",
-                                  padding: 10,
-                                  borderRadius: 10,
+                                  fontSize: 13,
+                                  fontWeight: "700",
+                                  color: "#0277BD",
+                                  marginBottom: 6,
+                                  letterSpacing: 0.3,
                                 }}
-                                data-testid="opg-thumb"
                               >
-                                {isImage ? (
-                                  <Image
-                                    source={{ uri: fileUrl }}
-                                    style={{
-                                      width: 70,
-                                      height: 70,
-                                      borderRadius: 8,
-                                      borderWidth: 1,
-                                      borderColor: "#90CAF9",
-                                    }}
-                                    resizeMode="cover"
-                                  />
-                                ) : (
-                                  <View
-                                    style={{
-                                      width: 70,
-                                      height: 70,
-                                      borderRadius: 8,
-                                      backgroundColor: "#BBDEFB",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                    }}
-                                  >
-                                    <Ionicons
-                                      name="document-attach"
-                                      size={32}
-                                      color="#1565C0"
-                                    />
+                                Multi-unit Abutment Placed:{" "}
+                                {procedure.phase2_data
+                                  .multi_unit_abutment_placed === "yes"
+                                  ? "Yes"
+                                  : "No"}
+                              </Text>
+                              {procedure.phase2_data
+                                .multi_unit_abutment_placed === "yes" &&
+                                Array.isArray(
+                                  procedure.phase2_data
+                                    .multi_unit_abutment_details,
+                                ) &&
+                                procedure.phase2_data
+                                  .multi_unit_abutment_details.length > 0 && (
+                                  <View style={{ marginTop: 4 }}>
+                                    {procedure.phase2_data.multi_unit_abutment_details.map(
+                                      (row: any, idx: number) => (
+                                        <View
+                                          key={idx}
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 8,
+                                            paddingVertical: 6,
+                                            borderBottomWidth:
+                                              idx <
+                                              procedure.phase2_data
+                                                .multi_unit_abutment_details
+                                                .length -
+                                                1
+                                                ? 1
+                                                : 0,
+                                            borderBottomColor: "#B3E5FC",
+                                          }}
+                                          data-testid={`mua-readonly-row-${idx}`}
+                                        >
+                                          <View
+                                            style={{
+                                              backgroundColor: "#B3E5FC",
+                                              paddingHorizontal: 10,
+                                              paddingVertical: 6,
+                                              borderRadius: 8,
+                                              minWidth: 70,
+                                              alignItems: "center",
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                fontWeight: "700",
+                                                color: "#01579B",
+                                              }}
+                                            >
+                                              Implant {row?.tooth ?? "—"}
+                                            </Text>
+                                          </View>
+                                          <View
+                                            style={{
+                                              flex: 1,
+                                              flexDirection: "row",
+                                              gap: 10,
+                                              flexWrap: "wrap",
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 13,
+                                                color: "#01579B",
+                                              }}
+                                            >
+                                              <Text
+                                                style={{ fontWeight: "600" }}
+                                              >
+                                                Angulation:{" "}
+                                              </Text>
+                                              {(row?.angulation || "")
+                                                .toString()
+                                                .trim() !== ""
+                                                ? `${row.angulation}°`
+                                                : "—"}
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                fontSize: 13,
+                                                color: "#01579B",
+                                              }}
+                                            >
+                                              <Text
+                                                style={{ fontWeight: "600" }}
+                                              >
+                                                Cuff Height:{" "}
+                                              </Text>
+                                              {(row?.cuff_height || "")
+                                                .toString()
+                                                .trim() !== ""
+                                                ? `${row.cuff_height} mm`
+                                                : "—"}
+                                            </Text>
+                                          </View>
+                                        </View>
+                                      ),
+                                    )}
                                   </View>
                                 )}
-                                <View style={{ flex: 1 }}>
-                                  <Text
-                                    style={{
-                                      fontSize: 13,
-                                      fontWeight: "700",
-                                      color: "#333",
-                                    }}
-                                  >
-                                    OPG
-                                  </Text>
-                                  <Text
-                                    style={{ fontSize: 11, color: "#888" }}
-                                    numberOfLines={1}
-                                  >
-                                    {
-                                      procedure.phase2_data.opg_file
-                                        .original_name
-                                    }
-                                  </Text>
-                                </View>
-                                <TouchableOpacity
+                            </View>
+                          )}
+                          {procedure.phase2_data.sutures_placed !==
+                            undefined && (
+                            <InfoRow
+                              icon="bandage"
+                              label="Sutures Placed"
+                              value={
+                                procedure.phase2_data.sutures_placed
+                                  ? "Yes"
+                                  : "No"
+                              }
+                              fieldKey="phase2_data.sutures_placed"
+                            />
+                          )}
+                          {procedure.phase2_data.hemostasis_achieved !==
+                            undefined && (
+                            <InfoRow
+                              icon="water"
+                              label="Hemostasis Achieved"
+                              value={
+                                procedure.phase2_data.hemostasis_achieved
+                                  ? "Yes"
+                                  : "No"
+                              }
+                              fieldKey="phase2_data.hemostasis_achieved"
+                            />
+                          )}
+
+                          {/* Post Surgical Radiographs - IOPA Thumbnails */}
+                          {procedure.phase2_data.iopa_files &&
+                            procedure.phase2_data.iopa_files.length > 0 && (
+                              <View
+                                style={{ marginTop: 12, marginBottom: 8 }}
+                                data-testid="iopa-files-section"
+                              >
+                                <Text
                                   style={{
-                                    backgroundColor: "#4CAF50",
-                                    borderRadius: 8,
-                                    paddingVertical: 8,
-                                    paddingHorizontal: 14,
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#1565C0",
+                                    marginBottom: 10,
+                                  }}
+                                >
+                                  {procedure.phase2_data.iopa_files.length === 1
+                                    ? "Post Surgical Radiograph"
+                                    : "Post Surgical Radiographs"}{" "}
+                                  - IOPA
+                                </Text>
+                                {procedure.phase2_data.iopa_files.map(
+                                  (f: any, idx: number) => {
+                                    const baseUrl = api.defaults.baseURL || "";
+                                    const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+                                    const isImage =
+                                      f.filename?.match(/\.(png|jpg|jpeg)$/i);
+                                    return (
+                                      <View
+                                        key={idx}
+                                        style={{
+                                          flexDirection: "row",
+                                          alignItems: "center",
+                                          marginBottom: 10,
+                                          gap: 10,
+                                          backgroundColor: "#E3F2FD",
+                                          padding: 8,
+                                          borderRadius: 10,
+                                        }}
+                                        data-testid={`iopa-thumb-${idx}`}
+                                      >
+                                        {isImage ? (
+                                          <Image
+                                            source={{ uri: fileUrl }}
+                                            style={{
+                                              width: 60,
+                                              height: 60,
+                                              borderRadius: 8,
+                                              borderWidth: 1,
+                                              borderColor: "#90CAF9",
+                                            }}
+                                            resizeMode="cover"
+                                          />
+                                        ) : (
+                                          <View
+                                            style={{
+                                              width: 60,
+                                              height: 60,
+                                              borderRadius: 8,
+                                              backgroundColor: "#BBDEFB",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                            }}
+                                          >
+                                            <Ionicons
+                                              name="document-attach"
+                                              size={28}
+                                              color="#1565C0"
+                                            />
+                                          </View>
+                                        )}
+                                        <View style={{ flex: 1 }}>
+                                          <Text
+                                            style={{
+                                              fontSize: 13,
+                                              fontWeight: "700",
+                                              color: "#333",
+                                            }}
+                                          >
+                                            {f.tooth_label
+                                              ? f.tooth_label.startsWith(
+                                                  "Implant",
+                                                )
+                                                ? f.tooth_label
+                                                : `Implant ${f.tooth_label}`
+                                              : `Implant ${idx + 1}`}
+                                          </Text>
+                                          <Text
+                                            style={{
+                                              fontSize: 11,
+                                              color: "#888",
+                                            }}
+                                            numberOfLines={1}
+                                          >
+                                            {f.original_name}
+                                          </Text>
+                                        </View>
+                                        <TouchableOpacity
+                                          style={{
+                                            backgroundColor: "#4CAF50",
+                                            borderRadius: 8,
+                                            paddingVertical: 6,
+                                            paddingHorizontal: 12,
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 4,
+                                          }}
+                                          onPress={async () => {
+                                            // Thumbnail above uses the (possibly stale) authToken —
+                                            // fine for a best-effort preview. The View tap mints a
+                                            // fresh scoped token so opening the full file doesn't
+                                            // depend on how long ago the screen loaded.
+                                            try {
+                                              const freshUrl =
+                                                await mintFileToken(f.filename);
+                                              await openDocument(
+                                                freshUrl,
+                                                f.filename,
+                                              );
+                                            } catch {
+                                              Alert.alert(
+                                                "Error",
+                                                "Could not open file",
+                                              );
+                                            }
+                                          }}
+                                          data-testid={`view-iopa-detail-${idx}`}
+                                        >
+                                          <Ionicons
+                                            name="open-outline"
+                                            size={14}
+                                            color="#FFF"
+                                          />
+                                          <Text
+                                            style={{
+                                              color: "#FFF",
+                                              fontSize: 12,
+                                              fontWeight: "700",
+                                            }}
+                                          >
+                                            View
+                                          </Text>
+                                        </TouchableOpacity>
+                                      </View>
+                                    );
+                                  },
+                                )}
+                              </View>
+                            )}
+
+                          {/* OPG Thumbnail */}
+                          {procedure.phase2_data.opg_file &&
+                            procedure.phase2_data.opg_file.filename && (
+                              <View
+                                style={{ marginTop: 8, marginBottom: 8 }}
+                                data-testid="opg-file-section"
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#1565C0",
+                                    marginBottom: 10,
+                                  }}
+                                >
+                                  OPG Radiograph
+                                </Text>
+                                {(() => {
+                                  const baseUrl = api.defaults.baseURL || "";
+                                  const fileUrl = `${baseUrl}/uploads/${procedure.phase2_data.opg_file.filename}?token=${authToken}`;
+                                  const isImage =
+                                    procedure.phase2_data.opg_file.filename?.match(
+                                      /\.(png|jpg|jpeg)$/i,
+                                    );
+                                  return (
+                                    <View
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        gap: 10,
+                                        backgroundColor: "#E3F2FD",
+                                        padding: 10,
+                                        borderRadius: 10,
+                                      }}
+                                      data-testid="opg-thumb"
+                                    >
+                                      {isImage ? (
+                                        <Image
+                                          source={{ uri: fileUrl }}
+                                          style={{
+                                            width: 70,
+                                            height: 70,
+                                            borderRadius: 8,
+                                            borderWidth: 1,
+                                            borderColor: "#90CAF9",
+                                          }}
+                                          resizeMode="cover"
+                                        />
+                                      ) : (
+                                        <View
+                                          style={{
+                                            width: 70,
+                                            height: 70,
+                                            borderRadius: 8,
+                                            backgroundColor: "#BBDEFB",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name="document-attach"
+                                            size={32}
+                                            color="#1565C0"
+                                          />
+                                        </View>
+                                      )}
+                                      <View style={{ flex: 1 }}>
+                                        <Text
+                                          style={{
+                                            fontSize: 13,
+                                            fontWeight: "700",
+                                            color: "#333",
+                                          }}
+                                        >
+                                          OPG
+                                        </Text>
+                                        <Text
+                                          style={{
+                                            fontSize: 11,
+                                            color: "#888",
+                                          }}
+                                          numberOfLines={1}
+                                        >
+                                          {
+                                            procedure.phase2_data.opg_file
+                                              .original_name
+                                          }
+                                        </Text>
+                                      </View>
+                                      <TouchableOpacity
+                                        style={{
+                                          backgroundColor: "#4CAF50",
+                                          borderRadius: 8,
+                                          paddingVertical: 8,
+                                          paddingHorizontal: 14,
+                                          flexDirection: "row",
+                                          alignItems: "center",
+                                          gap: 4,
+                                        }}
+                                        onPress={async () => {
+                                          try {
+                                            const freshUrl =
+                                              await mintFileToken(
+                                                procedure.phase2_data.opg_file
+                                                  .filename,
+                                              );
+                                            await openDocument(
+                                              freshUrl,
+                                              procedure.phase2_data.opg_file
+                                                .filename,
+                                            );
+                                          } catch {
+                                            Alert.alert(
+                                              "Error",
+                                              "Could not open file",
+                                            );
+                                          }
+                                        }}
+                                        data-testid="view-opg-detail"
+                                      >
+                                        <Ionicons
+                                          name="open-outline"
+                                          size={14}
+                                          color="#FFF"
+                                        />
+                                        <Text
+                                          style={{
+                                            color: "#FFF",
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                          }}
+                                        >
+                                          View
+                                        </Text>
+                                      </TouchableOpacity>
+                                    </View>
+                                  );
+                                })()}
+                              </View>
+                            )}
+                        </View>
+
+                        {/* Post-Operative Checklist */}
+                        {procedure.phase2_data.post_op_checklist &&
+                          Object.keys(procedure.phase2_data.post_op_checklist)
+                            .length > 0 && (
+                            <View style={{ marginBottom: 16 }}>
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                  color: "#1565C0",
+                                  marginBottom: 8,
+                                }}
+                              >
+                                Post-Operative Checklist
+                              </Text>
+                              {Object.entries(
+                                procedure.phase2_data.post_op_checklist,
+                              ).map(([key, val]) => (
+                                <View
+                                  key={key}
+                                  style={{
                                     flexDirection: "row",
                                     alignItems: "center",
-                                    gap: 4,
+                                    paddingVertical: 6,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: "#F5F5F5",
                                   }}
-                                  onPress={async () => {
-                                    try {
-                                      const freshUrl = await mintFileToken(
-                                        procedure.phase2_data.opg_file.filename,
-                                      );
-                                      await openDocument(
-                                        freshUrl,
-                                        procedure.phase2_data.opg_file.filename,
-                                      );
-                                    } catch {
-                                      Alert.alert(
-                                        "Error",
-                                        "Could not open file",
-                                      );
-                                    }
-                                  }}
-                                  data-testid="view-opg-detail"
                                 >
                                   <Ionicons
-                                    name="open-outline"
-                                    size={14}
-                                    color="#FFF"
+                                    name={val ? "checkbox" : "square-outline"}
+                                    size={20}
+                                    color={val ? "#4CAF50" : "#999"}
                                   />
                                   <Text
                                     style={{
-                                      color: "#FFF",
-                                      fontSize: 12,
-                                      fontWeight: "700",
+                                      marginLeft: 10,
+                                      fontSize: 13,
+                                      color: "#333",
+                                      textTransform: "capitalize",
                                     }}
                                   >
-                                    View
+                                    {key.replace(/_/g, " ")}
                                   </Text>
-                                </TouchableOpacity>
-                              </View>
-                            );
-                          })()}
-                        </View>
-                      )}
-                  </View>
+                                </View>
+                              ))}
+                            </View>
+                          )}
 
-                  {/* Post-Operative Checklist */}
-                  {procedure.phase2_data.post_op_checklist &&
-                    Object.keys(procedure.phase2_data.post_op_checklist)
-                      .length > 0 && (
-                      <View style={{ marginBottom: 16 }}>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            fontWeight: "700",
-                            color: "#1565C0",
-                            marginBottom: 8,
-                          }}
-                        >
-                          Post-Operative Checklist
-                        </Text>
-                        {Object.entries(
-                          procedure.phase2_data.post_op_checklist,
-                        ).map(([key, val]) => (
+                        {/* Notes & Remarks */}
+                        {(procedure.phase2_student_notes ||
+                          procedure.phase2_remark) && (
                           <View
-                            key={key}
                             style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              paddingVertical: 6,
-                              borderBottomWidth: 1,
-                              borderBottomColor: "#F5F5F5",
+                              marginBottom: 8,
+                              backgroundColor: "#F5F9FF",
+                              borderRadius: 8,
+                              padding: 12,
                             }}
                           >
-                            <Ionicons
-                              name={val ? "checkbox" : "square-outline"}
-                              size={20}
-                              color={val ? "#4CAF50" : "#999"}
-                            />
                             <Text
                               style={{
-                                marginLeft: 10,
-                                fontSize: 13,
-                                color: "#333",
-                                textTransform: "capitalize",
+                                fontSize: 14,
+                                fontWeight: "700",
+                                color: "#1565C0",
+                                marginBottom: 8,
                               }}
                             >
-                              {key.replace(/_/g, " ")}
+                              {procedure.created_by_role === "student"
+                                ? "Student's Notes"
+                                : "Operator's Notes"}
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: "#333",
+                                lineHeight: 20,
+                              }}
+                            >
+                              {procedure.phase2_student_notes ||
+                                procedure.phase2_remark}
                             </Text>
                           </View>
-                        ))}
+                        )}
+                        {procedure.phase2_supervisor_notes && (
+                          <View
+                            style={{
+                              marginBottom: 8,
+                              backgroundColor: "#F3E5F5",
+                              borderRadius: 8,
+                              padding: 12,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                fontWeight: "700",
+                                color: "#6A1B9A",
+                                marginBottom: 8,
+                              }}
+                            >
+                              Remarks by Supervising Faculty
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: "#333",
+                                lineHeight: 20,
+                              }}
+                            >
+                              {procedure.phase2_supervisor_notes}
+                            </Text>
+                          </View>
+                        )}
+                        {procedure.phase2_incharge_notes && (
+                          <View
+                            style={{
+                              marginBottom: 8,
+                              backgroundColor: "#E8F5E9",
+                              borderRadius: 8,
+                              padding: 12,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                fontWeight: "700",
+                                color: "#2E7D32",
+                                marginBottom: 8,
+                              }}
+                            >
+                              Remarks by Implant In-Charge
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: "#333",
+                                lineHeight: 20,
+                              }}
+                            >
+                              {procedure.phase2_incharge_notes}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     )}
-
-                  {/* Notes & Remarks */}
-                  {(procedure.phase2_student_notes ||
-                    procedure.phase2_remark) && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#F5F9FF",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#1565C0",
-                          marginBottom: 8,
-                        }}
-                      >
-                        {procedure.created_by_role === "student"
-                          ? "Student's Notes"
-                          : "Operator's Notes"}
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase2_student_notes ||
-                          procedure.phase2_remark}
-                      </Text>
-                    </View>
-                  )}
-                  {procedure.phase2_supervisor_notes && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#F3E5F5",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#6A1B9A",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Remarks by Supervising Faculty
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase2_supervisor_notes}
-                      </Text>
-                    </View>
-                  )}
-                  {procedure.phase2_incharge_notes && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#E8F5E9",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#2E7D32",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Remarks by Implant In-Charge
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase2_incharge_notes}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </>
-          );
-        })()}
+                  </>
+                );
+              })()}
 
             {/* AI Surgical Summary — Generate after Phase 2 approval; editable + persisted to PDF */}
             {(() => {
@@ -8499,7 +8975,8 @@ export default function ProcedureDetailScreen() {
             {user?.role !== "nurse" &&
               (procedure.phase3_data ||
                 procedure.stage2_surgical_remark ||
-                procedure.phase3_student_notes) && (() => {
+                procedure.phase3_student_notes) &&
+              (() => {
                 const badge3 = getPhaseBadge("p3", procedure.status);
                 const isOpen3 = !collapsedPhases.p3;
                 return (
@@ -8542,13 +9019,31 @@ export default function ProcedureDetailScreen() {
                           marginRight: 12,
                         }}
                       >
-                        <Ionicons name="git-branch-outline" size={18} color="#16A34A" />
+                        <Ionicons
+                          name="git-branch-outline"
+                          size={18}
+                          color="#16A34A"
+                        />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                        <Text
+                          style={{
+                            fontSize: 14.5,
+                            fontWeight: "700",
+                            color: "#0F172A",
+                            letterSpacing: 0.2,
+                          }}
+                        >
                           Phase 3 — Healing & Second Stage
                         </Text>
-                        <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: "#64748B",
+                            marginTop: 2,
+                          }}
+                          numberOfLines={1}
+                        >
                           {procedure.phase3_data?.implants?.length > 0
                             ? `${procedure.phase3_data.implants.length} implant(s) evaluated`
                             : "Healing & Second Stage Surgery"}
@@ -8563,9 +9058,21 @@ export default function ProcedureDetailScreen() {
                           marginRight: 8,
                         }}
                       >
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: badge3.color }}>{badge3.label}</Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: badge3.color,
+                          }}
+                        >
+                          {badge3.label}
+                        </Text>
                       </View>
-                      <Ionicons name={isOpen3 ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+                      <Ionicons
+                        name={isOpen3 ? "chevron-up" : "chevron-down"}
+                        size={18}
+                        color="#64748B"
+                      />
                     </TouchableOpacity>
 
                     {/* Phase 3 Content */}
@@ -8588,1568 +9095,1659 @@ export default function ProcedureDetailScreen() {
                           phaseAnchors.current["p3"] = e.nativeEvent.layout.y;
                         }}
                       >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 12,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <Ionicons name="git-branch" size={22} color="#2E7D32" />
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { marginBottom: 0, color: "#2E7D32", fontSize: 17, flex: 1 },
-                      ]}
-                    >
-                      Phase 3 — Healing and Second Stage Surgery
-                    </Text>
-                    {/* iter-358: One-tap prosthodontist hand-off report — reads the
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 12,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <Ionicons
+                            name="git-branch"
+                            size={22}
+                            color="#2E7D32"
+                          />
+                          <Text
+                            style={[
+                              styles.sectionTitle,
+                              {
+                                marginBottom: 0,
+                                color: "#2E7D32",
+                                fontSize: 17,
+                                flex: 1,
+                              },
+                            ]}
+                          >
+                            Phase 3 — Healing and Second Stage Surgery
+                          </Text>
+                          {/* iter-358: One-tap prosthodontist hand-off report — reads the
                         per-implant Phase-3 HA config + Phase-2 implant specs +
                         ISQs + IOPAs and generates a printable A4 summary. */}
-                    {procedure.phase3_data && (
-                      <View style={{ flexDirection: "row", gap: 6 }}>
-                        <TouchableOpacity
-                          onPress={async () => {
-                            try {
-                              await generatePhase3HandoffPDF(procedure);
-                            } catch {
-                              /* error already surfaced by helper */
-                            }
-                          }}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 4,
-                            backgroundColor: "#00695C",
-                            paddingHorizontal: 10,
-                            paddingVertical: 6,
-                            borderRadius: 6,
-                          }}
-                          testID="phase3-handoff-download"
-                          data-testid="phase3-handoff-download"
-                        >
-                          <Ionicons name="download" size={13} color="#FFF" />
-                          <Text
-                            style={{
-                              color: "#FFF",
-                              fontSize: 11,
-                              fontWeight: "700",
-                              letterSpacing: 0.3,
-                            }}
-                          >
-                            Hand-off PDF
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={async () => {
-                            try {
-                              await printPhase3HandoffPDF(procedure);
-                            } catch {
-                              /* helper already logs */
-                            }
-                          }}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 4,
-                            backgroundColor: "#FFF",
-                            borderColor: "#00695C",
-                            borderWidth: 1,
-                            paddingHorizontal: 10,
-                            paddingVertical: 5,
-                            borderRadius: 6,
-                          }}
-                          testID="phase3-handoff-print"
-                          data-testid="phase3-handoff-print"
-                        >
-                          <Ionicons name="print" size={13} color="#00695C" />
-                          <Text
-                            style={{
-                              color: "#00695C",
-                              fontSize: 11,
-                              fontWeight: "700",
-                              letterSpacing: 0.3,
-                            }}
-                          >
-                            Print
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
+                          {procedure.phase3_data && (
+                            <View style={{ flexDirection: "row", gap: 6 }}>
+                              <TouchableOpacity
+                                onPress={async () => {
+                                  try {
+                                    await generatePhase3HandoffPDF(procedure);
+                                  } catch {
+                                    /* error already surfaced by helper */
+                                  }
+                                }}
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  backgroundColor: "#00695C",
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 6,
+                                  borderRadius: 6,
+                                }}
+                                testID="phase3-handoff-download"
+                                data-testid="phase3-handoff-download"
+                              >
+                                <Ionicons
+                                  name="download"
+                                  size={13}
+                                  color="#FFF"
+                                />
+                                <Text
+                                  style={{
+                                    color: "#FFF",
+                                    fontSize: 11,
+                                    fontWeight: "700",
+                                    letterSpacing: 0.3,
+                                  }}
+                                >
+                                  Hand-off PDF
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                onPress={async () => {
+                                  try {
+                                    await printPhase3HandoffPDF(procedure);
+                                  } catch {
+                                    /* helper already logs */
+                                  }
+                                }}
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 4,
+                                  backgroundColor: "#FFF",
+                                  borderColor: "#00695C",
+                                  borderWidth: 1,
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 5,
+                                  borderRadius: 6,
+                                }}
+                                testID="phase3-handoff-print"
+                                data-testid="phase3-handoff-print"
+                              >
+                                <Ionicons
+                                  name="print"
+                                  size={13}
+                                  color="#00695C"
+                                />
+                                <Text
+                                  style={{
+                                    color: "#00695C",
+                                    fontSize: 11,
+                                    fontWeight: "700",
+                                    letterSpacing: 0.3,
+                                  }}
+                                >
+                                  Print
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
 
-                  {/* iter-Jun-2026 (v13, Chunk D, Ask 4): Immediate Prosthesis Done
+                        {/* iter-Jun-2026 (v13, Chunk D, Ask 4): Immediate Prosthesis Done
                       summary — when Phase 2 recorded Immediate Loading for any implant,
                       surface both the Prosthesis Type (Fixed/Removable) AND the
                       Prosthetic Plan carried over from Phase 1 / Phase 2. */}
-                  {(() => {
-                    const p2 = procedure.phase2_data || {};
-                    const p2Components: string[] = Array.isArray(p2.prosthetic_components)
-                      ? p2.prosthetic_components
-                      : [];
-                    const anyImmediate =
-                      p2Components.includes("Immediate Loading Done") ||
-                      p2.prosthetic_component === "Immediate Loading Done";
-                    if (!anyImmediate) return null;
-                    // iter-Jun-2026 (v13, Chunk E, Ask 2): Prosthesis Type and
-                    // Prosthetic Plan share procedure.prosthetic_plan as their
-                    // single source of truth.
-                    const plan = procedure.prosthetic_plan;
-                    const planOther = procedure.prosthetic_plan_other;
-                    const _display = plan
-                      ? plan === "Other"
-                        ? planOther || "Other"
-                        : plan
-                      : "— (not recorded)";
-                    return (
-                      <View
-                        style={{
-                          marginBottom: 14,
-                          padding: 10,
-                          borderRadius: 8,
-                          backgroundColor: "#F1F8E9",
-                          borderLeftWidth: 3,
-                          borderLeftColor: "#2E7D32",
-                        }}
-                        data-testid="phase3-immediate-prosthesis-summary"
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: "800",
-                            color: "#1B5E20",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Immediate Prosthesis Done
-                        </Text>
-                        <Text style={{ fontSize: 12.5, color: "#33691E" }}>
-                          <Text style={{ fontWeight: "700" }}>Prosthesis Type:</Text>{" "}
-                          {_display}
-                        </Text>
-                        <Text style={{ marginTop: 2, fontSize: 12.5, color: "#33691E" }}>
-                          <Text style={{ fontWeight: "700" }}>Prosthetic Plan:</Text>{" "}
-                          {_display}
-                        </Text>
-                      </View>
-                    );
-                  })()}
-
-                  {/* Phase 3 Checklist Items */}
-                  {procedure.phase3_data?.checklist_items &&
-                    Object.keys(procedure.phase3_data.checklist_items).length >
-                      0 && (
-                      <View style={{ marginBottom: 16 }}>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            fontWeight: "700",
-                            color: "#388E3C",
-                            marginBottom: 8,
-                          }}
-                        >
-                          Checklist
-                        </Text>
-                        {Object.entries(
-                          procedure.phase3_data.checklist_items,
-                        ).map(([key, val]) => (
-                          <View
-                            key={key}
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              paddingVertical: 6,
-                              borderBottomWidth: 1,
-                              borderBottomColor: "#F5F5F5",
-                            }}
-                          >
-                            <Ionicons
-                              name={val ? "checkbox" : "square-outline"}
-                              size={20}
-                              color={val ? "#4CAF50" : "#999"}
-                            />
-                            <Text
+                        {(() => {
+                          const p2 = procedure.phase2_data || {};
+                          const p2Components: string[] = Array.isArray(
+                            p2.prosthetic_components,
+                          )
+                            ? p2.prosthetic_components
+                            : [];
+                          const anyImmediate =
+                            p2Components.includes("Immediate Loading Done") ||
+                            p2.prosthetic_component ===
+                              "Immediate Loading Done";
+                          if (!anyImmediate) return null;
+                          // iter-Jun-2026 (v13, Chunk E, Ask 2): Prosthesis Type and
+                          // Prosthetic Plan share procedure.prosthetic_plan as their
+                          // single source of truth.
+                          const plan = procedure.prosthetic_plan;
+                          const planOther = procedure.prosthetic_plan_other;
+                          const _display = plan
+                            ? plan === "Other"
+                              ? planOther || "Other"
+                              : plan
+                            : "— (not recorded)";
+                          return (
+                            <View
                               style={{
-                                marginLeft: 10,
-                                fontSize: 13,
-                                color: "#333",
-                                textTransform: "capitalize",
+                                marginBottom: 14,
+                                padding: 10,
+                                borderRadius: 8,
+                                backgroundColor: "#F1F8E9",
+                                borderLeftWidth: 3,
+                                borderLeftColor: "#2E7D32",
                               }}
+                              data-testid="phase3-immediate-prosthesis-summary"
                             >
-                              {key.replace(/_/g, " ")}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: "800",
+                                  color: "#1B5E20",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                Immediate Prosthesis Done
+                              </Text>
+                              <Text
+                                style={{ fontSize: 12.5, color: "#33691E" }}
+                              >
+                                <Text style={{ fontWeight: "700" }}>
+                                  Prosthesis Type:
+                                </Text>{" "}
+                                {_display}
+                              </Text>
+                              <Text
+                                style={{
+                                  marginTop: 2,
+                                  fontSize: 12.5,
+                                  color: "#33691E",
+                                }}
+                              >
+                                <Text style={{ fontWeight: "700" }}>
+                                  Prosthetic Plan:
+                                </Text>{" "}
+                                {_display}
+                              </Text>
+                            </View>
+                          );
+                        })()}
 
-                  {/* ISQ & Healing Abutment.
+                        {/* Phase 3 Checklist Items */}
+                        {procedure.phase3_data?.checklist_items &&
+                          Object.keys(procedure.phase3_data.checklist_items)
+                            .length > 0 && (
+                            <View style={{ marginBottom: 16 }}>
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                  color: "#388E3C",
+                                  marginBottom: 8,
+                                }}
+                              >
+                                Checklist
+                              </Text>
+                              {Object.entries(
+                                procedure.phase3_data.checklist_items,
+                              ).map(([key, val]) => (
+                                <View
+                                  key={key}
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    paddingVertical: 6,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: "#F5F5F5",
+                                  }}
+                                >
+                                  <Ionicons
+                                    name={val ? "checkbox" : "square-outline"}
+                                    size={20}
+                                    color={val ? "#4CAF50" : "#999"}
+                                  />
+                                  <Text
+                                    style={{
+                                      marginLeft: 10,
+                                      fontSize: 13,
+                                      color: "#333",
+                                      textTransform: "capitalize",
+                                    }}
+                                  >
+                                    {key.replace(/_/g, " ")}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+
+                        {/* ISQ & Healing Abutment.
                 iter-210: per user request, filter out blank entries from the
                 ISQ + Healing-Abutment arrays so we don't render dangling "—"
                 rows. If both arrays end up empty after filtering, render the
                 Measurements section header with a single "NA" line so the
                 section still appears in the readback (option (a) — keeps
                 visual structure). */}
-                  {(() => {
-                    const isqRaw = procedure.phase3_data?.isq_value;
-                    const haRaw =
-                      procedure.phase3_data?.healing_abutment_height;
-                    const haCfg =
-                      procedure.phase3_data?.phase3_healing_abutment_config;
-                    if (
-                      !isqRaw &&
-                      !haRaw &&
-                      !(Array.isArray(haCfg) && haCfg.length > 0)
-                    )
-                      return null;
+                        {(() => {
+                          const isqRaw = procedure.phase3_data?.isq_value;
+                          const haRaw =
+                            procedure.phase3_data?.healing_abutment_height;
+                          const haCfg =
+                            procedure.phase3_data
+                              ?.phase3_healing_abutment_config;
+                          if (
+                            !isqRaw &&
+                            !haRaw &&
+                            !(Array.isArray(haCfg) && haCfg.length > 0)
+                          )
+                            return null;
 
-                    const nonEmpty = (v: any) =>
-                      v !== undefined && v !== null && String(v).trim() !== "";
+                          const nonEmpty = (v: any) =>
+                            v !== undefined &&
+                            v !== null &&
+                            String(v).trim() !== "";
 
-                    const isqArr: string[] = Array.isArray(isqRaw)
-                      ? isqRaw.filter(nonEmpty)
-                      : nonEmpty(isqRaw)
-                        ? [isqRaw]
-                        : [];
-                    const haArr: string[] = Array.isArray(haRaw)
-                      ? haRaw.filter(nonEmpty)
-                      : nonEmpty(haRaw)
-                        ? [haRaw]
-                        : [];
+                          const isqArr: string[] = Array.isArray(isqRaw)
+                            ? isqRaw.filter(nonEmpty)
+                            : nonEmpty(isqRaw)
+                              ? [isqRaw]
+                              : [];
+                          const haArr: string[] = Array.isArray(haRaw)
+                            ? haRaw.filter(nonEmpty)
+                            : nonEmpty(haRaw)
+                              ? [haRaw]
+                              : [];
 
-                    const isArrISQ = Array.isArray(isqRaw);
-                    const isArrHA = Array.isArray(haRaw);
+                          const isArrISQ = Array.isArray(isqRaw);
+                          const isArrHA = Array.isArray(haRaw);
 
-                    const usePerImplantHa =
-                      Array.isArray(haCfg) && haCfg.length > 0;
-                    const hasAnything =
-                      isqArr.length > 0 || haArr.length > 0 || usePerImplantHa;
-                    const plans =
-                      procedure.implant_plans || procedure.implants || [];
-                    const _fdi = (i: number) => {
-                      const p = plans[i] || {};
-                      const t = p.tooth_number || p.tooth || p.position;
-                      return t ? `Implant ${t}` : "Implant —";
-                    };
+                          const usePerImplantHa =
+                            Array.isArray(haCfg) && haCfg.length > 0;
+                          const hasAnything =
+                            isqArr.length > 0 ||
+                            haArr.length > 0 ||
+                            usePerImplantHa;
+                          const plans =
+                            procedure.implant_plans || procedure.implants || [];
+                          const _fdi = (i: number) => {
+                            const p = plans[i] || {};
+                            const t = p.tooth_number || p.tooth || p.position;
+                            return t ? `Implant ${t}` : "Implant —";
+                          };
 
-                    return (
-                      <View
-                        style={{ marginBottom: 16 }}
-                        testID="phase3-measurements-section"
-                      >
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            fontWeight: "700",
-                            color: "#388E3C",
-                            marginBottom: 8,
-                          }}
-                        >
-                          Measurements
-                        </Text>
-
-                        {!hasAnything && (
-                          <View
-                            style={{ paddingVertical: 8 }}
-                            testID="phase3-measurements-na"
-                          >
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                color: "#999",
-                                fontStyle: "italic",
-                              }}
-                            >
-                              NA
-                            </Text>
-                          </View>
-                        )}
-
-                        {isqArr.length > 0 &&
-                          (isArrISQ ? (
+                          return (
                             <View
-                              style={{
-                                backgroundColor: "#E8F5E9",
-                                borderRadius: 8,
-                                padding: 10,
-                                marginBottom: 8,
-                                borderWidth: 1,
-                                borderColor: "#A5D6A7",
-                              }}
+                              style={{ marginBottom: 16 }}
+                              testID="phase3-measurements-section"
                             >
                               <Text
                                 style={{
-                                  fontSize: 13,
+                                  fontSize: 14,
                                   fontWeight: "700",
-                                  color: "#2E7D32",
-                                  marginBottom: 6,
+                                  color: "#388E3C",
+                                  marginBottom: 8,
                                 }}
                               >
-                                ISQ Values
+                                Measurements
                               </Text>
-                              {(isqRaw as any[]).map(
-                                (val: any, idx: number) => {
-                                  if (!nonEmpty(val)) return null;
+
+                              {!hasAnything && (
+                                <View
+                                  style={{ paddingVertical: 8 }}
+                                  testID="phase3-measurements-na"
+                                >
+                                  <Text
+                                    style={{
+                                      fontSize: 13,
+                                      color: "#999",
+                                      fontStyle: "italic",
+                                    }}
+                                  >
+                                    NA
+                                  </Text>
+                                </View>
+                              )}
+
+                              {isqArr.length > 0 &&
+                                (isArrISQ ? (
+                                  <View
+                                    style={{
+                                      backgroundColor: "#E8F5E9",
+                                      borderRadius: 8,
+                                      padding: 10,
+                                      marginBottom: 8,
+                                      borderWidth: 1,
+                                      borderColor: "#A5D6A7",
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        fontWeight: "700",
+                                        color: "#2E7D32",
+                                        marginBottom: 6,
+                                      }}
+                                    >
+                                      ISQ Values
+                                    </Text>
+                                    {(isqRaw as any[]).map(
+                                      (val: any, idx: number) => {
+                                        if (!nonEmpty(val)) return null;
+                                        return (
+                                          <View
+                                            key={idx}
+                                            style={{
+                                              flexDirection: "row",
+                                              alignItems: "center",
+                                              gap: 8,
+                                              marginBottom: 4,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                fontWeight: "600",
+                                                color: "#1B5E20",
+                                                flex: 1,
+                                              }}
+                                            >
+                                              {_fdi(idx)}
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                fontSize: 16,
+                                                fontWeight: "700",
+                                                color: "#2E7D32",
+                                              }}
+                                            >
+                                              {val}
+                                            </Text>
+                                          </View>
+                                        );
+                                      },
+                                    )}
+                                  </View>
+                                ) : (
+                                  <InfoRow
+                                    icon="speedometer"
+                                    label="ISQ Value"
+                                    value={String(isqRaw)}
+                                  />
+                                ))}
+
+                              {/* iter-361: Per-implant Phase 3 Healing Abutment Configuration.
+                            Reads `phase3_healing_abutment_config[]` when present (the
+                            new iter-357 per-implant flow) so a Customised description
+                            also appears here — not only the mm cuff height. */}
+                              {usePerImplantHa ? (
+                                <View
+                                  style={{ marginBottom: 4 }}
+                                  data-testid="phase3-per-implant-ha"
+                                >
+                                  <Text
+                                    style={{
+                                      fontSize: 13,
+                                      fontWeight: "700",
+                                      color: "#37474F",
+                                      marginBottom: 6,
+                                    }}
+                                  >
+                                    Healing Abutment Configuration (per implant)
+                                  </Text>
+                                  {haCfg.map((cfg: any, idx: number) => {
+                                    // iter-Jun-2026 (v13, Chunk D, Ask 5): skip Immediate-
+                                    // Loaded implants — Healing Abutment n/a.
+                                    if (
+                                      cfg?.phase2_component ===
+                                      "Immediate Loading Done"
+                                    )
+                                      return null;
+                                    const changed =
+                                      cfg.mode === "standard" &&
+                                      cfg.phase2_cuff_height_mm &&
+                                      cfg.cuff_height_mm &&
+                                      String(cfg.phase2_cuff_height_mm) !==
+                                        String(cfg.cuff_height_mm);
+                                    const isCustom = cfg.mode === "customised";
+                                    const chipBg = isCustom
+                                      ? "#F3E5F5"
+                                      : "#E0F2F1";
+                                    const chipColor = isCustom
+                                      ? "#6A1B9A"
+                                      : "#00695C";
+                                    return (
+                                      <View
+                                        key={idx}
+                                        style={{
+                                          borderWidth: 1,
+                                          borderColor: "#E0E0E0",
+                                          borderRadius: 8,
+                                          backgroundColor: "#FAFAFA",
+                                          padding: 10,
+                                          marginBottom: 8,
+                                        }}
+                                        data-testid={`phase3-ha-card-${idx}`}
+                                      >
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            flexWrap: "wrap",
+                                            gap: 6,
+                                          }}
+                                        >
+                                          <Text
+                                            style={{
+                                              fontSize: 13,
+                                              fontWeight: "800",
+                                              color: "#1A2332",
+                                            }}
+                                          >
+                                            {_fdi(idx)}
+                                          </Text>
+                                          <View
+                                            style={{
+                                              backgroundColor: chipBg,
+                                              borderColor: chipColor,
+                                              borderWidth: 1,
+                                              paddingHorizontal: 8,
+                                              paddingVertical: 2,
+                                              borderRadius: 999,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 10,
+                                                fontWeight: "700",
+                                                color: chipColor,
+                                                letterSpacing: 0.3,
+                                                textTransform: "uppercase",
+                                              }}
+                                            >
+                                              {isCustom
+                                                ? "Customised"
+                                                : "Standard cuff height"}
+                                            </Text>
+                                          </View>
+                                          {cfg.phase2_component && (
+                                            <Text
+                                              style={{
+                                                fontSize: 10,
+                                                color: "#78909C",
+                                                fontStyle: "italic",
+                                              }}
+                                            >
+                                              Phase 2: {cfg.phase2_component}
+                                            </Text>
+                                          )}
+                                        </View>
+                                        {cfg.mode === "standard" &&
+                                          cfg.cuff_height_mm && (
+                                            <Text
+                                              style={{
+                                                marginTop: 4,
+                                                fontSize: 12.5,
+                                                color: "#37474F",
+                                              }}
+                                            >
+                                              Cuff height:{" "}
+                                              <Text
+                                                style={{
+                                                  fontWeight: "700",
+                                                  color: "#00695C",
+                                                }}
+                                              >
+                                                {cfg.cuff_height_mm} mm
+                                              </Text>
+                                              {changed && (
+                                                <Text
+                                                  style={{
+                                                    color: "#E65100",
+                                                    fontStyle: "italic",
+                                                  }}
+                                                >
+                                                  {"  "}(was{" "}
+                                                  {cfg.phase2_cuff_height_mm} mm
+                                                  in Phase 2)
+                                                </Text>
+                                              )}
+                                            </Text>
+                                          )}
+                                        {isCustom && cfg.customised_details && (
+                                          <View
+                                            style={{
+                                              marginTop: 6,
+                                              backgroundColor: "#FFF",
+                                              borderLeftWidth: 3,
+                                              borderLeftColor: "#6A1B9A",
+                                              padding: 8,
+                                              borderRadius: 4,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 11,
+                                                fontWeight: "700",
+                                                color: "#6A1B9A",
+                                                marginBottom: 2,
+                                                letterSpacing: 0.3,
+                                                textTransform: "uppercase",
+                                              }}
+                                            >
+                                              Customised healing abutment
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                fontSize: 12.5,
+                                                color: "#263238",
+                                                lineHeight: 18,
+                                              }}
+                                            >
+                                              {cfg.customised_details}
+                                            </Text>
+                                          </View>
+                                        )}
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              ) : (
+                                haArr.length > 0 &&
+                                (isArrHA ? (
+                                  (haRaw as any[]).map(
+                                    (val: any, idx: number) => {
+                                      if (!nonEmpty(val)) return null;
+                                      return (
+                                        <InfoRow
+                                          key={idx}
+                                          icon="resize"
+                                          label={`Healing Abutment Height (Implant ${idx + 1})`}
+                                          value={`${val} mm`}
+                                        />
+                                      );
+                                    },
+                                  )
+                                ) : (
+                                  <InfoRow
+                                    icon="resize"
+                                    label="Healing Abutment Height"
+                                    value={`${haRaw} mm`}
+                                  />
+                                ))
+                              )}
+                            </View>
+                          );
+                        })()}
+
+                        {/* Phase 3 IOPA Radiograph Thumbnails */}
+                        {procedure.phase3_data?.iopa_files &&
+                          procedure.phase3_data.iopa_files.length > 0 && (
+                            <View
+                              style={{ marginBottom: 16 }}
+                              data-testid="phase3-iopa-section"
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: "700",
+                                  color: "#1565C0",
+                                  marginBottom: 10,
+                                }}
+                              >
+                                IOPA Radiographs
+                              </Text>
+                              {procedure.phase3_data.iopa_files.map(
+                                (f: any, idx: number) => {
+                                  const baseUrl = api.defaults.baseURL || "";
+                                  const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+                                  const isImage =
+                                    f.filename?.match(/\.(png|jpg|jpeg)$/i);
                                   return (
                                     <View
                                       key={idx}
                                       style={{
                                         flexDirection: "row",
                                         alignItems: "center",
-                                        gap: 8,
-                                        marginBottom: 4,
+                                        marginBottom: 10,
+                                        gap: 10,
+                                        backgroundColor: "#E3F2FD",
+                                        padding: 8,
+                                        borderRadius: 10,
                                       }}
+                                      data-testid={`p3-iopa-thumb-${idx}`}
                                     >
-                                      <Text
+                                      {isImage ? (
+                                        <Image
+                                          source={{ uri: fileUrl }}
+                                          style={{
+                                            width: 60,
+                                            height: 60,
+                                            borderRadius: 8,
+                                            borderWidth: 1,
+                                            borderColor: "#90CAF9",
+                                          }}
+                                          resizeMode="cover"
+                                        />
+                                      ) : (
+                                        <View
+                                          style={{
+                                            width: 60,
+                                            height: 60,
+                                            borderRadius: 8,
+                                            backgroundColor: "#BBDEFB",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name="document-attach"
+                                            size={28}
+                                            color="#1565C0"
+                                          />
+                                        </View>
+                                      )}
+                                      <View style={{ flex: 1 }}>
+                                        <Text
+                                          style={{
+                                            fontSize: 13,
+                                            fontWeight: "700",
+                                            color: "#333",
+                                          }}
+                                        >
+                                          {f.tooth_label
+                                            ? f.tooth_label.startsWith(
+                                                "Implant",
+                                              )
+                                              ? f.tooth_label
+                                              : `Implant ${f.tooth_label}`
+                                            : `Implant ${idx + 1}`}
+                                        </Text>
+                                        <Text
+                                          style={{
+                                            fontSize: 11,
+                                            color: "#888",
+                                          }}
+                                          numberOfLines={1}
+                                        >
+                                          {f.original_name}
+                                        </Text>
+                                      </View>
+                                      <TouchableOpacity
                                         style={{
-                                          fontSize: 12,
-                                          fontWeight: "600",
-                                          color: "#1B5E20",
-                                          flex: 1,
+                                          backgroundColor: "#4CAF50",
+                                          borderRadius: 8,
+                                          paddingVertical: 6,
+                                          paddingHorizontal: 12,
+                                          flexDirection: "row",
+                                          alignItems: "center",
+                                          gap: 4,
                                         }}
-                                      >
-                                        {_fdi(idx)}
-                                      </Text>
-                                      <Text
-                                        style={{
-                                          fontSize: 16,
-                                          fontWeight: "700",
-                                          color: "#2E7D32",
+                                        onPress={async () => {
+                                          try {
+                                            const freshUrl =
+                                              await mintFileToken(f.filename);
+                                            await openDocument(
+                                              freshUrl,
+                                              f.filename,
+                                            );
+                                          } catch {
+                                            Alert.alert(
+                                              "Error",
+                                              "Could not open file",
+                                            );
+                                          }
                                         }}
+                                        data-testid={`p3-view-iopa-detail-${idx}`}
                                       >
-                                        {val}
-                                      </Text>
+                                        <Ionicons
+                                          name="open-outline"
+                                          size={14}
+                                          color="#FFF"
+                                        />
+                                        <Text
+                                          style={{
+                                            color: "#FFF",
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                          }}
+                                        >
+                                          View
+                                        </Text>
+                                      </TouchableOpacity>
                                     </View>
                                   );
                                 },
                               )}
                             </View>
-                          ) : (
-                            <InfoRow
-                              icon="speedometer"
-                              label="ISQ Value"
-                              value={String(isqRaw)}
-                            />
-                          ))}
+                          )}
 
-                        {/* iter-361: Per-implant Phase 3 Healing Abutment Configuration.
-                            Reads `phase3_healing_abutment_config[]` when present (the
-                            new iter-357 per-implant flow) so a Customised description
-                            also appears here — not only the mm cuff height. */}
-                        {usePerImplantHa ? (
-                          <View
-                            style={{ marginBottom: 4 }}
-                            data-testid="phase3-per-implant-ha"
-                          >
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                fontWeight: "700",
-                                color: "#37474F",
-                                marginBottom: 6,
-                              }}
-                            >
-                              Healing Abutment Configuration (per implant)
-                            </Text>
-                            {haCfg.map((cfg: any, idx: number) => {
-                              // iter-Jun-2026 (v13, Chunk D, Ask 5): skip Immediate-
-                              // Loaded implants — Healing Abutment n/a.
-                              if (
-                                cfg?.phase2_component ===
-                                "Immediate Loading Done"
-                              )
-                                return null;
-                              const changed =
-                                cfg.mode === "standard" &&
-                                cfg.phase2_cuff_height_mm &&
-                                cfg.cuff_height_mm &&
-                                String(cfg.phase2_cuff_height_mm) !==
-                                  String(cfg.cuff_height_mm);
-                              const isCustom = cfg.mode === "customised";
-                              const chipBg = isCustom ? "#F3E5F5" : "#E0F2F1";
-                              const chipColor = isCustom
-                                ? "#6A1B9A"
-                                : "#00695C";
-                              return (
-                                <View
-                                  key={idx}
-                                  style={{
-                                    borderWidth: 1,
-                                    borderColor: "#E0E0E0",
-                                    borderRadius: 8,
-                                    backgroundColor: "#FAFAFA",
-                                    padding: 10,
-                                    marginBottom: 8,
-                                  }}
-                                  data-testid={`phase3-ha-card-${idx}`}
-                                >
-                                  <View
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      flexWrap: "wrap",
-                                      gap: 6,
-                                    }}
-                                  >
-                                    <Text
-                                      style={{
-                                        fontSize: 13,
-                                        fontWeight: "800",
-                                        color: "#1A2332",
-                                      }}
-                                    >
-                                      {_fdi(idx)}
-                                    </Text>
-                                    <View
-                                      style={{
-                                        backgroundColor: chipBg,
-                                        borderColor: chipColor,
-                                        borderWidth: 1,
-                                        paddingHorizontal: 8,
-                                        paddingVertical: 2,
-                                        borderRadius: 999,
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          fontSize: 10,
-                                          fontWeight: "700",
-                                          color: chipColor,
-                                          letterSpacing: 0.3,
-                                          textTransform: "uppercase",
-                                        }}
-                                      >
-                                        {isCustom
-                                          ? "Customised"
-                                          : "Standard cuff height"}
-                                      </Text>
-                                    </View>
-                                    {cfg.phase2_component && (
-                                      <Text
-                                        style={{
-                                          fontSize: 10,
-                                          color: "#78909C",
-                                          fontStyle: "italic",
-                                        }}
-                                      >
-                                        Phase 2: {cfg.phase2_component}
-                                      </Text>
-                                    )}
-                                  </View>
-                                  {cfg.mode === "standard" &&
-                                    cfg.cuff_height_mm && (
-                                      <Text
-                                        style={{
-                                          marginTop: 4,
-                                          fontSize: 12.5,
-                                          color: "#37474F",
-                                        }}
-                                      >
-                                        Cuff height:{" "}
-                                        <Text
-                                          style={{
-                                            fontWeight: "700",
-                                            color: "#00695C",
-                                          }}
-                                        >
-                                          {cfg.cuff_height_mm} mm
-                                        </Text>
-                                        {changed && (
-                                          <Text
-                                            style={{
-                                              color: "#E65100",
-                                              fontStyle: "italic",
-                                            }}
-                                          >
-                                            {"  "}(was{" "}
-                                            {cfg.phase2_cuff_height_mm} mm in
-                                            Phase 2)
-                                          </Text>
-                                        )}
-                                      </Text>
-                                    )}
-                                  {isCustom && cfg.customised_details && (
-                                    <View
-                                      style={{
-                                        marginTop: 6,
-                                        backgroundColor: "#FFF",
-                                        borderLeftWidth: 3,
-                                        borderLeftColor: "#6A1B9A",
-                                        padding: 8,
-                                        borderRadius: 4,
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          fontSize: 11,
-                                          fontWeight: "700",
-                                          color: "#6A1B9A",
-                                          marginBottom: 2,
-                                          letterSpacing: 0.3,
-                                          textTransform: "uppercase",
-                                        }}
-                                      >
-                                        Customised healing abutment
-                                      </Text>
-                                      <Text
-                                        style={{
-                                          fontSize: 12.5,
-                                          color: "#263238",
-                                          lineHeight: 18,
-                                        }}
-                                      >
-                                        {cfg.customised_details}
-                                      </Text>
-                                    </View>
-                                  )}
-                                </View>
-                              );
-                            })}
-                          </View>
-                        ) : (
-                          haArr.length > 0 &&
-                          (isArrHA ? (
-                            (haRaw as any[]).map((val: any, idx: number) => {
-                              if (!nonEmpty(val)) return null;
-                              return (
-                                <InfoRow
-                                  key={idx}
-                                  icon="resize"
-                                  label={`Healing Abutment Height (Implant ${idx + 1})`}
-                                  value={`${val} mm`}
-                                />
-                              );
-                            })
-                          ) : (
-                            <InfoRow
-                              icon="resize"
-                              label="Healing Abutment Height"
-                              value={`${haRaw} mm`}
-                            />
-                          ))
-                        )}
-                      </View>
-                    );
-                  })()}
-
-                  {/* Phase 3 IOPA Radiograph Thumbnails */}
-                  {procedure.phase3_data?.iopa_files &&
-                    procedure.phase3_data.iopa_files.length > 0 && (
-                      <View
-                        style={{ marginBottom: 16 }}
-                        data-testid="phase3-iopa-section"
-                      >
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            fontWeight: "700",
-                            color: "#1565C0",
-                            marginBottom: 10,
-                          }}
-                        >
-                          IOPA Radiographs
-                        </Text>
-                        {procedure.phase3_data.iopa_files.map(
-                          (f: any, idx: number) => {
-                            const baseUrl = api.defaults.baseURL || "";
-                            const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
-                            const isImage =
-                              f.filename?.match(/\.(png|jpg|jpeg)$/i);
-                            return (
-                              <View
-                                key={idx}
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  marginBottom: 10,
-                                  gap: 10,
-                                  backgroundColor: "#E3F2FD",
-                                  padding: 8,
-                                  borderRadius: 10,
-                                }}
-                                data-testid={`p3-iopa-thumb-${idx}`}
-                              >
-                                {isImage ? (
-                                  <Image
-                                    source={{ uri: fileUrl }}
-                                    style={{
-                                      width: 60,
-                                      height: 60,
-                                      borderRadius: 8,
-                                      borderWidth: 1,
-                                      borderColor: "#90CAF9",
-                                    }}
-                                    resizeMode="cover"
-                                  />
-                                ) : (
-                                  <View
-                                    style={{
-                                      width: 60,
-                                      height: 60,
-                                      borderRadius: 8,
-                                      backgroundColor: "#BBDEFB",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                    }}
-                                  >
-                                    <Ionicons
-                                      name="document-attach"
-                                      size={28}
-                                      color="#1565C0"
-                                    />
-                                  </View>
-                                )}
-                                <View style={{ flex: 1 }}>
-                                  <Text
-                                    style={{
-                                      fontSize: 13,
-                                      fontWeight: "700",
-                                      color: "#333",
-                                    }}
-                                  >
-                                    {f.tooth_label
-                                      ? f.tooth_label.startsWith("Implant")
-                                        ? f.tooth_label
-                                        : `Implant ${f.tooth_label}`
-                                      : `Implant ${idx + 1}`}
-                                  </Text>
-                                  <Text
-                                    style={{ fontSize: 11, color: "#888" }}
-                                    numberOfLines={1}
-                                  >
-                                    {f.original_name}
-                                  </Text>
-                                </View>
-                                <TouchableOpacity
-                                  style={{
-                                    backgroundColor: "#4CAF50",
-                                    borderRadius: 8,
-                                    paddingVertical: 6,
-                                    paddingHorizontal: 12,
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    gap: 4,
-                                  }}
-                                  onPress={async () => {
-                                    try {
-                                      const freshUrl = await mintFileToken(
-                                        f.filename,
-                                      );
-                                      await openDocument(freshUrl, f.filename);
-                                    } catch {
-                                      Alert.alert(
-                                        "Error",
-                                        "Could not open file",
-                                      );
-                                    }
-                                  }}
-                                  data-testid={`p3-view-iopa-detail-${idx}`}
-                                >
-                                  <Ionicons
-                                    name="open-outline"
-                                    size={14}
-                                    color="#FFF"
-                                  />
-                                  <Text
-                                    style={{
-                                      color: "#FFF",
-                                      fontSize: 12,
-                                      fontWeight: "700",
-                                    }}
-                                  >
-                                    View
-                                  </Text>
-                                </TouchableOpacity>
-                              </View>
-                            );
-                          },
-                        )}
-                      </View>
-                    )}
-
-                  {/* Notes & Remarks */}
-                  {(procedure.phase3_student_notes ||
-                    procedure.stage2_surgical_remark) && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#F1F8E9",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#33691E",
-                          marginBottom: 8,
-                        }}
-                      >
-                        {procedure.created_by_role === "student"
-                          ? "Student's Notes"
-                          : "Operator's Notes"}
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase3_student_notes ||
-                          procedure.stage2_surgical_remark}
-                      </Text>
-                    </View>
-                  )}
-                  {procedure.phase3_supervisor_notes && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#F3E5F5",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#6A1B9A",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Remarks by Supervising Faculty
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase3_supervisor_notes}
-                      </Text>
-                    </View>
-                  )}
-                  {procedure.phase3_incharge_notes && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#E8F5E9",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#2E7D32",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Remarks by Implant In-Charge
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase3_incharge_notes}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-            {/* ═══════════ SMART PROSTHETIC PLANNER ═══════════ */}
-            {[
-              "stage2_surgical_approved",
-              "pending_stage2_prosthetic",
-              "completed",
-            ].includes(procedure.status) && (
-              <View
-                style={[
-                  styles.section,
-                  { borderLeftWidth: 4, borderLeftColor: "#0D47A1" },
-                ]}
-                data-testid="smart-planner-section"
-              >
-                <TouchableOpacity
-                  onPress={() => {
-                    if (smartPlannerReport) {
-                      setShowSmartPlanner(!showSmartPlanner);
-                    } else {
-                      generateSmartPlanner();
-                    }
-                  }}
-                  disabled={smartPlannerLoading}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                  data-testid="smart-planner-toggle"
-                >
-                  <View
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: "#E3F2FD",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Ionicons name="bulb" size={22} color="#0D47A1" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: "700",
-                        color: "#0D47A1",
-                        letterSpacing: 0.3,
-                      }}
-                    >
-                      Smart Prosthetic Planner
-                    </Text>
-                    <Text
-                      style={{ fontSize: 12, color: "#5C6BC0", marginTop: 2 }}
-                    >
-                      Pre-Prosthetic Insights
-                    </Text>
-                  </View>
-                  {smartPlannerLoading ? (
-                    <ActivityIndicator size="small" color="#1565C0" />
-                  ) : (
-                    <Ionicons
-                      name={showSmartPlanner ? "chevron-up" : "chevron-down"}
-                      size={22}
-                      color="#1565C0"
-                    />
-                  )}
-                </TouchableOpacity>
-
-                {showSmartPlanner && smartPlannerReport && (
-                  <View style={{ marginTop: 16 }}>
-                    {/* Case Type Badge */}
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 14,
-                      }}
-                    >
-                      <View
-                        style={{
-                          backgroundColor: "#E3F2FD",
-                          paddingHorizontal: 12,
-                          paddingVertical: 6,
-                          borderRadius: 16,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: "700",
-                            color: "#1565C0",
-                          }}
-                        >
-                          {smartPlannerReport.case_type === "full_arch"
-                            ? "Full Arch"
-                            : "Dentulous"}{" "}
-                          Case
-                        </Text>
-                      </View>
-                      <Text style={{ fontSize: 11, color: "#90A4AE" }}>
-                        {new Date(
-                          smartPlannerReport.generated_at,
-                        ).toLocaleDateString()}
-                      </Text>
-                    </View>
-
-                    {/* Modules */}
-                    {smartPlannerReport.modules?.map(
-                      (mod: any, idx: number) => (
-                        <View
-                          key={mod.id || idx}
-                          style={{
-                            marginBottom: 14,
-                            backgroundColor: "#F8FAFC",
-                            borderRadius: 14,
-                            padding: 14,
-                            borderWidth: 1,
-                            borderColor: "#E0E7EE",
-                          }}
-                        >
+                        {/* Notes & Remarks */}
+                        {(procedure.phase3_student_notes ||
+                          procedure.stage2_surgical_remark) && (
                           <View
                             style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 8,
-                              marginBottom: 10,
+                              marginBottom: 8,
+                              backgroundColor: "#F1F8E9",
+                              borderRadius: 8,
+                              padding: 12,
                             }}
                           >
-                            <Ionicons
-                              name={mod.icon || "information-circle"}
-                              size={18}
-                              color="#1565C0"
-                            />
                             <Text
                               style={{
                                 fontSize: 14,
                                 fontWeight: "700",
-                                color: "#0D47A1",
+                                color: "#33691E",
+                                marginBottom: 8,
                               }}
                             >
-                              {mod.title}
+                              {procedure.created_by_role === "student"
+                                ? "Student's Notes"
+                                : "Operator's Notes"}
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: "#333",
+                                lineHeight: 20,
+                              }}
+                            >
+                              {procedure.phase3_student_notes ||
+                                procedure.stage2_surgical_remark}
                             </Text>
                           </View>
-
-                          {/* Space Analysis flags */}
-                          {mod.id === "space_analysis" &&
-                            mod.data?.flags?.map((f: any, fi: number) => (
-                              <View
-                                key={fi}
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "flex-start",
-                                  gap: 8,
-                                  marginBottom: 8,
-                                  paddingLeft: 4,
-                                }}
-                              >
-                                <Ionicons
-                                  name={
-                                    f.status === "CRITICAL"
-                                      ? "alert-circle"
-                                      : f.status === "WARNING"
-                                        ? "warning"
-                                        : "checkmark-circle"
-                                  }
-                                  size={16}
-                                  color={
-                                    f.status === "CRITICAL"
-                                      ? "#D32F2F"
-                                      : f.status === "WARNING"
-                                        ? "#F57C00"
-                                        : "#388E3C"
-                                  }
-                                  style={{ marginTop: 2 }}
-                                />
-                                <View style={{ flex: 1 }}>
-                                  <Text
-                                    style={{
-                                      fontSize: 13,
-                                      fontWeight: "600",
-                                      color: "#333",
-                                    }}
-                                  >
-                                    {f.param}: {f.value}
-                                  </Text>
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      color: "#666",
-                                      marginTop: 2,
-                                      lineHeight: 18,
-                                    }}
-                                  >
-                                    {f.note}
-                                  </Text>
-                                </View>
-                              </View>
-                            ))}
-
-                          {/* Interarch Space */}
-                          {mod.id === "interarch_space" && (
-                            <View>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 8,
-                                  marginBottom: 6,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    fontSize: 24,
-                                    fontWeight: "700",
-                                    color:
-                                      mod.severity === "SEVERE"
-                                        ? "#D32F2F"
-                                        : mod.severity === "MODERATE"
-                                          ? "#F57C00"
-                                          : "#388E3C",
-                                  }}
-                                >
-                                  {mod.data.space_mm} mm
-                                </Text>
-                                <View
-                                  style={{
-                                    backgroundColor:
-                                      mod.severity === "SEVERE"
-                                        ? "#FFEBEE"
-                                        : mod.severity === "MODERATE"
-                                          ? "#FFF3E0"
-                                          : "#E8F5E9",
-                                    paddingHorizontal: 10,
-                                    paddingVertical: 4,
-                                    borderRadius: 12,
-                                  }}
-                                >
-                                  <Text
-                                    style={{
-                                      fontSize: 11,
-                                      fontWeight: "700",
-                                      color:
-                                        mod.severity === "SEVERE"
-                                          ? "#D32F2F"
-                                          : mod.severity === "MODERATE"
-                                            ? "#F57C00"
-                                            : "#388E3C",
-                                    }}
-                                  >
-                                    {mod.severity}
-                                  </Text>
-                                </View>
-                              </View>
-                              <Text
-                                style={{
-                                  fontSize: 13,
-                                  color: "#555",
-                                  marginBottom: 6,
-                                }}
-                              >
-                                {mod.data.interpretation}
-                              </Text>
-                              {mod.data.implications?.map(
-                                (imp: string, ii: number) => (
-                                  <View
-                                    key={ii}
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "flex-start",
-                                      gap: 6,
-                                      marginBottom: 3,
-                                    }}
-                                  >
-                                    <Text
-                                      style={{
-                                        fontSize: 12,
-                                        color: "#1565C0",
-                                        marginTop: 1,
-                                      }}
-                                    >
-                                      •
-                                    </Text>
-                                    <Text
-                                      style={{
-                                        fontSize: 12,
-                                        color: "#555",
-                                        flex: 1,
-                                        lineHeight: 18,
-                                      }}
-                                    >
-                                      {imp}
-                                    </Text>
-                                  </View>
-                                ),
-                              )}
-                            </View>
-                          )}
-
-                          {/* Material Compatibility */}
-                          {mod.id === "material_compatibility" && (
-                            <View>
-                              {mod.data.suitable?.length > 0 && (
-                                <View style={{ marginBottom: 8 }}>
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      fontWeight: "700",
-                                      color: "#388E3C",
-                                      marginBottom: 4,
-                                    }}
-                                  >
-                                    Feasible
-                                  </Text>
-                                  {mod.data.suitable.map(
-                                    (s: string, si: number) => (
-                                      <View
-                                        key={si}
-                                        style={{
-                                          flexDirection: "row",
-                                          alignItems: "center",
-                                          gap: 6,
-                                          marginBottom: 2,
-                                        }}
-                                      >
-                                        <Ionicons
-                                          name="checkmark-circle"
-                                          size={14}
-                                          color="#388E3C"
-                                        />
-                                        <Text
-                                          style={{
-                                            fontSize: 12,
-                                            color: "#555",
-                                          }}
-                                        >
-                                          {s}
-                                        </Text>
-                                      </View>
-                                    ),
-                                  )}
-                                </View>
-                              )}
-                              {mod.data.limited?.length > 0 && (
-                                <View style={{ marginBottom: 8 }}>
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      fontWeight: "700",
-                                      color: "#F57C00",
-                                      marginBottom: 4,
-                                    }}
-                                  >
-                                    Marginal
-                                  </Text>
-                                  {mod.data.limited.map(
-                                    (l: string, li: number) => (
-                                      <View
-                                        key={li}
-                                        style={{
-                                          flexDirection: "row",
-                                          alignItems: "center",
-                                          gap: 6,
-                                          marginBottom: 2,
-                                        }}
-                                      >
-                                        <Ionicons
-                                          name="warning"
-                                          size={14}
-                                          color="#F57C00"
-                                        />
-                                        <Text
-                                          style={{
-                                            fontSize: 12,
-                                            color: "#555",
-                                          }}
-                                        >
-                                          {l}
-                                        </Text>
-                                      </View>
-                                    ),
-                                  )}
-                                </View>
-                              )}
-                              {mod.data.not_feasible?.length > 0 && (
-                                <View>
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      fontWeight: "700",
-                                      color: "#D32F2F",
-                                      marginBottom: 4,
-                                    }}
-                                  >
-                                    Not Feasible
-                                  </Text>
-                                  {mod.data.not_feasible.map(
-                                    (n: string, ni: number) => (
-                                      <View
-                                        key={ni}
-                                        style={{
-                                          flexDirection: "row",
-                                          alignItems: "center",
-                                          gap: 6,
-                                          marginBottom: 2,
-                                        }}
-                                      >
-                                        <Ionicons
-                                          name="close-circle"
-                                          size={14}
-                                          color="#D32F2F"
-                                        />
-                                        <Text
-                                          style={{
-                                            fontSize: 12,
-                                            color: "#555",
-                                          }}
-                                        >
-                                          {n}
-                                        </Text>
-                                      </View>
-                                    ),
-                                  )}
-                                </View>
-                              )}
-                            </View>
-                          )}
-
-                          {/* Esthetic Zone */}
-                          {mod.id === "esthetic_zone" && (
-                            <View>
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  color: "#1565C0",
-                                  marginBottom: 6,
-                                }}
-                              >
-                                Teeth: {mod.data.teeth?.join(", ")}
-                              </Text>
-                              {mod.data.alerts?.map((a: string, ai: number) => (
-                                <View
-                                  key={ai}
-                                  style={{
-                                    flexDirection: "row",
-                                    alignItems: "flex-start",
-                                    gap: 6,
-                                    marginBottom: 3,
-                                  }}
-                                >
-                                  <Ionicons
-                                    name="flower"
-                                    size={13}
-                                    color="#AD1457"
-                                    style={{ marginTop: 2 }}
-                                  />
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      color: "#555",
-                                      flex: 1,
-                                      lineHeight: 18,
-                                    }}
-                                  >
-                                    {a}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          )}
-
-                          {/* Retention Guidance */}
-                          {mod.id === "retention_guidance" && (
-                            <View>
-                              <View
-                                style={{
-                                  backgroundColor: "#E8F5E9",
-                                  borderRadius: 10,
-                                  padding: 10,
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    fontWeight: "700",
-                                    color: "#2E7D32",
-                                    marginBottom: 2,
-                                  }}
-                                >
-                                  Preferred
-                                </Text>
-                                <Text style={{ fontSize: 12, color: "#555" }}>
-                                  {mod.data.preferred}
-                                </Text>
-                              </View>
-                              <View
-                                style={{
-                                  backgroundColor: "#FFF3E0",
-                                  borderRadius: 10,
-                                  padding: 10,
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    fontWeight: "700",
-                                    color: "#E65100",
-                                    marginBottom: 2,
-                                  }}
-                                >
-                                  Alternative
-                                </Text>
-                                <Text style={{ fontSize: 12, color: "#555" }}>
-                                  {mod.data.alternative}
-                                </Text>
-                              </View>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "flex-start",
-                                  gap: 6,
-                                  backgroundColor: "#FFFDE7",
-                                  borderRadius: 10,
-                                  padding: 10,
-                                }}
-                              >
-                                <Ionicons
-                                  name="information-circle"
-                                  size={16}
-                                  color="#F57F17"
-                                  style={{ marginTop: 1 }}
-                                />
-                                <Text
-                                  style={{
-                                    fontSize: 12,
-                                    color: "#555",
-                                    flex: 1,
-                                    lineHeight: 18,
-                                  }}
-                                >
-                                  {mod.data.advisory}
-                                </Text>
-                              </View>
-                            </View>
-                          )}
-
-                          {/* Generic notes/warnings/recommendations lists */}
-                          {(mod.id === "occlusion" ||
-                            mod.id === "biomechanics" ||
-                            mod.id === "hygiene") && (
-                            <View>
-                              {(
-                                mod.data.notes ||
-                                mod.data.warnings ||
-                                mod.data.recommendations
-                              )?.map((n: string, ni: number) => (
-                                <View
-                                  key={ni}
-                                  style={{
-                                    flexDirection: "row",
-                                    alignItems: "flex-start",
-                                    gap: 6,
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      color: "#1565C0",
-                                      marginTop: 1,
-                                    }}
-                                  >
-                                    •
-                                  </Text>
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      color: "#555",
-                                      flex: 1,
-                                      lineHeight: 18,
-                                    }}
-                                  >
-                                    {n}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          )}
-
-                          {/* Opposing Arch */}
-                          {mod.id === "opposing_arch" && (
-                            <View>
-                              <View
-                                style={{
-                                  backgroundColor: "#E3F2FD",
-                                  borderRadius: 10,
-                                  padding: 10,
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <Text
-                                  style={{
-                                    fontSize: 13,
-                                    fontWeight: "700",
-                                    color: "#1565C0",
-                                  }}
-                                >
-                                  {mod.data.opposing_type}
-                                </Text>
-                              </View>
-                              {mod.data.notes?.map((n: string, ni: number) => (
-                                <View
-                                  key={ni}
-                                  style={{
-                                    flexDirection: "row",
-                                    alignItems: "flex-start",
-                                    gap: 6,
-                                    marginBottom: 3,
-                                  }}
-                                >
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      color: "#1565C0",
-                                      marginTop: 1,
-                                    }}
-                                  >
-                                    •
-                                  </Text>
-                                  <Text
-                                    style={{
-                                      fontSize: 12,
-                                      color: "#555",
-                                      flex: 1,
-                                      lineHeight: 18,
-                                    }}
-                                  >
-                                    {n}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          )}
-
-                          {/* Stability Alert */}
-                          {mod.id === "stability_alert" && (
-                            <View>
-                              {mod.data.low_isq_implants?.map(
-                                (imp: any, ii: number) => (
-                                  <View
-                                    key={ii}
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      gap: 6,
-                                      marginBottom: 4,
-                                    }}
-                                  >
-                                    <Ionicons
-                                      name="alert-circle"
-                                      size={14}
-                                      color="#D32F2F"
-                                    />
-                                    <Text
-                                      style={{
-                                        fontSize: 12,
-                                        color: "#D32F2F",
-                                        fontWeight: "600",
-                                      }}
-                                    >
-                                      Implant {imp.implant}: ISQ {imp.value}
-                                    </Text>
-                                  </View>
-                                ),
-                              )}
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  color: "#555",
-                                  marginTop: 4,
-                                  lineHeight: 18,
-                                }}
-                              >
-                                {mod.data.recommendation}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      ),
-                    )}
-
-                    {/* Alerts */}
-                    {smartPlannerReport.alerts?.length > 0 && (
-                      <View
-                        style={{
-                          backgroundColor: "#FFF3E0",
-                          borderRadius: 14,
-                          padding: 14,
-                          borderWidth: 1.5,
-                          borderColor: "#FFE082",
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 6,
-                            marginBottom: 8,
-                          }}
-                        >
-                          <Ionicons name="warning" size={16} color="#E65100" />
-                          <Text
+                        )}
+                        {procedure.phase3_supervisor_notes && (
+                          <View
                             style={{
-                              fontSize: 13,
-                              fontWeight: "700",
-                              color: "#E65100",
+                              marginBottom: 8,
+                              backgroundColor: "#F3E5F5",
+                              borderRadius: 8,
+                              padding: 12,
                             }}
                           >
-                            Clinical Alerts
-                          </Text>
-                        </View>
-                        {smartPlannerReport.alerts.map(
-                          (a: string, ai: number) => (
-                            <View
-                              key={ai}
+                            <Text
                               style={{
-                                flexDirection: "row",
-                                alignItems: "flex-start",
-                                gap: 6,
-                                marginBottom: 3,
+                                fontSize: 14,
+                                fontWeight: "700",
+                                color: "#6A1B9A",
+                                marginBottom: 8,
                               }}
                             >
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  color: "#E65100",
-                                  marginTop: 1,
-                                }}
-                              >
-                                •
-                              </Text>
-                              <Text
-                                style={{
-                                  fontSize: 12,
-                                  color: "#BF360C",
-                                  flex: 1,
-                                  lineHeight: 18,
-                                }}
-                              >
-                                {a}
-                              </Text>
-                            </View>
-                          ),
+                              Remarks by Supervising Faculty
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: "#333",
+                                lineHeight: 20,
+                              }}
+                            >
+                              {procedure.phase3_supervisor_notes}
+                            </Text>
+                          </View>
+                        )}
+                        {procedure.phase3_incharge_notes && (
+                          <View
+                            style={{
+                              marginBottom: 8,
+                              backgroundColor: "#E8F5E9",
+                              borderRadius: 8,
+                              padding: 12,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                fontWeight: "700",
+                                color: "#2E7D32",
+                                marginBottom: 8,
+                              }}
+                            >
+                              Remarks by Implant In-Charge
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 14,
+                                color: "#333",
+                                lineHeight: 20,
+                              }}
+                            >
+                              {procedure.phase3_incharge_notes}
+                            </Text>
+                          </View>
                         )}
                       </View>
                     )}
 
-                    {/* Regenerate button */}
-                    <TouchableOpacity
-                      onPress={generateSmartPlanner}
-                      disabled={smartPlannerLoading}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 6,
-                        marginTop: 14,
-                        paddingVertical: 10,
-                        backgroundColor: "#E3F2FD",
-                        borderRadius: 12,
-                      }}
-                      data-testid="smart-planner-regenerate"
-                    >
-                      <Ionicons name="refresh" size={16} color="#1565C0" />
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "600",
-                          color: "#1565C0",
-                        }}
+                    {/* ═══════════ SMART PROSTHETIC PLANNER ═══════════ */}
+                    {[
+                      "stage2_surgical_approved",
+                      "pending_stage2_prosthetic",
+                      "completed",
+                    ].includes(procedure.status) && (
+                      <View
+                        style={[
+                          styles.section,
+                          { borderLeftWidth: 4, borderLeftColor: "#0D47A1" },
+                        ]}
+                        data-testid="smart-planner-section"
                       >
-                        Regenerate Report
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
-          </>
-        );
-      })()}
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (smartPlannerReport) {
+                              setShowSmartPlanner(!showSmartPlanner);
+                            } else {
+                              generateSmartPlanner();
+                            }
+                          }}
+                          disabled={smartPlannerLoading}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 10,
+                          }}
+                          data-testid="smart-planner-toggle"
+                        >
+                          <View
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 20,
+                              backgroundColor: "#E3F2FD",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <Ionicons name="bulb" size={22} color="#0D47A1" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={{
+                                fontSize: 16,
+                                fontWeight: "700",
+                                color: "#0D47A1",
+                                letterSpacing: 0.3,
+                              }}
+                            >
+                              Smart Prosthetic Planner
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: "#5C6BC0",
+                                marginTop: 2,
+                              }}
+                            >
+                              Pre-Prosthetic Insights
+                            </Text>
+                          </View>
+                          {smartPlannerLoading ? (
+                            <ActivityIndicator size="small" color="#1565C0" />
+                          ) : (
+                            <Ionicons
+                              name={
+                                showSmartPlanner ? "chevron-up" : "chevron-down"
+                              }
+                              size={22}
+                              color="#1565C0"
+                            />
+                          )}
+                        </TouchableOpacity>
+
+                        {showSmartPlanner && smartPlannerReport && (
+                          <View style={{ marginTop: 16 }}>
+                            {/* Case Type Badge */}
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 14,
+                              }}
+                            >
+                              <View
+                                style={{
+                                  backgroundColor: "#E3F2FD",
+                                  paddingHorizontal: 12,
+                                  paddingVertical: 6,
+                                  borderRadius: 16,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 12,
+                                    fontWeight: "700",
+                                    color: "#1565C0",
+                                  }}
+                                >
+                                  {smartPlannerReport.case_type === "full_arch"
+                                    ? "Full Arch"
+                                    : "Dentulous"}{" "}
+                                  Case
+                                </Text>
+                              </View>
+                              <Text style={{ fontSize: 11, color: "#90A4AE" }}>
+                                {new Date(
+                                  smartPlannerReport.generated_at,
+                                ).toLocaleDateString()}
+                              </Text>
+                            </View>
+
+                            {/* Modules */}
+                            {smartPlannerReport.modules?.map(
+                              (mod: any, idx: number) => (
+                                <View
+                                  key={mod.id || idx}
+                                  style={{
+                                    marginBottom: 14,
+                                    backgroundColor: "#F8FAFC",
+                                    borderRadius: 14,
+                                    padding: 14,
+                                    borderWidth: 1,
+                                    borderColor: "#E0E7EE",
+                                  }}
+                                >
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      marginBottom: 10,
+                                    }}
+                                  >
+                                    <Ionicons
+                                      name={mod.icon || "information-circle"}
+                                      size={18}
+                                      color="#1565C0"
+                                    />
+                                    <Text
+                                      style={{
+                                        fontSize: 14,
+                                        fontWeight: "700",
+                                        color: "#0D47A1",
+                                      }}
+                                    >
+                                      {mod.title}
+                                    </Text>
+                                  </View>
+
+                                  {/* Space Analysis flags */}
+                                  {mod.id === "space_analysis" &&
+                                    mod.data?.flags?.map(
+                                      (f: any, fi: number) => (
+                                        <View
+                                          key={fi}
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "flex-start",
+                                            gap: 8,
+                                            marginBottom: 8,
+                                            paddingLeft: 4,
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name={
+                                              f.status === "CRITICAL"
+                                                ? "alert-circle"
+                                                : f.status === "WARNING"
+                                                  ? "warning"
+                                                  : "checkmark-circle"
+                                            }
+                                            size={16}
+                                            color={
+                                              f.status === "CRITICAL"
+                                                ? "#D32F2F"
+                                                : f.status === "WARNING"
+                                                  ? "#F57C00"
+                                                  : "#388E3C"
+                                            }
+                                            style={{ marginTop: 2 }}
+                                          />
+                                          <View style={{ flex: 1 }}>
+                                            <Text
+                                              style={{
+                                                fontSize: 13,
+                                                fontWeight: "600",
+                                                color: "#333",
+                                              }}
+                                            >
+                                              {f.param}: {f.value}
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                color: "#666",
+                                                marginTop: 2,
+                                                lineHeight: 18,
+                                              }}
+                                            >
+                                              {f.note}
+                                            </Text>
+                                          </View>
+                                        </View>
+                                      ),
+                                    )}
+
+                                  {/* Interarch Space */}
+                                  {mod.id === "interarch_space" && (
+                                    <View>
+                                      <View
+                                        style={{
+                                          flexDirection: "row",
+                                          alignItems: "center",
+                                          gap: 8,
+                                          marginBottom: 6,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 24,
+                                            fontWeight: "700",
+                                            color:
+                                              mod.severity === "SEVERE"
+                                                ? "#D32F2F"
+                                                : mod.severity === "MODERATE"
+                                                  ? "#F57C00"
+                                                  : "#388E3C",
+                                          }}
+                                        >
+                                          {mod.data.space_mm} mm
+                                        </Text>
+                                        <View
+                                          style={{
+                                            backgroundColor:
+                                              mod.severity === "SEVERE"
+                                                ? "#FFEBEE"
+                                                : mod.severity === "MODERATE"
+                                                  ? "#FFF3E0"
+                                                  : "#E8F5E9",
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 4,
+                                            borderRadius: 12,
+                                          }}
+                                        >
+                                          <Text
+                                            style={{
+                                              fontSize: 11,
+                                              fontWeight: "700",
+                                              color:
+                                                mod.severity === "SEVERE"
+                                                  ? "#D32F2F"
+                                                  : mod.severity === "MODERATE"
+                                                    ? "#F57C00"
+                                                    : "#388E3C",
+                                            }}
+                                          >
+                                            {mod.severity}
+                                          </Text>
+                                        </View>
+                                      </View>
+                                      <Text
+                                        style={{
+                                          fontSize: 13,
+                                          color: "#555",
+                                          marginBottom: 6,
+                                        }}
+                                      >
+                                        {mod.data.interpretation}
+                                      </Text>
+                                      {mod.data.implications?.map(
+                                        (imp: string, ii: number) => (
+                                          <View
+                                            key={ii}
+                                            style={{
+                                              flexDirection: "row",
+                                              alignItems: "flex-start",
+                                              gap: 6,
+                                              marginBottom: 3,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                color: "#1565C0",
+                                                marginTop: 1,
+                                              }}
+                                            >
+                                              •
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                color: "#555",
+                                                flex: 1,
+                                                lineHeight: 18,
+                                              }}
+                                            >
+                                              {imp}
+                                            </Text>
+                                          </View>
+                                        ),
+                                      )}
+                                    </View>
+                                  )}
+
+                                  {/* Material Compatibility */}
+                                  {mod.id === "material_compatibility" && (
+                                    <View>
+                                      {mod.data.suitable?.length > 0 && (
+                                        <View style={{ marginBottom: 8 }}>
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              fontWeight: "700",
+                                              color: "#388E3C",
+                                              marginBottom: 4,
+                                            }}
+                                          >
+                                            Feasible
+                                          </Text>
+                                          {mod.data.suitable.map(
+                                            (s: string, si: number) => (
+                                              <View
+                                                key={si}
+                                                style={{
+                                                  flexDirection: "row",
+                                                  alignItems: "center",
+                                                  gap: 6,
+                                                  marginBottom: 2,
+                                                }}
+                                              >
+                                                <Ionicons
+                                                  name="checkmark-circle"
+                                                  size={14}
+                                                  color="#388E3C"
+                                                />
+                                                <Text
+                                                  style={{
+                                                    fontSize: 12,
+                                                    color: "#555",
+                                                  }}
+                                                >
+                                                  {s}
+                                                </Text>
+                                              </View>
+                                            ),
+                                          )}
+                                        </View>
+                                      )}
+                                      {mod.data.limited?.length > 0 && (
+                                        <View style={{ marginBottom: 8 }}>
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              fontWeight: "700",
+                                              color: "#F57C00",
+                                              marginBottom: 4,
+                                            }}
+                                          >
+                                            Marginal
+                                          </Text>
+                                          {mod.data.limited.map(
+                                            (l: string, li: number) => (
+                                              <View
+                                                key={li}
+                                                style={{
+                                                  flexDirection: "row",
+                                                  alignItems: "center",
+                                                  gap: 6,
+                                                  marginBottom: 2,
+                                                }}
+                                              >
+                                                <Ionicons
+                                                  name="warning"
+                                                  size={14}
+                                                  color="#F57C00"
+                                                />
+                                                <Text
+                                                  style={{
+                                                    fontSize: 12,
+                                                    color: "#555",
+                                                  }}
+                                                >
+                                                  {l}
+                                                </Text>
+                                              </View>
+                                            ),
+                                          )}
+                                        </View>
+                                      )}
+                                      {mod.data.not_feasible?.length > 0 && (
+                                        <View>
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              fontWeight: "700",
+                                              color: "#D32F2F",
+                                              marginBottom: 4,
+                                            }}
+                                          >
+                                            Not Feasible
+                                          </Text>
+                                          {mod.data.not_feasible.map(
+                                            (n: string, ni: number) => (
+                                              <View
+                                                key={ni}
+                                                style={{
+                                                  flexDirection: "row",
+                                                  alignItems: "center",
+                                                  gap: 6,
+                                                  marginBottom: 2,
+                                                }}
+                                              >
+                                                <Ionicons
+                                                  name="close-circle"
+                                                  size={14}
+                                                  color="#D32F2F"
+                                                />
+                                                <Text
+                                                  style={{
+                                                    fontSize: 12,
+                                                    color: "#555",
+                                                  }}
+                                                >
+                                                  {n}
+                                                </Text>
+                                              </View>
+                                            ),
+                                          )}
+                                        </View>
+                                      )}
+                                    </View>
+                                  )}
+
+                                  {/* Esthetic Zone */}
+                                  {mod.id === "esthetic_zone" && (
+                                    <View>
+                                      <Text
+                                        style={{
+                                          fontSize: 12,
+                                          color: "#1565C0",
+                                          marginBottom: 6,
+                                        }}
+                                      >
+                                        Teeth: {mod.data.teeth?.join(", ")}
+                                      </Text>
+                                      {mod.data.alerts?.map(
+                                        (a: string, ai: number) => (
+                                          <View
+                                            key={ai}
+                                            style={{
+                                              flexDirection: "row",
+                                              alignItems: "flex-start",
+                                              gap: 6,
+                                              marginBottom: 3,
+                                            }}
+                                          >
+                                            <Ionicons
+                                              name="flower"
+                                              size={13}
+                                              color="#AD1457"
+                                              style={{ marginTop: 2 }}
+                                            />
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                color: "#555",
+                                                flex: 1,
+                                                lineHeight: 18,
+                                              }}
+                                            >
+                                              {a}
+                                            </Text>
+                                          </View>
+                                        ),
+                                      )}
+                                    </View>
+                                  )}
+
+                                  {/* Retention Guidance */}
+                                  {mod.id === "retention_guidance" && (
+                                    <View>
+                                      <View
+                                        style={{
+                                          backgroundColor: "#E8F5E9",
+                                          borderRadius: 10,
+                                          padding: 10,
+                                          marginBottom: 8,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                            color: "#2E7D32",
+                                            marginBottom: 2,
+                                          }}
+                                        >
+                                          Preferred
+                                        </Text>
+                                        <Text
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#555",
+                                          }}
+                                        >
+                                          {mod.data.preferred}
+                                        </Text>
+                                      </View>
+                                      <View
+                                        style={{
+                                          backgroundColor: "#FFF3E0",
+                                          borderRadius: 10,
+                                          padding: 10,
+                                          marginBottom: 8,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 12,
+                                            fontWeight: "700",
+                                            color: "#E65100",
+                                            marginBottom: 2,
+                                          }}
+                                        >
+                                          Alternative
+                                        </Text>
+                                        <Text
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#555",
+                                          }}
+                                        >
+                                          {mod.data.alternative}
+                                        </Text>
+                                      </View>
+                                      <View
+                                        style={{
+                                          flexDirection: "row",
+                                          alignItems: "flex-start",
+                                          gap: 6,
+                                          backgroundColor: "#FFFDE7",
+                                          borderRadius: 10,
+                                          padding: 10,
+                                        }}
+                                      >
+                                        <Ionicons
+                                          name="information-circle"
+                                          size={16}
+                                          color="#F57F17"
+                                          style={{ marginTop: 1 }}
+                                        />
+                                        <Text
+                                          style={{
+                                            fontSize: 12,
+                                            color: "#555",
+                                            flex: 1,
+                                            lineHeight: 18,
+                                          }}
+                                        >
+                                          {mod.data.advisory}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                  )}
+
+                                  {/* Generic notes/warnings/recommendations lists */}
+                                  {(mod.id === "occlusion" ||
+                                    mod.id === "biomechanics" ||
+                                    mod.id === "hygiene") && (
+                                    <View>
+                                      {(
+                                        mod.data.notes ||
+                                        mod.data.warnings ||
+                                        mod.data.recommendations
+                                      )?.map((n: string, ni: number) => (
+                                        <View
+                                          key={ni}
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "flex-start",
+                                            gap: 6,
+                                            marginBottom: 4,
+                                          }}
+                                        >
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              color: "#1565C0",
+                                              marginTop: 1,
+                                            }}
+                                          >
+                                            •
+                                          </Text>
+                                          <Text
+                                            style={{
+                                              fontSize: 12,
+                                              color: "#555",
+                                              flex: 1,
+                                              lineHeight: 18,
+                                            }}
+                                          >
+                                            {n}
+                                          </Text>
+                                        </View>
+                                      ))}
+                                    </View>
+                                  )}
+
+                                  {/* Opposing Arch */}
+                                  {mod.id === "opposing_arch" && (
+                                    <View>
+                                      <View
+                                        style={{
+                                          backgroundColor: "#E3F2FD",
+                                          borderRadius: 10,
+                                          padding: 10,
+                                          marginBottom: 8,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 13,
+                                            fontWeight: "700",
+                                            color: "#1565C0",
+                                          }}
+                                        >
+                                          {mod.data.opposing_type}
+                                        </Text>
+                                      </View>
+                                      {mod.data.notes?.map(
+                                        (n: string, ni: number) => (
+                                          <View
+                                            key={ni}
+                                            style={{
+                                              flexDirection: "row",
+                                              alignItems: "flex-start",
+                                              gap: 6,
+                                              marginBottom: 3,
+                                            }}
+                                          >
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                color: "#1565C0",
+                                                marginTop: 1,
+                                              }}
+                                            >
+                                              •
+                                            </Text>
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                color: "#555",
+                                                flex: 1,
+                                                lineHeight: 18,
+                                              }}
+                                            >
+                                              {n}
+                                            </Text>
+                                          </View>
+                                        ),
+                                      )}
+                                    </View>
+                                  )}
+
+                                  {/* Stability Alert */}
+                                  {mod.id === "stability_alert" && (
+                                    <View>
+                                      {mod.data.low_isq_implants?.map(
+                                        (imp: any, ii: number) => (
+                                          <View
+                                            key={ii}
+                                            style={{
+                                              flexDirection: "row",
+                                              alignItems: "center",
+                                              gap: 6,
+                                              marginBottom: 4,
+                                            }}
+                                          >
+                                            <Ionicons
+                                              name="alert-circle"
+                                              size={14}
+                                              color="#D32F2F"
+                                            />
+                                            <Text
+                                              style={{
+                                                fontSize: 12,
+                                                color: "#D32F2F",
+                                                fontWeight: "600",
+                                              }}
+                                            >
+                                              Implant {imp.implant}: ISQ{" "}
+                                              {imp.value}
+                                            </Text>
+                                          </View>
+                                        ),
+                                      )}
+                                      <Text
+                                        style={{
+                                          fontSize: 12,
+                                          color: "#555",
+                                          marginTop: 4,
+                                          lineHeight: 18,
+                                        }}
+                                      >
+                                        {mod.data.recommendation}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              ),
+                            )}
+
+                            {/* Alerts */}
+                            {smartPlannerReport.alerts?.length > 0 && (
+                              <View
+                                style={{
+                                  backgroundColor: "#FFF3E0",
+                                  borderRadius: 14,
+                                  padding: 14,
+                                  borderWidth: 1.5,
+                                  borderColor: "#FFE082",
+                                }}
+                              >
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 6,
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  <Ionicons
+                                    name="warning"
+                                    size={16}
+                                    color="#E65100"
+                                  />
+                                  <Text
+                                    style={{
+                                      fontSize: 13,
+                                      fontWeight: "700",
+                                      color: "#E65100",
+                                    }}
+                                  >
+                                    Clinical Alerts
+                                  </Text>
+                                </View>
+                                {smartPlannerReport.alerts.map(
+                                  (a: string, ai: number) => (
+                                    <View
+                                      key={ai}
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "flex-start",
+                                        gap: 6,
+                                        marginBottom: 3,
+                                      }}
+                                    >
+                                      <Text
+                                        style={{
+                                          fontSize: 12,
+                                          color: "#E65100",
+                                          marginTop: 1,
+                                        }}
+                                      >
+                                        •
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 12,
+                                          color: "#BF360C",
+                                          flex: 1,
+                                          lineHeight: 18,
+                                        }}
+                                      >
+                                        {a}
+                                      </Text>
+                                    </View>
+                                  ),
+                                )}
+                              </View>
+                            )}
+
+                            {/* Regenerate button */}
+                            <TouchableOpacity
+                              onPress={generateSmartPlanner}
+                              disabled={smartPlannerLoading}
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 6,
+                                marginTop: 14,
+                                paddingVertical: 10,
+                                backgroundColor: "#E3F2FD",
+                                borderRadius: 12,
+                              }}
+                              data-testid="smart-planner-regenerate"
+                            >
+                              <Ionicons
+                                name="refresh"
+                                size={16}
+                                color="#1565C0"
+                              />
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: "600",
+                                  color: "#1565C0",
+                                }}
+                              >
+                                Regenerate Report
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
 
             {/* ═══════════ PHASE 4: PROSTHETIC PROTOCOL & DELIVERY ═══════════ */}
             {user?.role !== "nurse" &&
@@ -10157,7 +10755,8 @@ export default function ProcedureDetailScreen() {
                 procedure.stage2_prosthetic_remark ||
                 procedure.phase4_step1_student_notes ||
                 procedure.phase4_step2_data ||
-                procedure.phase4_step2_student_notes) && (() => {
+                procedure.phase4_step2_student_notes) &&
+              (() => {
                 const badge4 = getPhaseBadge("p4", procedure.status);
                 const isOpen4 = !collapsedPhases.p4;
                 return (
@@ -10203,14 +10802,34 @@ export default function ProcedureDetailScreen() {
                           marginRight: 12,
                         }}
                       >
-                        <Ionicons name="construct-outline" size={18} color="#EA580C" />
+                        <Ionicons
+                          name="construct-outline"
+                          size={18}
+                          color="#EA580C"
+                        />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14.5, fontWeight: "700", color: "#0F172A", letterSpacing: 0.2 }}>
+                        <Text
+                          style={{
+                            fontSize: 14.5,
+                            fontWeight: "700",
+                            color: "#0F172A",
+                            letterSpacing: 0.2,
+                          }}
+                        >
                           Phase 4 — Prosthetic Protocol & Delivery
                         </Text>
-                        <Text style={{ fontSize: 12, color: "#64748B", marginTop: 2 }} numberOfLines={1}>
-                          {procedure.phase4_step2_data ? "Step 1 & Step 2 recorded" : "Step 1: Prosthetic Protocol"}
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            color: "#64748B",
+                            marginTop: 2,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {procedure.phase4_step2_data
+                            ? "Step 1 & Step 2 recorded"
+                            : "Step 1: Prosthetic Protocol"}
                         </Text>
                       </View>
                       <View
@@ -10222,9 +10841,21 @@ export default function ProcedureDetailScreen() {
                           marginRight: 8,
                         }}
                       >
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: badge4.color }}>{badge4.label}</Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: badge4.color,
+                          }}
+                        >
+                          {badge4.label}
+                        </Text>
                       </View>
-                      <Ionicons name={isOpen4 ? "chevron-up" : "chevron-down"} size={18} color="#64748B" />
+                      <Ionicons
+                        name={isOpen4 ? "chevron-up" : "chevron-down"}
+                        size={18}
+                        color="#64748B"
+                      />
                     </TouchableOpacity>
 
                     {/* Phase 4 Content */}
@@ -10237,645 +10868,738 @@ export default function ProcedureDetailScreen() {
                           <View
                             style={[
                               styles.section,
-                              { borderLeftWidth: 4, borderLeftColor: "#FF6F00" },
+                              {
+                                borderLeftWidth: 4,
+                                borderLeftColor: "#FF6F00",
+                              },
                             ]}
                             testID="phase4-step1-full-data-section"
                             data-testid="phase4-step1-full-data-section"
                             onLayout={(e) => {
-                              phaseAnchors.current["p4"] = e.nativeEvent.layout.y;
+                              phaseAnchors.current["p4"] =
+                                e.nativeEvent.layout.y;
                             }}
                           >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 12,
-                    }}
-                  >
-                    <Ionicons name="construct" size={22} color="#FF6F00" />
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { marginBottom: 0, color: "#E65100", fontSize: 17 },
-                      ]}
-                    >
-                      Phase 4 — Prosthetic Rehabilitation (Step 1 — Prosthetic
-                      Planning)
-                    </Text>
-                  </View>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 12,
+                              }}
+                            >
+                              <Ionicons
+                                name="construct"
+                                size={22}
+                                color="#FF6F00"
+                              />
+                              <Text
+                                style={[
+                                  styles.sectionTitle,
+                                  {
+                                    marginBottom: 0,
+                                    color: "#E65100",
+                                    fontSize: 17,
+                                  },
+                                ]}
+                              >
+                                Phase 4 — Prosthetic Rehabilitation (Step 1 —
+                                Prosthetic Planning)
+                              </Text>
+                            </View>
 
-                  {/* Prosthetic Plan Details */}
-                  {procedure.phase4_step1_data && (
-                    <View style={{ marginBottom: 16 }}>
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#EF6C00",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Prosthetic Plan
-                      </Text>
-                      {procedure.phase4_step1_data.final_prosthetic_plan && (
-                        <InfoRow
-                          icon="build"
-                          label="Final Prosthetic Plan"
-                          value={
-                            procedure.phase4_step1_data.final_prosthetic_plan
-                          }
-                          fieldKey="phase4_step1_data.final_prosthetic_plan"
-                        />
-                      )}
-                      {procedure.phase4_step1_data.prosthetic_material && (
-                        <InfoRow
-                          icon="diamond"
-                          label="Prosthetic Material"
-                          value={
-                            procedure.phase4_step1_data.prosthetic_material
-                          }
-                          fieldKey="phase4_step1_data.prosthetic_material"
-                        />
-                      )}
-                      {procedure.phase4_step1_data.custom_abutment && (
-                        <InfoRow
-                          icon="settings"
-                          label="Custom Abutment"
-                          value={procedure.phase4_step1_data.custom_abutment}
-                          fieldKey="phase4_step1_data.custom_abutment"
-                        />
-                      )}
-                      {procedure.phase4_step1_data.overdenture_attachment && (
-                        <InfoRow
-                          icon="link"
-                          label="Overdenture Attachment"
-                          value={
-                            procedure.phase4_step1_data.overdenture_attachment
-                          }
-                          fieldKey="phase4_step1_data.overdenture_attachment"
-                        />
-                      )}
-                      {procedure.phase4_step1_data.impression_type && (
-                        <InfoRow
-                          icon="scan"
-                          label="Impression Type"
-                          value={
-                            procedure.phase4_step1_data.impression_type ===
-                            "intraoral_scans"
-                              ? "Intraoral Scans"
-                              : `Conventional Impressions${
-                                  procedure.phase4_step1_data
-                                    .conventional_tray_type
-                                    ? ` (${procedure.phase4_step1_data.conventional_tray_type === "open_tray" ? "Open Tray" : "Closed Tray"})`
-                                    : ""
-                                }${
-                                  procedure.phase4_step1_data
-                                    .impression_material
-                                    ? ` — ${
-                                        {
-                                          polyether: "Polyether",
-                                          heavy_light_body:
-                                            "Heavy and Light body",
-                                          putty_light_body:
-                                            "Putty and Light body",
-                                        }[
-                                          procedure.phase4_step1_data
-                                            .impression_material as string
-                                        ] ||
-                                        procedure.phase4_step1_data
-                                          .impression_material
-                                      }`
-                                    : ""
-                                }`
-                          }
-                          fieldKey="phase4_step1_data.impression_type"
-                        />
-                      )}
-                      {procedure.phase4_step1_data.payment_complete !==
-                        undefined && (
-                        <InfoRow
-                          icon="card"
-                          label="Payment Complete"
-                          value={
-                            procedure.phase4_step1_data.payment_complete
-                              ? "Yes"
-                              : "No"
-                          }
-                          fieldKey="phase4_step1_data.payment_complete"
-                        />
-                      )}
-                      {procedure.phase4_step1_data.components_available !==
-                        undefined && (
-                        <InfoRow
-                          icon="cube"
-                          label="Components Available"
-                          value={
-                            procedure.phase4_step1_data.components_available
-                              ? "Yes"
-                              : "No"
-                          }
-                          fieldKey="phase4_step1_data.components_available"
-                        />
-                      )}
-                    </View>
-                  )}
+                            {/* Prosthetic Plan Details */}
+                            {procedure.phase4_step1_data && (
+                              <View style={{ marginBottom: 16 }}>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#EF6C00",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  Prosthetic Plan
+                                </Text>
+                                {procedure.phase4_step1_data
+                                  .final_prosthetic_plan && (
+                                  <InfoRow
+                                    icon="build"
+                                    label="Final Prosthetic Plan"
+                                    value={
+                                      procedure.phase4_step1_data
+                                        .final_prosthetic_plan
+                                    }
+                                    fieldKey="phase4_step1_data.final_prosthetic_plan"
+                                  />
+                                )}
+                                {procedure.phase4_step1_data
+                                  .prosthetic_material && (
+                                  <InfoRow
+                                    icon="diamond"
+                                    label="Prosthetic Material"
+                                    value={
+                                      procedure.phase4_step1_data
+                                        .prosthetic_material
+                                    }
+                                    fieldKey="phase4_step1_data.prosthetic_material"
+                                  />
+                                )}
+                                {procedure.phase4_step1_data
+                                  .custom_abutment && (
+                                  <InfoRow
+                                    icon="settings"
+                                    label="Custom Abutment"
+                                    value={
+                                      procedure.phase4_step1_data
+                                        .custom_abutment
+                                    }
+                                    fieldKey="phase4_step1_data.custom_abutment"
+                                  />
+                                )}
+                                {procedure.phase4_step1_data
+                                  .overdenture_attachment && (
+                                  <InfoRow
+                                    icon="link"
+                                    label="Overdenture Attachment"
+                                    value={
+                                      procedure.phase4_step1_data
+                                        .overdenture_attachment
+                                    }
+                                    fieldKey="phase4_step1_data.overdenture_attachment"
+                                  />
+                                )}
+                                {procedure.phase4_step1_data
+                                  .impression_type && (
+                                  <InfoRow
+                                    icon="scan"
+                                    label="Impression Type"
+                                    value={
+                                      procedure.phase4_step1_data
+                                        .impression_type === "intraoral_scans"
+                                        ? "Intraoral Scans"
+                                        : `Conventional Impressions${
+                                            procedure.phase4_step1_data
+                                              .conventional_tray_type
+                                              ? ` (${procedure.phase4_step1_data.conventional_tray_type === "open_tray" ? "Open Tray" : "Closed Tray"})`
+                                              : ""
+                                          }${
+                                            procedure.phase4_step1_data
+                                              .impression_material
+                                              ? ` — ${
+                                                  {
+                                                    polyether: "Polyether",
+                                                    heavy_light_body:
+                                                      "Heavy and Light body",
+                                                    putty_light_body:
+                                                      "Putty and Light body",
+                                                  }[
+                                                    procedure.phase4_step1_data
+                                                      .impression_material as string
+                                                  ] ||
+                                                  procedure.phase4_step1_data
+                                                    .impression_material
+                                                }`
+                                              : ""
+                                          }`
+                                    }
+                                    fieldKey="phase4_step1_data.impression_type"
+                                  />
+                                )}
+                                {procedure.phase4_step1_data
+                                  .payment_complete !== undefined && (
+                                  <InfoRow
+                                    icon="card"
+                                    label="Payment Complete"
+                                    value={
+                                      procedure.phase4_step1_data
+                                        .payment_complete
+                                        ? "Yes"
+                                        : "No"
+                                    }
+                                    fieldKey="phase4_step1_data.payment_complete"
+                                  />
+                                )}
+                                {procedure.phase4_step1_data
+                                  .components_available !== undefined && (
+                                  <InfoRow
+                                    icon="cube"
+                                    label="Components Available"
+                                    value={
+                                      procedure.phase4_step1_data
+                                        .components_available
+                                        ? "Yes"
+                                        : "No"
+                                    }
+                                    fieldKey="phase4_step1_data.components_available"
+                                  />
+                                )}
+                              </View>
+                            )}
 
-                  {/* Notes & Remarks */}
-                  {(procedure.phase4_step1_student_notes ||
-                    procedure.stage2_prosthetic_remark) && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#FFF8E1",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#E65100",
-                          marginBottom: 8,
-                        }}
-                      >
-                        {procedure.created_by_role === "student"
-                          ? "Student's Notes"
-                          : "Operator's Notes"}
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase4_step1_student_notes ||
-                          procedure.stage2_prosthetic_remark}
-                      </Text>
-                    </View>
-                  )}
-                  {(procedure.stage2_prosthetic_faculty_remark ||
-                    procedure.phase4_step1_supervisor_notes) && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#F3E5F5",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#6A1B9A",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Supervisor Comment
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase4_step1_supervisor_notes ||
-                          procedure.stage2_prosthetic_faculty_remark}
-                      </Text>
-                    </View>
-                  )}
-                  {(procedure.stage2_prosthetic_incharge_remark ||
-                    procedure.phase4_step1_incharge_notes) && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#E8F5E9",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#2E7D32",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Remarks by Implant In-Charge
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.stage2_prosthetic_incharge_remark}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
+                            {/* Notes & Remarks */}
+                            {(procedure.phase4_step1_student_notes ||
+                              procedure.stage2_prosthetic_remark) && (
+                              <View
+                                style={{
+                                  marginBottom: 8,
+                                  backgroundColor: "#FFF8E1",
+                                  borderRadius: 8,
+                                  padding: 12,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#E65100",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  {procedure.created_by_role === "student"
+                                    ? "Student's Notes"
+                                    : "Operator's Notes"}
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color: "#333",
+                                    lineHeight: 20,
+                                  }}
+                                >
+                                  {procedure.phase4_step1_student_notes ||
+                                    procedure.stage2_prosthetic_remark}
+                                </Text>
+                              </View>
+                            )}
+                            {(procedure.stage2_prosthetic_faculty_remark ||
+                              procedure.phase4_step1_supervisor_notes) && (
+                              <View
+                                style={{
+                                  marginBottom: 8,
+                                  backgroundColor: "#F3E5F5",
+                                  borderRadius: 8,
+                                  padding: 12,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#6A1B9A",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  Supervisor Comment
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color: "#333",
+                                    lineHeight: 20,
+                                  }}
+                                >
+                                  {procedure.phase4_step1_supervisor_notes ||
+                                    procedure.stage2_prosthetic_faculty_remark}
+                                </Text>
+                              </View>
+                            )}
+                            {(procedure.stage2_prosthetic_incharge_remark ||
+                              procedure.phase4_step1_incharge_notes) && (
+                              <View
+                                style={{
+                                  marginBottom: 8,
+                                  backgroundColor: "#E8F5E9",
+                                  borderRadius: 8,
+                                  padding: 12,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#2E7D32",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  Remarks by Implant In-Charge
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color: "#333",
+                                    lineHeight: 20,
+                                  }}
+                                >
+                                  {procedure.stage2_prosthetic_incharge_remark}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
 
-            {/* iter-195: Lab Prescription — re-printable button at the end of
+                        {/* iter-195: Lab Prescription — re-printable button at the end of
             Phase 4 Step 1 details once the prosthetic plan is approved
             (stage2_prosthetic_step1_approved) AND continues to be available
             through Phase 4 Step 2 / case completion so the student or lab
             can re-pull the slip on demand.
             Note: the *form-level* Generate Lab Slip (iter-194) handles the
             pre-approval draft path; this button is the post-approval reprint. */}
-            {user?.role !== "nurse" &&
-              procedure.phase4_step1_data &&
-              [
-                "stage2_prosthetic_step1_approved",
-                "pending_final_delivery",
-                "completed",
-              ].includes(procedure.status) && (
-                <View
-                  style={[
-                    styles.section,
-                    {
-                      borderLeftWidth: 4,
-                      borderLeftColor: "#6A1B9A",
-                      backgroundColor: "#F3E5F5",
-                    },
-                  ]}
-                  testID="lab-slip-card"
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 12,
-                    }}
-                  >
-                    <Ionicons name="document-text" size={20} color="#6A1B9A" />
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { marginBottom: 0, color: "#6A1B9A", fontSize: 16 },
-                      ]}
-                    >
-                      Lab Prescription
-                    </Text>
-                    {/* iter-209: replaced the always-on helper text with a tappable
+                        {user?.role !== "nurse" &&
+                          procedure.phase4_step1_data &&
+                          [
+                            "stage2_prosthetic_step1_approved",
+                            "pending_final_delivery",
+                            "completed",
+                          ].includes(procedure.status) && (
+                            <View
+                              style={[
+                                styles.section,
+                                {
+                                  borderLeftWidth: 4,
+                                  borderLeftColor: "#6A1B9A",
+                                  backgroundColor: "#F3E5F5",
+                                },
+                              ]}
+                              testID="lab-slip-card"
+                            >
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  marginBottom: 12,
+                                }}
+                              >
+                                <Ionicons
+                                  name="document-text"
+                                  size={20}
+                                  color="#6A1B9A"
+                                />
+                                <Text
+                                  style={[
+                                    styles.sectionTitle,
+                                    {
+                                      marginBottom: 0,
+                                      color: "#6A1B9A",
+                                      fontSize: 16,
+                                    },
+                                  ]}
+                                >
+                                  Lab Prescription
+                                </Text>
+                                {/* iter-209: replaced the always-on helper text with a tappable
                   i-circle that explains the slip in an Alert on demand —
                   keeps the card visually compact for repeat visits. */}
-                    <TouchableOpacity
-                      onPress={() =>
-                        Alert.alert(
-                          "Lab Prescription",
-                          "Generate the lab slip anytime to share with the laboratory. Lab slip is auto built from the saved information.",
-                        )
-                      }
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      testID="lab-prescription-info-btn"
-                      accessibilityLabel="About Lab Prescription"
-                    >
-                      <Ionicons
-                        name="information-circle-outline"
-                        size={20}
-                        color="#6A1B9A"
-                      />
-                    </TouchableOpacity>
-                  </View>
+                                <TouchableOpacity
+                                  onPress={() =>
+                                    Alert.alert(
+                                      "Lab Prescription",
+                                      "Generate the lab slip anytime to share with the laboratory. Lab slip is auto built from the saved information.",
+                                    )
+                                  }
+                                  hitSlop={{
+                                    top: 8,
+                                    bottom: 8,
+                                    left: 8,
+                                    right: 8,
+                                  }}
+                                  testID="lab-prescription-info-btn"
+                                  accessibilityLabel="About Lab Prescription"
+                                >
+                                  <Ionicons
+                                    name="information-circle-outline"
+                                    size={20}
+                                    color="#6A1B9A"
+                                  />
+                                </TouchableOpacity>
+                              </View>
 
-                  {/* iter-196: optional Note to the Lab — up to 150 words. */}
-                  {(() => {
-                    const wordCount = labSlipNote.trim()
-                      ? labSlipNote.trim().split(/\s+/).length
-                      : 0;
-                    const overLimit = wordCount > 150;
-                    return (
-                      <View
-                        style={{ marginBottom: 12 }}
-                        testID="lab-slip-note-block"
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: "700",
-                            color: "#4A148C",
-                            marginBottom: 4,
-                          }}
-                        >
-                          Note to the Lab{" "}
-                          <Text
-                            style={{
-                              fontStyle: "italic",
-                              fontWeight: "500",
-                              color: "#7B1FA2",
-                            }}
-                          >
-                            (optional, up to 150 words)
-                          </Text>
-                        </Text>
-                        <TextInput
-                          multiline
-                          numberOfLines={4}
-                          value={labSlipNote}
-                          onChangeText={(t) => {
-                            // allow free typing, but clamp at 150 words by trimming
-                            // any words past the limit on input; preserves trailing
-                            // whitespace so the cursor doesn't jump.
-                            const tokens = t.split(/(\s+)/);
-                            let words = 0;
-                            let out = "";
-                            for (const tok of tokens) {
-                              if (/\S/.test(tok)) {
-                                if (words >= 150) break;
-                                words += 1;
-                              }
-                              out += tok;
-                            }
-                            setLabSlipNote(out);
-                          }}
-                          placeholder="e.g. Try-in next Wednesday; emphasise palatal cusp for occlusal balance; deliver in a Glidewell case."
-                          placeholderTextColor="#B39DDB"
-                          style={{
-                            borderWidth: 1,
-                            borderColor: overLimit ? "#C62828" : "#CE93D8",
-                            borderRadius: 8,
-                            padding: 10,
-                            minHeight: 90,
-                            backgroundColor: "#FFFFFF",
-                            color: "#1A1A1A",
-                            fontSize: 13,
-                            textAlignVertical: "top",
-                          }}
-                          testID="lab-slip-note-input"
-                        />
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: overLimit ? "#C62828" : "#7B1FA2",
-                            marginTop: 4,
-                            textAlign: "right",
-                          }}
-                        >
-                          {wordCount}/150 words
-                          {overLimit ? " — trim to enable Generate" : ""}
-                        </Text>
-                      </View>
-                    );
-                  })()}
+                              {/* iter-196: optional Note to the Lab — up to 150 words. */}
+                              {(() => {
+                                const wordCount = labSlipNote.trim()
+                                  ? labSlipNote.trim().split(/\s+/).length
+                                  : 0;
+                                const overLimit = wordCount > 150;
+                                return (
+                                  <View
+                                    style={{ marginBottom: 12 }}
+                                    testID="lab-slip-note-block"
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        fontWeight: "700",
+                                        color: "#4A148C",
+                                        marginBottom: 4,
+                                      }}
+                                    >
+                                      Note to the Lab{" "}
+                                      <Text
+                                        style={{
+                                          fontStyle: "italic",
+                                          fontWeight: "500",
+                                          color: "#7B1FA2",
+                                        }}
+                                      >
+                                        (optional, up to 150 words)
+                                      </Text>
+                                    </Text>
+                                    <TextInput
+                                      multiline
+                                      numberOfLines={4}
+                                      value={labSlipNote}
+                                      onChangeText={(t) => {
+                                        // allow free typing, but clamp at 150 words by trimming
+                                        // any words past the limit on input; preserves trailing
+                                        // whitespace so the cursor doesn't jump.
+                                        const tokens = t.split(/(\s+)/);
+                                        let words = 0;
+                                        let out = "";
+                                        for (const tok of tokens) {
+                                          if (/\S/.test(tok)) {
+                                            if (words >= 150) break;
+                                            words += 1;
+                                          }
+                                          out += tok;
+                                        }
+                                        setLabSlipNote(out);
+                                      }}
+                                      placeholder="e.g. Try-in next Wednesday; emphasise palatal cusp for occlusal balance; deliver in a Glidewell case."
+                                      placeholderTextColor="#B39DDB"
+                                      style={{
+                                        borderWidth: 1,
+                                        borderColor: overLimit
+                                          ? "#C62828"
+                                          : "#CE93D8",
+                                        borderRadius: 8,
+                                        padding: 10,
+                                        minHeight: 90,
+                                        backgroundColor: "#FFFFFF",
+                                        color: "#1A1A1A",
+                                        fontSize: 13,
+                                        textAlignVertical: "top",
+                                      }}
+                                      testID="lab-slip-note-input"
+                                    />
+                                    <Text
+                                      style={{
+                                        fontSize: 11,
+                                        color: overLimit
+                                          ? "#C62828"
+                                          : "#7B1FA2",
+                                        marginTop: 4,
+                                        textAlign: "right",
+                                      }}
+                                    >
+                                      {wordCount}/150 words
+                                      {overLimit
+                                        ? " — trim to enable Generate"
+                                        : ""}
+                                    </Text>
+                                  </View>
+                                );
+                              })()}
 
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "#6A1B9A",
-                      paddingVertical: 12,
-                      paddingHorizontal: 18,
-                      borderRadius: 8,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      opacity:
-                        labSlipNote.trim().split(/\s+/).filter(Boolean).length >
-                        150
-                          ? 0.5
-                          : 1,
-                    }}
-                    testID="generate-lab-slip-btn"
-                    disabled={
-                      labSlipNote.trim().split(/\s+/).filter(Boolean).length >
-                      150
-                    }
-                    onPress={async () => {
-                      try {
-                        // iter-196: inject the user-typed note as a transient property
-                        // on a shallow copy of the procedure so the PDF builder can
-                        // render it without a backend round-trip.
-                        await generateLabSlipPDF({
-                          ...procedure,
-                          lab_slip_note: labSlipNote.trim() || null,
-                        });
-                      } catch (e) {
-                        // generator already alerts on failure
-                      }
-                    }}
-                  >
-                    <Ionicons name="print-outline" size={18} color="#FFF" />
-                    <Text
-                      style={{
-                        color: "#FFF",
-                        fontSize: 14,
-                        fontWeight: "700",
-                        letterSpacing: 0.4,
-                      }}
-                    >
-                      Generate Lab Slip
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+                              <TouchableOpacity
+                                style={{
+                                  backgroundColor: "#6A1B9A",
+                                  paddingVertical: 12,
+                                  paddingHorizontal: 18,
+                                  borderRadius: 8,
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: 8,
+                                  opacity:
+                                    labSlipNote
+                                      .trim()
+                                      .split(/\s+/)
+                                      .filter(Boolean).length > 150
+                                      ? 0.5
+                                      : 1,
+                                }}
+                                testID="generate-lab-slip-btn"
+                                disabled={
+                                  labSlipNote
+                                    .trim()
+                                    .split(/\s+/)
+                                    .filter(Boolean).length > 150
+                                }
+                                onPress={async () => {
+                                  try {
+                                    // iter-196: inject the user-typed note as a transient property
+                                    // on a shallow copy of the procedure so the PDF builder can
+                                    // render it without a backend round-trip.
+                                    await generateLabSlipPDF({
+                                      ...procedure,
+                                      lab_slip_note: labSlipNote.trim() || null,
+                                    });
+                                  } catch (e) {
+                                    // generator already alerts on failure
+                                  }
+                                }}
+                              >
+                                <Ionicons
+                                  name="print-outline"
+                                  size={18}
+                                  color="#FFF"
+                                />
+                                <Text
+                                  style={{
+                                    color: "#FFF",
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    letterSpacing: 0.4,
+                                  }}
+                                >
+                                  Generate Lab Slip
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
 
-            {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
-            {(procedure.phase4_step2_data ||
-              procedure.phase4_step2_student_notes) && (
-              <View
-                style={[
-                  styles.section,
-                  { borderLeftWidth: 4, borderLeftColor: "#AD1457" },
-                ]}
-                data-testid="phase4-step2-full-data-section"
-              >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      marginBottom: 12,
-                    }}
-                  >
-                    <Ionicons name="ribbon" size={22} color="#AD1457" />
-                    <Text
-                      style={[
-                        styles.sectionTitle,
-                        { marginBottom: 0, color: "#AD1457", fontSize: 17 },
-                      ]}
-                    >
-                      Phase 4 — Trial & Delivery (Step 2)
-                    </Text>
-                  </View>
-
-                  {/* Trial Checklist */}
-                  {procedure.phase4_step2_data?.trial_checklist &&
-                    Object.keys(procedure.phase4_step2_data.trial_checklist)
-                      .length > 0 && (
-                      <View style={{ marginBottom: 16 }}>
-                        <Text
-                          style={{
-                            fontSize: 14,
-                            fontWeight: "700",
-                            color: "#C2185B",
-                            marginBottom: 8,
-                          }}
-                        >
-                          Trial Checklist
-                        </Text>
-                        {Object.entries(
-                          procedure.phase4_step2_data.trial_checklist,
-                        ).map(([key, val]) => (
+                        {/* ═══════════ PHASE 4 STEP 2: TRIAL & DELIVERY - Full Data Display ═══════════ */}
+                        {(procedure.phase4_step2_data ||
+                          procedure.phase4_step2_student_notes) && (
                           <View
-                            key={key}
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              paddingVertical: 6,
-                              borderBottomWidth: 1,
-                              borderBottomColor: "#F5F5F5",
-                            }}
+                            style={[
+                              styles.section,
+                              {
+                                borderLeftWidth: 4,
+                                borderLeftColor: "#AD1457",
+                              },
+                            ]}
+                            data-testid="phase4-step2-full-data-section"
                           >
-                            <Ionicons
-                              name={val ? "checkbox" : "square-outline"}
-                              size={20}
-                              color={val ? "#4CAF50" : "#999"}
-                            />
-                            <Text
+                            <View
                               style={{
-                                marginLeft: 10,
-                                fontSize: 13,
-                                color: "#333",
-                                textTransform: "capitalize",
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 12,
                               }}
                             >
-                              {key.replace(/_/g, " ")}
-                            </Text>
+                              <Ionicons
+                                name="ribbon"
+                                size={22}
+                                color="#AD1457"
+                              />
+                              <Text
+                                style={[
+                                  styles.sectionTitle,
+                                  {
+                                    marginBottom: 0,
+                                    color: "#AD1457",
+                                    fontSize: 17,
+                                  },
+                                ]}
+                              >
+                                Phase 4 — Trial & Delivery (Step 2)
+                              </Text>
+                            </View>
+
+                            {/* Trial Checklist */}
+                            {procedure.phase4_step2_data?.trial_checklist &&
+                              Object.keys(
+                                procedure.phase4_step2_data.trial_checklist,
+                              ).length > 0 && (
+                                <View style={{ marginBottom: 16 }}>
+                                  <Text
+                                    style={{
+                                      fontSize: 14,
+                                      fontWeight: "700",
+                                      color: "#C2185B",
+                                      marginBottom: 8,
+                                    }}
+                                  >
+                                    Trial Checklist
+                                  </Text>
+                                  {Object.entries(
+                                    procedure.phase4_step2_data.trial_checklist,
+                                  ).map(([key, val]) => (
+                                    <View
+                                      key={key}
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        paddingVertical: 6,
+                                        borderBottomWidth: 1,
+                                        borderBottomColor: "#F5F5F5",
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name={
+                                          val ? "checkbox" : "square-outline"
+                                        }
+                                        size={20}
+                                        color={val ? "#4CAF50" : "#999"}
+                                      />
+                                      <Text
+                                        style={{
+                                          marginLeft: 10,
+                                          fontSize: 13,
+                                          color: "#333",
+                                          textTransform: "capitalize",
+                                        }}
+                                      >
+                                        {key.replace(/_/g, " ")}
+                                      </Text>
+                                    </View>
+                                  ))}
+                                </View>
+                              )}
+
+                            {/* Confirmation Statement */}
+                            {procedure.phase4_step2_data
+                              ?.confirmation_statement !== undefined && (
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  marginBottom: 12,
+                                  padding: 10,
+                                  backgroundColor: procedure.phase4_step2_data
+                                    .confirmation_statement
+                                    ? "#E8F5E9"
+                                    : "#FFEBEE",
+                                  borderRadius: 8,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <Ionicons
+                                  name={
+                                    procedure.phase4_step2_data
+                                      .confirmation_statement
+                                      ? "checkmark-circle"
+                                      : "close-circle"
+                                  }
+                                  size={22}
+                                  color={
+                                    procedure.phase4_step2_data
+                                      .confirmation_statement
+                                      ? "#4CAF50"
+                                      : "#F44336"
+                                  }
+                                />
+                                <Text
+                                  style={{
+                                    marginLeft: 10,
+                                    fontSize: 14,
+                                    fontWeight: "600",
+                                    color: "#333",
+                                    flexShrink: 1,
+                                  }}
+                                >
+                                  Confirmation:{" "}
+                                  {procedure.phase4_step2_data
+                                    .confirmation_statement
+                                    ? "Treatment Confirmed Complete"
+                                    : "Not Confirmed"}
+                                </Text>
+                              </View>
+                            )}
+
+                            {/* Notes & Remarks */}
+                            {procedure.phase4_step2_student_notes && (
+                              <View
+                                style={{
+                                  marginBottom: 8,
+                                  backgroundColor: "#FCE4EC",
+                                  borderRadius: 8,
+                                  padding: 12,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#880E4F",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  {procedure.created_by_role === "student"
+                                    ? "Student's Notes"
+                                    : "Operator's Notes"}
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color: "#333",
+                                    lineHeight: 20,
+                                  }}
+                                >
+                                  {procedure.phase4_step2_student_notes}
+                                </Text>
+                              </View>
+                            )}
+                            {procedure.phase4_step2_supervisor_notes && (
+                              <View
+                                style={{
+                                  marginBottom: 8,
+                                  backgroundColor: "#F3E5F5",
+                                  borderRadius: 8,
+                                  padding: 12,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#6A1B9A",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  Supervisor Comment
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color: "#333",
+                                    lineHeight: 20,
+                                  }}
+                                >
+                                  {procedure.phase4_step2_supervisor_notes}
+                                </Text>
+                              </View>
+                            )}
+                            {procedure.phase4_step2_incharge_notes && (
+                              <View
+                                style={{
+                                  marginBottom: 8,
+                                  backgroundColor: "#E8F5E9",
+                                  borderRadius: 8,
+                                  padding: 12,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#2E7D32",
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  In-Charge Comment
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    color: "#333",
+                                    lineHeight: 20,
+                                  }}
+                                >
+                                  {procedure.phase4_step2_incharge_notes}
+                                </Text>
+                              </View>
+                            )}
                           </View>
-                        ))}
-                      </View>
+                        )}
+                      </>
                     )}
-
-                  {/* Confirmation Statement */}
-                  {procedure.phase4_step2_data?.confirmation_statement !==
-                    undefined && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        marginBottom: 12,
-                        padding: 10,
-                        backgroundColor: procedure.phase4_step2_data
-                          .confirmation_statement
-                          ? "#E8F5E9"
-                          : "#FFEBEE",
-                        borderRadius: 8,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <Ionicons
-                        name={
-                          procedure.phase4_step2_data.confirmation_statement
-                            ? "checkmark-circle"
-                            : "close-circle"
-                        }
-                        size={22}
-                        color={
-                          procedure.phase4_step2_data.confirmation_statement
-                            ? "#4CAF50"
-                            : "#F44336"
-                        }
-                      />
-                      <Text
-                        style={{
-                          marginLeft: 10,
-                          fontSize: 14,
-                          fontWeight: "600",
-                          color: "#333",
-                          flexShrink: 1,
-                        }}
-                      >
-                        Confirmation:{" "}
-                        {procedure.phase4_step2_data.confirmation_statement
-                          ? "Treatment Confirmed Complete"
-                          : "Not Confirmed"}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Notes & Remarks */}
-                  {procedure.phase4_step2_student_notes && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#FCE4EC",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#880E4F",
-                          marginBottom: 8,
-                        }}
-                      >
-                        {procedure.created_by_role === "student"
-                          ? "Student's Notes"
-                          : "Operator's Notes"}
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase4_step2_student_notes}
-                      </Text>
-                    </View>
-                  )}
-                  {procedure.phase4_step2_supervisor_notes && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#F3E5F5",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#6A1B9A",
-                          marginBottom: 8,
-                        }}
-                      >
-                        Supervisor Comment
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase4_step2_supervisor_notes}
-                      </Text>
-                    </View>
-                  )}
-                  {procedure.phase4_step2_incharge_notes && (
-                    <View
-                      style={{
-                        marginBottom: 8,
-                        backgroundColor: "#E8F5E9",
-                        borderRadius: 8,
-                        padding: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 14,
-                          fontWeight: "700",
-                          color: "#2E7D32",
-                          marginBottom: 8,
-                        }}
-                      >
-                        In-Charge Comment
-                      </Text>
-                      <Text
-                        style={{ fontSize: 14, color: "#333", lineHeight: 20 }}
-                      >
-                        {procedure.phase4_step2_incharge_notes}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </>
-          )}
-        </>
-      );
-    })()}
+                  </>
+                );
+              })()}
 
             {procedure.stage2_surgical_remark && !procedure.phase3_data && (
               <View style={styles.section}>

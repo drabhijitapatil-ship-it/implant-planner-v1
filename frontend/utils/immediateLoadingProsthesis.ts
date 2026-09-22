@@ -36,6 +36,7 @@ const FULL_ARCH_TYPES = new Set([
   'All on 4',
   'All on 6',
   'All on X',
+  'Implant Overdenture',
   'All-on-4',
   'All-on-6',
   'All-on-X',

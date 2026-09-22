@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import api, { getAuthFileUrl } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";
 
-const FULL_ARCH_TYPES = new Set(["All on 4", "All on 6", "All on X"]);
+const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
 
 type Upload = {
   filename: string;

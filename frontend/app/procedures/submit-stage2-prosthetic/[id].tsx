@@ -44,6 +44,7 @@ import {
   GROUP_A_ABUTMENT_TYPE_OPTIONS,
   GROUP_A_RETENTION_OPTIONS,
   GROUP_A_CROWN_MATERIAL_OPTIONS,
+  getGroupBPlanOptions,
   GROUP_B_PROSTHETIC_PLAN_OPTIONS,
   GROUP_C_PROSTHETIC_PLAN_OPTIONS,
   getEffectiveWorkflow,
@@ -801,7 +802,7 @@ export default function Phase4Step1Screen() {
                     <GroupedDescDropdown label="Prosthetic Plan" required
                       value={faFinalProstheticPlan}
                       onChange={v => { setFaFinalProstheticPlan(v); if (v !== 'Other') setFaFinalProstheticPlanOther(''); }}
-                      groups={GROUP_B_PROSTHETIC_PLAN_OPTIONS}
+                      groups={getGroupBPlanOptions(procedure?.implant_procedure_type)}
                       testID="fa-final-prosthetic-plan" />
                     {faFinalProstheticPlan === 'Other' && (
                       <TextInput style={s.textArea} value={faFinalProstheticPlanOther}

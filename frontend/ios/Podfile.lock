@@ -42,6 +42,10 @@ PODS:
     - ExpoModulesCore
   - ExpoBlur (15.0.8):
     - ExpoModulesCore
+  - ExpoCamera (17.0.10):
+    - ExpoModulesCore
+    - ZXingObjC/OneD
+    - ZXingObjC/PDF417
   - ExpoClipboard (8.0.8):
     - ExpoModulesCore
   - ExpoDevice (8.0.10):
@@ -2203,6 +2207,11 @@ PODS:
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.17)
   - Yoga (0.0.0)
+  - ZXingObjC/Core (3.6.9)
+  - ZXingObjC/OneD (3.6.9):
+    - ZXingObjC/Core
+  - ZXingObjC/PDF417 (3.6.9):
+    - ZXingObjC/Core
 
 DEPENDENCIES:
   - EASClient (from `../node_modules/expo-eas-client/ios`)
@@ -2215,6 +2224,7 @@ DEPENDENCIES:
   - Expo (from `../node_modules/expo`)
   - ExpoAsset (from `../node_modules/expo-asset/ios`)
   - ExpoBlur (from `../node_modules/expo-blur/ios`)
+  - ExpoCamera (from `../node_modules/expo-camera/ios`)
   - ExpoClipboard (from `../node_modules/expo-clipboard/ios`)
   - ExpoDevice (from `../node_modules/expo-device/ios`)
   - ExpoDocumentPicker (from `../node_modules/expo-document-picker/ios`)
@@ -2328,6 +2338,7 @@ SPEC REPOS:
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
     - SDWebImageWebPCoder
+    - ZXingObjC
 
 EXTERNAL SOURCES:
   EASClient:
@@ -2350,6 +2361,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-asset/ios"
   ExpoBlur:
     :path: "../node_modules/expo-blur/ios"
+  ExpoCamera:
+    :path: "../node_modules/expo-camera/ios"
   ExpoClipboard:
     :path: "../node_modules/expo-clipboard/ios"
   ExpoDevice:
@@ -2565,6 +2578,7 @@ SPEC CHECKSUMS:
   Expo: 0402aa13b318225ab96c28f8f6ed374efd62ca16
   ExpoAsset: cc98e16f65a64e58079d9ccad3b5eec2b57b9263
   ExpoBlur: 688c53d5d26575cbb6c72e7fbd4caef8d8cfadf6
+  ExpoCamera: 44705f35b32741582d00c69187c8ee59669ed46e
   ExpoClipboard: 50fa3332136758be7ca2ea912bae585f74bb93c3
   ExpoDevice: 0773c782b055558ca9b40b74aa4a8133a66cd0d2
   ExpoDocumentPicker: 774b0d1f41468f79148e8201afd094ca852e9e42
@@ -2674,6 +2688,7 @@ SPEC CHECKSUMS:
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
   Yoga: 5934998fbeaef7845dbf698f698518695ab4cd1a
+  ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
 PODFILE CHECKSUM: 5393337e572c9d790f1d4c5d63cccc840db36138
 

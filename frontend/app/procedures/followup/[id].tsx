@@ -21,7 +21,7 @@ import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import RadiographCompare from '../../../components/RadiographCompare';
 // import PhaseTabbedAutoFetch from '@/components/PhaseTabbedAutoFetch';
 
-const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X']);
+const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
 type Upload = { filename: string; original_name: string; content_type: string };
 
 const FAILURE_REASONS = [

@@ -157,6 +157,7 @@ export const PROCEDURE_TYPES = [
   'Partial Extraction Therapy',
   'Implant Placement with Guided Bone Regeneration',
   'Guided Surgery',
+  'Implant Overdenture',
   'All on 4',
   'All on 6',
   'All on X',
@@ -191,6 +192,14 @@ export const ZYGOMA_PTERYGOID_PROCEDURE_TYPES = [
 
 export const isZygomaPterygoidProcedure = (t: string | undefined | null): boolean =>
   !!t && ZYGOMA_PTERYGOID_PROCEDURE_TYPES.includes(t);
+
+export const IMPLANT_OVERDENTURE = 'Implant Overdenture';
+export const OVERDENTURE_TYPES = [
+  'Implant Retained Overdenture',
+  'Implant Supported Overdenture',
+];
+export const isImplantOverdenture = (t: string | undefined | null): boolean =>
+  t === IMPLANT_OVERDENTURE;
 
 // iter-Feb-2026: Pterygoid + Conventional cases are NOT treated as
 // advanced maxillary rehabilitation cases. The Phase 1 form skips the
@@ -339,6 +348,7 @@ export const FULL_ARCH_GROUP = new Set([
   'All on 4',
   'All on 6',
   'All on X',
+  'Implant Overdenture',
   // iter-Feb-2026 (v3): All Zygoma cases are full-arch maxillary rehabs.
   // Membership here hides the "Missing Teeth" FDI chart, forces the
   // full-arch Clinical Examination workflow, and locks the Arch dropdown

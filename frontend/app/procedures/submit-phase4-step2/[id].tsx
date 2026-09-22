@@ -24,7 +24,7 @@ import RadiographCompare from '../../../components/RadiographCompare';
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 
 const TRIAL_ITEMS = CHECKLIST_DATA.prosthetic_phase.step2.items;
-const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X']);
+const FULL_ARCH_TYPES = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
 
 type Upload = { filename: string; original_name: string; content_type: string };
 type LabeledUpload = Upload & { label: string };

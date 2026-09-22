@@ -10,6 +10,7 @@ import { goBackOrHome } from '../../../utils/safeNav';
 import { showUploadPicker } from '../../../utils/uploadPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
+import ImplantScanSheet, { type ImplantTraceability } from '../../../components/ImplantScanSheet';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import SaveDraftButton from '../../../components/SaveDraftButton';
 import { draftStorageKey, loadDraft, clearDraft, useDraftAutosave, useUnsavedChangesGuard } from '../../../utils/draftAutosave';
@@ -144,6 +145,9 @@ export default function Phase2SubmissionScreen() {
   const [opgUploading, setOpgUploading] = useState(false);
   const [authToken, setAuthToken] = useState('');
   const [implantPlans, setImplantPlans] = useState<any[]>([]);
+  const [traceability, setTraceability] = useState<Record<string, ImplantTraceability>>({});
+  const [scanIdx, setScanIdx] = useState<number | null>(null);
+  const traceKey = (idx: number) => implantPositions[idx] || `idx${idx}`;
   const [initialPerImplant, setInitialPerImplant] = useState<Record<string, any>>({});
   const [initialAdvanced, setInitialAdvanced] = useState<Record<string, any>>({});
   // iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement — universal
@@ -157,7 +161,7 @@ export default function Phase2SubmissionScreen() {
 
   useEffect(() => { getToken('access_token').then(t => setAuthToken(t || '')); }, []);
 
-  const FULL_ARCH_SET = new Set(['All on 4', 'All on 6', 'All on X']);
+  const FULL_ARCH_SET = new Set(['All on 4', 'All on 6', 'All on X', 'Implant Overdenture']);
   const isFullArch = FULL_ARCH_SET.has(procedureType);
   const isSingleImplant = procedureType === 'Single Conventional Implant';
   // iter-356: per-implant Prosthetic Component applies to multi-implant
@@ -263,6 +267,7 @@ export default function Phase2SubmissionScreen() {
       setImplantPlans(planRes.data.implant_plans || []);
       const p2 = (procRes.data.phase2_data || {}) as any;
       setInitialPerImplant(p2.per_implant || {});
+      if (p2.implant_traceability && Object.keys(p2.implant_traceability).length) setTraceability(p2.implant_traceability);
       setInitialAdvanced(p2.advanced_clinical || {});
       // iter-Jun-2026 (v11): hydrate MUA state from prior submission —
       // ONCE only. Subsequent loadImplantPlan() calls (triggered when the
@@ -330,6 +335,7 @@ export default function Phase2SubmissionScreen() {
       if (pType === 'All on 4') iopaCount = 4;
       else if (pType === 'All on 6') iopaCount = 6;
       else if (pType === 'All on X') iopaCount = 5;
+      else if (pType === 'Implant Overdenture') iopaCount = Math.max(convPositions.length, 2);
       else iopaCount = convPositions.length; // 0 for pure Zygoma/Pterygoid cases
       setIopaFiles(new Array(iopaCount).fill(null));
 
@@ -659,6 +665,7 @@ export default function Phase2SubmissionScreen() {
         implant_seated_correctly: implantSeated,
         implant_seated_comment: implantSeatedComment || null,
         torque_values: torqueValues.map(v => parseFloat(v)),
+        implant_traceability: Object.keys(traceability).length ? traceability : null,
         // iter-Jun-2026 (v11): Multiunit Abutment (MUA) placement — universal
         // Phase 2 field. `mua_placed` is nullable; if user hasn't chosen
         // Yes/No we send null. Details only sent when Yes.
@@ -689,13 +696,13 @@ export default function Phase2SubmissionScreen() {
         // partial data is persisted; warnings are shown inline in the UI.
         multi_unit_abutment_placed:
           (prostheticComponent === 'Immediate Loading Done'
-            && ['All on 4','All on 6','All on X'].includes(procedureType)
+            && ['All on 4','All on 6','All on X','Implant Overdenture'].includes(procedureType)
             && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading'))
             ? (multiUnitPlaced || null)
             : null,
         multi_unit_abutment_details:
           (prostheticComponent === 'Immediate Loading Done'
-            && ['All on 4','All on 6','All on X'].includes(procedureType)
+            && ['All on 4','All on 6','All on X','Implant Overdenture'].includes(procedureType)
             && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading')
             && multiUnitPlaced === 'yes')
             ? implantPositions.map((pos, idx) => ({
@@ -1207,6 +1214,46 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
               ))}
             </View>
 
+            {/* iter-Jun-2026: Implant Traceability — scan the GS1 DataMatrix on
+                each implant box (GTIN / Lot / Serial / Expiry) or enter manually. */}
+            <View style={s.traceSection} testID="implant-traceability-section">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Ionicons name="qr-code-outline" size={18} color="#00695C" />
+                <Text style={s.traceTitle}>Implant Traceability (box code)</Text>
+              </View>
+              <Text style={s.traceHint}>Scan the DataMatrix on each implant box to record model, lot and serial number.</Text>
+              {torqueValues.map((_, idx) => {
+                const t = traceability[traceKey(idx)];
+                return (
+                  <View key={`trace-${idx}`} style={s.traceRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.traceLabel}>
+                        Implant {idx + 1}{implantPositions[idx] ? ` — ${implantDisplayLabel(implantPositions[idx])}` : ''}
+                      </Text>
+                      {t ? (
+                        <Text style={s.traceMeta} numberOfLines={2}>
+                          {t.model_label || 'Model not set'}{t.lot ? ` · Lot ${t.lot}` : ''}{t.serial ? ` · SN ${t.serial}` : ''}{t.expiry ? ` · Exp ${t.expiry}` : ''}
+                        </Text>
+                      ) : <Text style={s.traceMissing}>Not recorded</Text>}
+                    </View>
+                    <TouchableOpacity style={[s.traceBtn, t && s.traceBtnDone]} onPress={() => setScanIdx(idx)} testID={`trace-scan-${idx}`}>
+                      <Ionicons name={t ? 'checkmark-circle' : 'scan-outline'} size={16} color={t ? '#2E7D32' : '#FFF'} />
+                      <Text style={[s.traceBtnText, t && s.traceBtnTextDone]}>{t ? 'Edit' : 'Scan box'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+            <ImplantScanSheet
+              visible={scanIdx !== null}
+              onClose={() => setScanIdx(null)}
+              positionLabel={scanIdx !== null ? `Implant ${scanIdx + 1}${implantPositions[scanIdx] ? ` — ${implantDisplayLabel(implantPositions[scanIdx])}` : ''}` : ''}
+              initial={scanIdx !== null ? traceability[traceKey(scanIdx)] : null}
+              suggestedBrand={scanIdx !== null ? implantPlans[scanIdx]?.brand : undefined}
+              suggestedSystem={scanIdx !== null ? implantPlans[scanIdx]?.system : undefined}
+              onSave={t => { if (scanIdx !== null) setTraceability(prev => ({ ...prev, [traceKey(scanIdx)]: t })); }}
+            />
+
             {/* iter-Jun-2026 (v11): Multiunit Abutments (MUA) Placed — universal
                 Phase 2 section, applies to every implant procedure type.
                 Yes/No toggle; when Yes, reveals a cyan-themed per-implant
@@ -1606,7 +1653,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                 per-implant details section with Angulation (°) + Cuff Ht (mm)
                 inputs. Prosthesis Type below renders after this section. */}
             {prostheticComponent === 'Immediate Loading Done'
-             && (['All on 4','All on 6','All on X'].includes(procedureType))
+             && (['All on 4','All on 6','All on X','Implant Overdenture'].includes(procedureType))
              && (Array.isArray(loadingType) ? loadingType.includes('Immediate Loading') : loadingType === 'Immediate Loading') && (
               <View style={s.muaSection}>
                 <Text style={s.muaTitle}>Multi-unit Abutment Placed</Text>
@@ -1769,7 +1816,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
               }
               // Overlapping modifier procedure types — Group A/B decided by teeth count.
               const OVERLAP = new Set(['Immediate Implant','Partial Extraction Therapy','Implant Placement with Guided Bone Regeneration','Guided Surgery']);
-              const FULL_ARCH = new Set(['All on 4','All on 6','All on X']);
+              const FULL_ARCH = new Set(['All on 4','All on 6','All on X','Implant Overdenture']);
               let options: string[] = [];
               if (FULL_ARCH.has(procedureType)) {
                 options = [
@@ -1960,7 +2007,7 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
                 );
               })}
               {/* Add extra IOPA button for All on X */}
-              {procedureType === 'All on X' && (
+              {(procedureType === 'All on X' || procedureType === 'Implant Overdenture') && (
                 <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
                   onPress={addExtraIopa} data-testid="add-extra-iopa-btn">
                   <Ionicons name="add-circle" size={26} color="#4CAF50" />
@@ -2290,6 +2337,17 @@ const s = StyleSheet.create({
   torqueSection: { backgroundColor: '#FFF8E1', borderRadius: 14, padding: 16, marginBottom: 14, borderWidth: 1.5, borderColor: '#FFE082', shadowColor: '#FF8F00', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
   torqueTitle: { fontSize: 15, fontWeight: '700', color: '#E65100', marginBottom: 12, letterSpacing: 0.3 },
   torqueRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  traceSection: { backgroundColor: '#E0F2F1', borderRadius: 14, padding: 14, marginBottom: 16 },
+  traceTitle: { fontSize: 15, fontWeight: '700', color: '#00695C' },
+  traceHint: { fontSize: 12, color: '#546E7A', marginBottom: 10 },
+  traceRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFF', borderRadius: 10, padding: 10, marginBottom: 8 },
+  traceLabel: { fontSize: 13, fontWeight: '600', color: '#1A1A2E' },
+  traceMeta: { fontSize: 12, color: '#37474F', marginTop: 2 },
+  traceMissing: { fontSize: 12, color: '#9AA5B1', marginTop: 2, fontStyle: 'italic' },
+  traceBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#00897B', borderRadius: 10, paddingHorizontal: 12, minHeight: 40, justifyContent: 'center' },
+  traceBtnDone: { backgroundColor: '#E8F5E9', borderWidth: 1, borderColor: '#A5D6A7' },
+  traceBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  traceBtnTextDone: { color: '#2E7D32' },
   torqueLabel: { flex: 1, backgroundColor: '#FFF3E0', padding: 10, borderRadius: 10 },
   torqueLabelText: { fontSize: 13, fontWeight: '600', color: '#BF360C' },
   torqueInput: { width: 80, borderWidth: 2, borderColor: '#FF6D00', borderRadius: 12, padding: 10, fontSize: 18, fontWeight: '700', textAlign: 'center', backgroundColor: '#FFF' },
