@@ -1,0 +1,32 @@
+{
+  "summary": "iter-433 Implant Traceability (GS1 DataMatrix box-code capture) end-to-end tested. Backend: 9/9 pytest passing in /app/backend/tests/test_iter433_implant_traceability.py — GET /api/gtin/{gtin} returns {found:false} for unknowns; POST /api/gtin upserts, GET returns found:true + uses increments; leading-zero normalisation (08123... vs 8123... resolve same row); nurse POST → 403; invalid gtin (7 digits / non-numeric / 15+ digits) → 422; POST /procedures/{id}/submit-phase2 with implant_traceability persists whitelisted fields only (unknown 'evil' dropped, >200-char values truncated) plus server-set recorded_by/recorded_at; omitting implant_traceability does NOT add the key (regression clean); POST /procedures/{id}/case-report PDF contains 'Implant Traceability (box codes):' + 'Source: Scanned' + GTIN/Lot/Serial/Expiry; PATCH /procedures/{id}/tabbed-phase-data/2 with per_implant leaves phase2_data.implant_traceability intact. Frontend (390x844, RN-web): /procedures/submit-phase2/69cfae83a19e1d1819e0f6e5 → tab '2. Surgery' → 'Implant Traceability (box code)' section renders below Torque Achieved with 'Scan box' button; sheet opens directly in manual/form mode on web (no camera prompt, no crash), pasting '(01)08123456789012(10)LOT2024A(21)SN00123(17)271231' → Parse autofilled GTIN/Lot/Serial/Expiry/mfg + auto-filled model 'Nobel Biocare NobelActive' with 'Auto-filled from previous scan'; bad-check-digit GTIN 08123456789012 → 1st tap shows trace-gtin-warn + button label switches to 'Save anyway', 2nd tap saves & closes sheet; row updates to show model · Lot · SN · Exp with 'Edit' button. Case Details for 69f640140ae04a75cf8d0cc7 shows implant-traceability-card for the student with Scanned badge, GTIN, Nobel Biocare, Recorded by … ; Nurse.1 sees NO implant-traceability-card. No react-native red-screen or blocking runtime error observed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter433_implant_traceability.py",
+    "/app/test_reports/pytest/iter433_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ImplantScanSheet still calls Alert.alert in a few places (line 126 'Code read', line 138 'Camera blocked', line 163 'Upload failed'). Per agent-note Alert.alert does not render on RN-web; on web those cases will silently no-op. Non-blocking for this iteration because the happy paths use inline warnings, but worth converting to inline messaging for web parity in a follow-up.",
+    "GtinMapIn.system/label allow empty string but are typed Optional[str]; POST /api/gtin normalises label to 'brand system' fallback which is fine. Consider indexing db.gtin_map.gtin_key for uniqueness — current upsert uses {gtin_key: key} filter but there is no explicit index (schema-level), so under heavy load duplicate upserts could race.",
+    "The PDF traceability line uses fpdf multi_cell which wraps long value strings — the resulting text extraction can insert line breaks between label and value (e.g. 'Source:' \\n 'Scanned'). Regex-tolerant test used. Not a functional issue but worth noting for downstream consumers that grep the PDF."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter433_implant_traceability.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (all requested flows verified)"},
+  "seed_data_creation": "No new seed data. Learning-map row for GTIN 08123456789012 → Nobel Biocare NobelActive is (re)taught by test_02. Two procedures were used: 69cfae83a19e1d1819e0f6e5 (reset to phase1_approved during the run) for the FE/BE submit-phase2 flow, and 69f640140ae04a75cf8d0cc7 (already had implant_traceability persisted from earlier work) for PDF + Case Details card verification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Traceability learning map lives in db.gtin_map (key = gtin_key = gtin.lstrip('0')). _TRACE_FIELDS whitelist in server.py line 12189 controls what submit-phase2 persists. 69f640140ae04a75cf8d0cc7 holds a canonical scanned record you can rely on for regression. Testing FE requires tab click 'Surg…' inside submit-phase2; the trace section renders only after clicking the '2. Surgery' step tab. RN-web strips data-testid on <View> but keeps it on <TextInput> and TouchableOpacity — all critical testIDs used here (implant-traceability-section, implant-traceability-card, implant-scan-sheet, trace-scan-N, trace-raw, trace-raw-apply, trace-gtin/lot/serial/expiry, trace-model, trace-pick-model, trace-save, trace-gtin-warn) resolved correctly.",
+  "rca_of_issue": "N/A — all requested behaviour is working end-to-end. Only findings are code-review nits (Alert.alert on web, missing explicit gtin_key index, PDF wrap-friendly text) noted under critical_code_review_comments."
+}

@@ -1117,6 +1117,8 @@ async def _ensure_access_log_indexes() -> None:
         # Non-destructive query indexes only.
         await db.access_logs.create_index([("user_id", 1), ("created_at", -1)])
         await db.access_logs.create_index([("resource_type", 1), ("resource_id", 1), ("created_at", -1)])
+        # iter-Jun-2026: GTIN → implant model learning map (Implant Traceability)
+        await db.gtin_map.create_index([("gtin_key", 1)], unique=True)
     except Exception as e:
         logging.warning(f"[audit] index creation skipped: {e}")
 

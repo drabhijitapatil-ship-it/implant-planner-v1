@@ -7713,3 +7713,12 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - **Infra**: patches/@expo+cli patch renamed to 57.0.26 (applies cleanly). `expo-doctor` 20/21 (only pre-existing duplicate package-lock.json warning). Pre-existing TS type errors (~70) unchanged — not bundling blockers.
 - **Not tested**: native iOS/Android runtime (Expo Go SDK 57 / EAS build) — only web preview verified (iteration_432 frontend regression pass). User must redeploy + rebuild.
 - Git snapshot before upgrade: commit e5c1e8c8 ("Snapshot before Expo SDK 54→57 upgrade").
+
+## Iteration 433 (Jun 2026) — Implant Traceability (GS1 DataMatrix box-code capture)
+- **Where**: Phase 2 (Implant Surgery) → Surgery step, new "Implant Traceability (box code)" section under Torque Achieved; one row per implant with "Scan box"/"Edit" button → `components/ImplantScanSheet.tsx` bottom sheet.
+- **Scanning**: `expo-camera` `CameraView` (barcodeTypes datamatrix/qr/code128) — native only; contextual permission flow with Open Settings fallback. Web shows manual "Paste code string" + Parse. `utils/gs1.ts` parses GS1 AIs (01 GTIN, 10 Lot, 21 Serial, 17 Expiry, 11 Mfg; FNC1/GS-separated, bracketed, ]d2 prefix) + GTIN mod-10 check (inline warning, "Save anyway").
+- **Learning map**: `db.gtin_map` (unique index gtin_key = GTIN stripped of leading zeros). `GET /api/gtin/{gtin}` → found/brand/system/label (+uses); `POST /api/gtin` upsert (nurse 403). Unknown GTIN → user picks brand/system from `/implant-catalog`; the plan's brand/system is the suggested default. Sheet POSTs the mapping on save.
+- **Storage**: `submit-phase2` body `implant_traceability: {position → {gtin, lot, serial, expiry, mfg_date, raw, model_brand, model_system, model_label, label_photo, label_photo_name, source, scanned_at}}` → whitelisted (`_TRACE_FIELDS`), truncated to 200 chars, stamped `recorded_by/recorded_at`, stored at `phase2_data.implant_traceability`. Label photo via `/uploads/media-temp`. Preserved by `tabbed-phase-data` merges.
+- **Display**: `components/ImplantTraceabilityCard.tsx` in Case Details (hidden for nurse) above Torque Values; Case Report PDF block "Implant Traceability (box codes)".
+- **app.json**: expo-camera plugin + NSCameraUsageDescription "Scan implant box codes to record lot and serial numbers", android CAMERA permission.
+- Tests: backend 9/9 (`tests/test_iter433_implant_traceability.py`), frontend web flow verified (iteration_433). Camera scanning itself needs a real device (redeploy → Expo Go SDK 57 / build).
