@@ -24,6 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { downloadConsentTemplate, printConsentTemplate } from '../../utils/consentPdf';
 import BackButton from '../../components/BackButton';
+import ImplantTraceabilityCard from '../../components/ImplantTraceabilityCard';
 import RadiographThumb from '../../components/RadiographThumb';
 import {
   STATUS_COLORS, STATUS_LABELS, CHECKLIST_DATA,
@@ -2890,6 +2891,11 @@ export default function ProcedureDetailScreen() {
         )}
 
         {/* Torque Values Achieved - visible to supervisors during approval and to students after approval */}
+        {/* iter-Jun-2026: Implant Traceability (GS1 box codes captured in Phase 2) */}
+        {user?.role !== 'nurse' && (
+          <ImplantTraceabilityCard traceability={procedure.phase2_data?.implant_traceability} labelFor={(pos) => `Implant ${pos}`} />
+        )}
+
         {procedure.torque_values && procedure.torque_values.length > 0 && (
           <View style={styles.section} data-testid="torque-values-section">
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>

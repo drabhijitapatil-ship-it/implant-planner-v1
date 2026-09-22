@@ -16,14 +16,20 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.dental.phaseapp"
+      "bundleIdentifier": "com.dental.phaseapp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Scan implant box codes to record lot and serial numbers"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.dental.phaseapp"
+      "package": "com.dental.phaseapp",
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -64,7 +70,13 @@
         }
       ],
       "@react-native-vector-icons/ionicons",
-      "@react-native-vector-icons/material-design-icons"
+      "@react-native-vector-icons/material-design-icons",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan implant box codes to record lot and serial numbers"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

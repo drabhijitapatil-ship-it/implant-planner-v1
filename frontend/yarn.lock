@@ -1870,6 +1870,11 @@
     "@types/node" "*"
     "@types/responselike" "^1.0.0"
 
+"@types/emscripten@^1.41.5":
+  version "1.41.6"
+  resolved "https://registry.yarnpkg.com/@types/emscripten/-/emscripten-1.41.6.tgz#0d852a4c29fc2c035ed9232f00135717f1a920f1"
+  integrity sha512-uN+9i8bFT5CUcZfyIEYDrSueACEyKGbUs5kC/72DGlZZoinh84sJfVV0i8UOJD1asdzkvLPBRrKs41kZ8MdEXg==
+
 "@types/estree@^1.0.6":
   version "1.0.8"
   resolved "https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz"
@@ -2538,6 +2543,13 @@ balanced-match@^4.0.2:
   version "4.0.4"
   resolved "https://registry.npmjs.org/balanced-match/-/balanced-match-4.0.4.tgz"
   integrity sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==
+
+barcode-detector@^3.0.0:
+  version "3.2.2"
+  resolved "https://registry.yarnpkg.com/barcode-detector/-/barcode-detector-3.2.2.tgz#3617f8659c8d4d708e381048940287d7d6fd524b"
+  integrity sha512-/4QOrrNrCRmDSBWiiP4aC72dnkuXUEdcFRidHgbPRXUpy82XcCMvJssI6fEs6JT42LS7DvBVZO70qasJbYKyrA==
+  dependencies:
+    zxing-wasm "3.1.3"
 
 base64-js@^1.5.1:
   version "1.5.1"
@@ -3552,6 +3564,13 @@ expo-blur@~57.0.3:
   version "57.0.3"
   resolved "https://registry.yarnpkg.com/expo-blur/-/expo-blur-57.0.3.tgz#87feb0b2e48e7ecba239b3b7a5358d1810203ccc"
   integrity sha512-uyBeJwxIuXzWXXNrnRub5pcF8VzQsiOz0VBTWDpMG2UztmaFyfAz6pI/GCwRtWpHhiOpLoJj79WLdg1GMB+9cg==
+
+expo-camera@~57.0.5:
+  version "57.0.5"
+  resolved "https://registry.yarnpkg.com/expo-camera/-/expo-camera-57.0.5.tgz#4fb877750641a1b35340a7e2e564275dcef29e6c"
+  integrity sha512-0JaUXfDWMytmqm4pVKesZfLTSjAumfS2UGhnc1M4tqJ0qATCS0jxc7KjaoyKEzWJY+FEc8GlPCAGprS/7tNWZQ==
+  dependencies:
+    barcode-detector "^3.0.0"
 
 expo-clipboard@~57.0.2:
   version "57.0.2"
@@ -6856,6 +6875,11 @@ supports-preserve-symlinks-flag@^1.0.0:
   resolved "https://registry.npmjs.org/supports-preserve-symlinks-flag/-/supports-preserve-symlinks-flag-1.0.0.tgz"
   integrity sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==
 
+tagged-tag@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/tagged-tag/-/tagged-tag-1.0.0.tgz#a0b5917c2864cba54841495abfa3f6b13edcf4d6"
+  integrity sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==
+
 terminal-link@^2.1.1:
   version "2.1.1"
   resolved "https://registry.npmjs.org/terminal-link/-/terminal-link-2.1.1.tgz"
@@ -6968,6 +6992,13 @@ type-fest@^0.7.1:
   version "0.7.1"
   resolved "https://registry.npmjs.org/type-fest/-/type-fest-0.7.1.tgz"
   integrity sha512-Ne2YiiGN8bmrmJJEuTWTLJR32nh/JdL1+PSicowtNb0WFpn59GK8/lfD61bVtzguz7b3PBt74nxpv/Pw5po5Rg==
+
+type-fest@^5.8.0:
+  version "5.10.0"
+  resolved "https://registry.yarnpkg.com/type-fest/-/type-fest-5.10.0.tgz#bf0131fdf662889c94c409d37402e364fb2016f7"
+  integrity sha512-NoSdpq/WEiAg5sjmBkmV/hfxv6HJH4NqPNrqjtSO5CwRmpsDfaf4begxW34KdJykH/l1yHtwBWQkCRdoXO8mPA==
+  dependencies:
+    tagged-tag "^1.0.0"
 
 typed-array-buffer@^1.0.3:
   version "1.0.3"
@@ -7415,3 +7446,11 @@ zustand@^5.0.11:
   version "5.0.11"
   resolved "https://registry.npmjs.org/zustand/-/zustand-5.0.11.tgz"
   integrity sha512-fdZY+dk7zn/vbWNCYmzZULHRrss0jx5pPFiOuMZ/5HJN6Yv3u+1Wswy/4MpZEkEGhtNH+pwxZB8OKgUBPzYAGg==
+
+zxing-wasm@3.1.3:
+  version "3.1.3"
+  resolved "https://registry.yarnpkg.com/zxing-wasm/-/zxing-wasm-3.1.3.tgz#0f26377994edddd2b8d8132e9eb5a4e99e813444"
+  integrity sha512-3lC9BJk4fR5ZJxcGjb0hVnDFOW7KpLXHIebiBmVd4FDRQZVeObztoTKxRUPxlWwSgxrMRONK0u50hBD1aTYEKg==
+  dependencies:
+    "@types/emscripten" "^1.41.5"
+    type-fest "^5.8.0"

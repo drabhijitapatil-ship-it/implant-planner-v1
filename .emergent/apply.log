@@ -2057,3 +2057,11 @@
 [FAIL] Timeout (180s) waiting for supervisor config
 === apply-deferred 2026-09-21T11:18:26Z ===
 [FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-09-21T15:18:18Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-09-21T16:03:43Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-09-22T04:04:28Z ===
+[FAIL] Timeout (180s) waiting for supervisor config
+=== apply-deferred 2026-09-22T04:43:59Z ===
+[FAIL] Timeout (180s) waiting for supervisor config

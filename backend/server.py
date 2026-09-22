@@ -717,6 +717,11 @@ class Phase2Submit(BaseModel):
     # "17°", "30°", "45°", or free-text via Other).
     mua_placed: Optional[bool] = None
     mua_details: Optional[Dict[str, Dict[str, Any]]] = None
+    # iter-Jun-2026: Implant Traceability — GS1 DataMatrix scanned from each
+    # implant box, keyed by implant position ('15', 'ZR1', or 'idxN').
+    # Values: { gtin, lot, serial, expiry, mfg_date, raw, model_brand,
+    # model_system, model_label, label_photo, source: scan|manual, scanned_at }
+    implant_traceability: Optional[Dict[str, Dict[str, Any]]] = None
     # Surgical procedure data
     anesthesia_adequate: Optional[str] = Field("Yes", max_length=10)  # Yes/No
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
@@ -12181,6 +12186,43 @@ async def list_implant_catalog(current_user: dict = Depends(get_current_user)):
     return {"systems": docs}
 
 
+_TRACE_FIELDS = {"gtin", "lot", "serial", "expiry", "mfg_date", "raw", "model_brand",
+                 "model_system", "model_label", "label_photo", "label_photo_name", "source", "scanned_at"}
+
+
+class GtinMapIn(BaseModel):
+    gtin: str = Field(..., min_length=8, max_length=14, pattern=r"^\d+$")
+    brand: str = Field(..., min_length=1, max_length=100)
+    system: Optional[str] = Field("", max_length=150)
+    label: Optional[str] = Field("", max_length=200)
+
+
+@api_router.get("/gtin/{gtin}")
+async def lookup_gtin(gtin: str, current_user: dict = Depends(get_current_user)):
+    """iter-Jun-2026: GTIN → implant model learning map (first scan teaches it)."""
+    key = gtin.strip().lstrip("0")
+    doc = await db.gtin_map.find_one({"gtin_key": key}, {"_id": 0})
+    if not doc:
+        return {"found": False, "gtin": gtin}
+    await db.gtin_map.update_one({"gtin_key": key}, {"$inc": {"uses": 1}})
+    return {"found": True, **doc}
+
+
+@api_router.post("/gtin")
+async def save_gtin(body: GtinMapIn, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") == "nurse":
+        raise HTTPException(status_code=403, detail="Read-only access")
+    key = body.gtin.strip().lstrip("0")
+    doc = {
+        "gtin": body.gtin.strip(), "gtin_key": key, "brand": body.brand.strip(),
+        "system": (body.system or "").strip(), "label": (body.label or "").strip() or f"{body.brand.strip()} {(body.system or '').strip()}".strip(),
+        "learned_by": current_user.get("name") or current_user.get("full_name") or current_user.get("username"),
+        "learned_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.gtin_map.update_one({"gtin_key": key}, {"$set": doc, "$setOnInsert": {"uses": 0}}, upsert=True)
+    return {"ok": True, **doc}
+
+
 @api_router.get("/implant-catalog/compare")
 async def compare_implant_catalog(component_type: str, current_user: dict = Depends(get_current_user)):
     """
@@ -14583,6 +14625,21 @@ async def generate_case_report(
                     pos_label = f" (Position {implant_plans[i].get('position', '')})"
                 pdf.cell(0, 6, safe(f"  Implant {i+1}{pos_label}: {t} Ncm"), ln=True)
             pdf.ln(2)
+        # iter-Jun-2026: Implant Traceability (GS1 DataMatrix box codes).
+        trace = p2.get("implant_traceability") or {}
+        if trace:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(0, 7, safe("Implant Traceability (box codes):"), ln=True)
+            pdf.set_font("Helvetica", "", 9)
+            for pos, t in trace.items():
+                if not isinstance(t, dict):
+                    continue
+                pos_label = pos if not str(pos).startswith("idx") else f"Implant {int(str(pos)[3:]) + 1}"
+                parts = [f"Model: {t.get('model_label') or '-'}", f"GTIN: {t.get('gtin') or '-'}",
+                         f"Lot: {t.get('lot') or '-'}", f"Serial: {t.get('serial') or '-'}",
+                         f"Expiry: {t.get('expiry') or '-'}", f"Source: {'Scanned' if t.get('source') == 'scan' else 'Manual'}"]
+                pdf.multi_cell(0, 5, safe(f"  {pos_label}: " + " | ".join(parts)))
+            pdf.ln(2)
         # iter-Jun-2026 (v11/v12): MUA placement (universal, per-implant).
         if p2.get("mua_placed") is not None:
             add_field("Multiunit Abutments (MUA) Placed", "Yes" if p2["mua_placed"] else "No")
@@ -16135,6 +16192,17 @@ async def submit_phase2(
         phase2_surgical_data["per_implant"] = phase2_data.per_implant_data
     if phase2_data.advanced_clinical is not None:
         phase2_surgical_data["advanced_clinical"] = phase2_data.advanced_clinical
+    if phase2_data.implant_traceability is not None:
+        trace = {}
+        for pos, t in phase2_data.implant_traceability.items():
+            if not isinstance(t, dict):
+                continue
+            rec = {k: (str(v)[:200] if v is not None else None) for k, v in t.items()
+                   if k in _TRACE_FIELDS}
+            rec["recorded_by"] = current_user.get("name") or current_user.get("full_name") or current_user.get("username")
+            rec["recorded_at"] = rec.get("scanned_at") or datetime.now(timezone.utc).isoformat()
+            trace[str(pos)[:20]] = rec
+        phase2_surgical_data["implant_traceability"] = trace
     if phase2_data.mua_placed is not None:
         phase2_surgical_data["mua_placed"] = phase2_data.mua_placed
     if phase2_data.mua_details is not None:
