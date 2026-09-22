@@ -96,3 +96,4 @@ frontend/eas.json.bak
 credentials.json
 *.key
 .credentials
+backend/.env
