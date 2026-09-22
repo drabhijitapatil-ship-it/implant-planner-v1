@@ -24,7 +24,12 @@ import {
   Pressable,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
+import {
+  useRouter,
+  useFocusEffect,
+  useLocalSearchParams,
+  router as globalRouter,
+} from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Line } from "react-native-svg";
@@ -513,6 +518,72 @@ const calStyles = StyleSheet.create({
 });
 
 // ─── Main Component ────────────────────────────────────
+/** Route-level error boundary: a render error in Phase 1 / Implant Selection
+ * shows the actual message (so it can be screenshotted) with recovery
+ * options instead of closing the app. The case itself is already saved as a
+ * draft on the server once "Continue to Implant Selection" succeeds. */
+export function ErrorBoundary({
+  error,
+  retry,
+}: {
+  error: Error;
+  retry: () => Promise<void>;
+}) {
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: "#FFF" }} edges={["top"]}>
+      <View
+        style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}
+        testID="new-procedure-error-boundary"
+      >
+        <Ionicons name="warning" size={40} color="#E53935" />
+        <Text
+          style={{ fontSize: 16, fontWeight: "700", color: "#37474F", marginTop: 12, textAlign: "center" }}
+        >
+          This screen hit an error
+        </Text>
+        <Text style={{ fontSize: 13, color: "#546E7A", marginTop: 8, textAlign: "center" }}>
+          If you had already continued to Implant Selection, the case is saved
+          as a draft — open it from the dashboard.
+        </Text>
+        <Text selectable style={{ fontSize: 12, color: "#78909C", marginTop: 10, textAlign: "center" }}>
+          {String(error?.message || error)}
+        </Text>
+        <TouchableOpacity
+          onPress={() => retry()}
+          style={{ marginTop: 20, backgroundColor: "#1565C0", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+          testID="new-procedure-retry-btn"
+        >
+          <Text style={{ color: "#FFF", fontWeight: "700" }}>Try Again</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => globalRouter.replace("/(tabs)/dashboard")}
+          style={{ marginTop: 10, paddingHorizontal: 24, paddingVertical: 10 }}
+          testID="new-procedure-error-dashboard-btn"
+        >
+          <Text style={{ color: "#546E7A", fontWeight: "600" }}>Go to Dashboard</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+/** FastAPI returns `detail` as an array of objects on 422 validation errors;
+ * Alert.alert needs a plain string. */
+const apiErrorText = (err: any, fallback: string): string => {
+  const d = err?.response?.data?.detail;
+  if (typeof d === "string" && d) return d;
+  if (Array.isArray(d) && d.length) {
+    return d
+      .map((e: any) =>
+        typeof e === "string"
+          ? e
+          : `${(e?.loc || []).filter((l: any) => l !== "body").join(" › ")}: ${e?.msg || ""}`,
+      )
+      .join("\n");
+  }
+  return err?.message || fallback;
+};
+
 export default function NewProcedureScreen() {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -775,37 +846,35 @@ export default function NewProcedureScreen() {
       ...staticStyles,
       headerBar: [
         staticStyles.headerBar,
-        isTablet && { maxWidth: 800, alignSelf: "center", width: "100%" },
+        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
       ],
       existingProgressBar: [
         staticStyles.existingProgressBar,
-        isTablet && { maxWidth: 800, alignSelf: "center", width: "100%" },
+        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
       ],
       section: [
         staticStyles.section,
         isTablet && {
           maxWidth: 800,
-          alignSelf: "center",
+          alignSelf: "center" as const,
           width: "100%",
-          marginHorizontal: "auto",
         },
       ],
       continueBtn: [
         staticStyles.continueBtn,
         isTablet && {
           maxWidth: 800,
-          alignSelf: "center",
+          alignSelf: "center" as const,
           width: "100%",
-          marginHorizontal: "auto",
         },
       ],
       stepHeader: [
         staticStyles.stepHeader,
-        isTablet && { maxWidth: 800, alignSelf: "center", width: "100%" },
+        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
       ],
       submitContainer: [
         staticStyles.submitContainer,
-        isTablet && { maxWidth: 800, alignSelf: "center", width: "100%" },
+        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
       ],
     }),
     [isTablet],
@@ -2695,10 +2764,7 @@ export default function NewProcedureScreen() {
       setStep("implants");
       await clearPersistedForm();
     } catch (err: any) {
-      Alert.alert(
-        "Error",
-        err.response?.data?.detail || "Failed to create case",
-      );
+      Alert.alert("Error", apiErrorText(err, "Failed to create case"));
     } finally {
       setLoading(false);
     }

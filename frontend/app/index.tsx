@@ -17,11 +17,7 @@ export default function Index() {
     }
   }, [user, loading]);
 
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#007AFF" />
-    </View>
-  );
+  return null;
 }
 
 const styles = StyleSheet.create({

@@ -14,11 +14,24 @@ import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ScrollView,
   Platform, ActivityIndicator, Alert, Linking, Image,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { requireOptionalNativeModule } from 'expo';
+import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl } from '../utils/api';
 import { parseGs1, isValidGtin } from '../utils/gs1';
-import { showUploadPicker } from '../utils/uploadPicker';
+import { safeLaunchCamera, safeLaunchLibrary } from '../utils/safePicker';
+
+// expo-camera throws at import time when the installed binary predates it
+// (OTA update on an older build), which would crash the whole Phase 2 screen.
+// Load it only when the native module is actually present.
+const isNative = Platform.OS !== 'web';
+const hasCameraModule = isNative && !!requireOptionalNativeModule('ExpoCamera');
+const ExpoCamera: typeof import('expo-camera') | null = hasCameraModule ? require('expo-camera') : null;
+const CameraView = ExpoCamera?.CameraView;
+// Module-level constant → the same hook is called on every render.
+const useCameraPermissions = ExpoCamera
+  ? ExpoCamera.useCameraPermissions
+  : () => [null, async () => ({ granted: false, canAskAgain: false } as any)] as const;
 
 export type ImplantTraceability = {
   gtin?: string;
@@ -67,7 +80,7 @@ export default function ImplantScanSheet({ visible, onClose, positionLabel, init
   const [gtinWarn, setGtinWarn] = useState(false);
   const [emptyWarn, setEmptyWarn] = useState(false);
 
-  const canUseCamera = Platform.OS !== 'web';
+  const canUseCamera = hasCameraModule;
 
   useEffect(() => {
     if (!visible) return;
@@ -150,13 +163,11 @@ export default function ImplantScanSheet({ visible, onClose, positionLabel, init
     if (visible && mode === 'scan' && canUseCamera && !permission?.granted) ensurePermission();
   }, [visible, mode]);
 
-  const pickLabelPhoto = async () => {
+  const uploadLabelPhoto = async (picked: { uri: string; name: string; type: string }) => {
+    setUploading(true);
     try {
-      const picked = await showUploadPicker(['image/png', 'image/jpeg', 'image/heic', 'image/heif']);
-      if (!picked) return;
-      setUploading(true);
       const fd = new FormData();
-      fd.append('file', { uri: picked.uri, name: picked.name || 'label.jpg', type: picked.type || 'image/jpeg' } as any);
+      fd.append('file', { uri: picked.uri, name: picked.name, type: picked.type } as any);
       const res = await api.post('/uploads/media-temp', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       update({ label_photo: res.data.filename, label_photo_name: res.data.original_name });
     } catch (err: any) {
@@ -164,6 +175,39 @@ export default function ImplantScanSheet({ visible, onClose, positionLabel, init
     } finally {
       setUploading(false);
     }
+  };
+
+  const launchPhoto = async (source: 'camera' | 'library') => {
+    try {
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert('Camera blocked', 'Allow camera access in Settings to photograph the label.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]);
+          return;
+        }
+      }
+      const opts = { mediaTypes: ['images'] as any, quality: 0.8 };
+      const result = source === 'camera' ? await safeLaunchCamera(opts) : await safeLaunchLibrary(opts);
+      if (result.canceled || !result.assets?.length) return;
+      const a = result.assets[0];
+      await uploadLabelPhoto({ uri: a.uri, name: a.fileName || `label_${Date.now()}.jpg`, type: a.mimeType || 'image/jpeg' });
+    } catch (err: any) {
+      Alert.alert('Photo unavailable', err?.message || 'Could not open the camera or photo library');
+    }
+  };
+
+  // The app-wide attach picker is a root-level overlay that renders behind this
+  // Modal, so launch the native pickers directly (they present above the Modal).
+  const pickLabelPhoto = () => {
+    if (!isNative) return launchPhoto('library');
+    Alert.alert('Label photo', 'Add a photo of the implant box label', [
+      { text: 'Take photo', onPress: () => launchPhoto('camera') },
+      { text: 'Choose from library', onPress: () => launchPhoto('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const filteredCatalog = useMemo(() => {
@@ -232,7 +276,7 @@ export default function ImplantScanSheet({ visible, onClose, positionLabel, init
 
           {mode === 'scan' && canUseCamera ? (
             <View style={st.cameraWrap}>
-              {permission?.granted ? (
+              {permission?.granted && CameraView ? (
                 <CameraView
                   style={st.camera}
                   facing="back"
@@ -260,6 +304,12 @@ export default function ImplantScanSheet({ visible, onClose, positionLabel, init
                   <Ionicons name="scan-outline" size={18} color="#1565C0" />
                   <Text style={st.linkText}>{data.raw ? 'Scan again' : 'Scan with camera'}</Text>
                 </TouchableOpacity>
+              )}
+              {isNative && !canUseCamera && (
+                <View style={st.warnRow} testID="trace-camera-unavailable">
+                  <Ionicons name="information-circle" size={16} color="#E65100" />
+                  <Text style={st.warnText}>Box-code scanning needs the latest app version. Update the app from the store, or enter the details below.</Text>
+                </View>
               )}
               {!canUseCamera && (
                 <View style={st.field}>

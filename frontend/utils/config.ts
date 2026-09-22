@@ -23,5 +23,6 @@ function resolveBackendUrl(): string {
 }
 
 const BACKEND_URL: string = resolveBackendUrl();
+console.log(BACKEND_URL)
 
 export { BACKEND_URL };

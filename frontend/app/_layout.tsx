@@ -7,18 +7,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TabletFrame } from '../components/TabletFrame';
 import { useScreenCaptureProtection } from '../hooks/useScreenCaptureProtection';
 import AttachPickerModalRoot from '../components/AttachPickerModal';
-import CustomSplashScreen from '../components/CustomSplashScreen';
-
-// Keep the native (static-image) splash up until our custom JS splash has
-// mounted underneath it — avoids a blank-white flash between the two.
-SplashScreen.preventAutoHideAsync().catch(() => {});
+// Native splash hides as soon as the app mounts
+SplashScreen.hideAsync().catch(() => {});
 
 /**
  * ActivityTracker wraps the Stack and captures any touch anywhere in the app to
  * reset the session inactivity timer used by AuthContext. Also enables the
  * HIPAA screen-capture guard (FLAG_SECURE on Android / preventScreenCapture on
- * iOS) while the user is authenticated, and hosts the custom JS splash screen
- * overlay until the auth check resolves.
+ * iOS) while the user is authenticated.
  *
  * iter-169: Touch/responder capture on the outer View doesn't fire when inner
  * ScrollView / TextInput consume the gesture, which caused mid-session
@@ -50,7 +46,6 @@ function ActivityTracker({ children }: { children: React.ReactNode }) {
       onMoveShouldSetResponderCapture={() => { recordActivity(); return false; }}
     >
       {children}
-      <CustomSplashScreen visible={loading} />
     </View>
   );
 }

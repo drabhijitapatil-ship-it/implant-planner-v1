@@ -130,15 +130,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
           return;
         }
+
+        // Restore cached user immediately so UI and dashboard render without waiting for network!
+        const cachedUserStr = await getToken('user');
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr);
+            if (cachedUser && cachedUser.id) {
+              setUser(cachedUser);
+            }
+          } catch {
+            /* ignore parse error */
+          }
+        }
+
+        // Immediately unblock UI if we have cached user or token
+        setLoading(false);
+
         try {
           const resp = await api.get('/auth/me');
           setUser(resp.data);
+          await setToken('user', JSON.stringify(resp.data));
         } catch {
           // Token invalid — try refresh silently (interceptor handles it)
           // If refresh also fails, interceptor clears tokens
           await removeToken('access_token');
           await removeToken('refresh_token');
           await removeToken('user');
+          setUser(null);
         }
       }
     } catch (error) {
