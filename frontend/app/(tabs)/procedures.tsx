@@ -11,6 +11,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
@@ -44,7 +45,11 @@ function DefaultProceduresScreen() {
   // Filtering is now done entirely client-side over the full case list so
   // the four tabs (All / In Progress / Completed / Rejected) stay
   // consistent for every role.
-  const [filter, setFilter] = useState<'all' | 'in_progress' | 'completed' | 'rejected'>('all');
+  const [filter, setFilter] = useState<'all' | 'in_progress' | 'completed' | 'rejected' | 'assisted'>('all');
+  // iter-Jun-2026: cases where the signed-in PG student is the named assistant
+  // (read-only). Fetched separately so they never mix into own cases.
+  const [assistedProcedures, setAssistedProcedures] = useState<any[]>([]);
+  const isStudent = user?.role === 'student';
   const [searchQuery, setSearchQuery] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [shareCase, setShareCase] = useState<{ id: string; patientName?: string } | null>(null);
@@ -61,7 +66,7 @@ function DefaultProceduresScreen() {
     } else if (params.filter === 'pending') {
       // Legacy URL param — map "pending" → new "in_progress" tab
       setFilter('in_progress');
-    } else if (params.filter && ['in_progress', 'completed', 'rejected'].includes(params.filter)) {
+    } else if (params.filter && ['in_progress', 'completed', 'rejected', 'assisted'].includes(params.filter)) {
       setFilter(params.filter as any);
     }
   }, [params.filter, params.phase]);
@@ -80,11 +85,15 @@ function DefaultProceduresScreen() {
       // For All / In Progress / Completed / Rejected we fetch the full
       // case list and filter client-side so categories stay consistent
       // across roles (see filteredProcedures below).
-      const response = await api.get('/procedures', { params: reqParams });
+      const [response, assistedRes] = await Promise.all([
+        api.get('/procedures', { params: reqParams }),
+        isStudent ? api.get('/procedures', { params: { scope: 'assisted' } }).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      ]);
       const filtered = f.startsWith('phase_')
         ? response.data
         : response.data.filter((p: any) => p.status !== 'draft');
       setProcedures(filtered);
+      setAssistedProcedures(Array.isArray(assistedRes.data) ? assistedRes.data : []);
     } catch (error) {
       console.error('Failed to load procedures:', error);
     } finally {
@@ -205,7 +214,8 @@ function DefaultProceduresScreen() {
   };
 
   const renderProcedure = ({ item }: any) => {
-    const actions = getMenuActions(item);
+    const isAssistedView = filter === 'assisted';
+    const actions = isAssistedView ? [] : getMenuActions(item);
     const isMenuOpen = menuOpenId === item.id;
 
     return (
@@ -217,6 +227,12 @@ function DefaultProceduresScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.patientName}>{item.patient_name}</Text>
             <Text style={styles.registrationNumber}>#{item.registration_number}</Text>
+            {isAssistedView ? (
+              <View style={styles.assistingChip} data-testid={`assisting-chip-${item.id}`}>
+                <Ionicons name="eye-outline" size={11} color="#4527A0" />
+                <Text style={styles.assistingChipTxt}>Assisting · read-only</Text>
+              </View>
+            ) : null}
             {Array.isArray(item.reschedule_history) && item.reschedule_history.length > 0 ? (
               <View style={styles.rescheduledChip} data-testid={`rescheduled-chip-${item.id}`}>
                 <Ionicons name="swap-horizontal" size={11} color="#E65100" />
@@ -277,6 +293,13 @@ function DefaultProceduresScreen() {
           <View style={styles.detailRow}>
             <Ionicons name="person" size={16} color="#666" />
             <Text style={styles.detailText}>Student: {item.student_name}</Text>
+          </View>
+        ) : null}
+
+        {item.assistant_name && !isAssistedView ? (
+          <View style={styles.detailRow}>
+            <Ionicons name="people" size={16} color="#666" />
+            <Text style={styles.detailText}>Assistant: {item.assistant_name}</Text>
           </View>
         ) : null}
 
@@ -348,10 +371,13 @@ function DefaultProceduresScreen() {
     { key: 'in_progress', label: 'In Progress' },
     { key: 'completed', label: 'Completed' },
     { key: 'rejected', label: 'Rejected' },
+    // iter-Jun-2026: only PG students can be assistants → tab only for them.
+    ...(isStudent ? [{ key: 'assisted', label: 'Assisted' }] : []),
   ];
 
+  const sourceList: any[] = filter === 'assisted' ? assistedProcedures : procedures;
   const searchFiltered = searchQuery.trim()
-    ? procedures.filter((p: any) => {
+    ? sourceList.filter((p: any) => {
         const q = searchQuery.toLowerCase();
         return (
           p.patient_name?.toLowerCase().includes(q) ||
@@ -360,7 +386,7 @@ function DefaultProceduresScreen() {
           p.supervisor_name?.toLowerCase().includes(q)
         );
       })
-    : procedures;
+    : sourceList;
 
   // iter-267: unified client-side status categorisation. Drafts are
   // already excluded upstream (Dashboard owns them).
@@ -378,17 +404,25 @@ function DefaultProceduresScreen() {
 
   // iter-268: per-tab counts so users see workload at a glance.
   // Counts reflect the active search query (mirrors the visible list).
+  const ownSearchFiltered = filter === 'assisted' && searchQuery.trim()
+    ? (procedures as any[]).filter((p: any) => {
+        const q = searchQuery.toLowerCase();
+        return p.patient_name?.toLowerCase().includes(q) || p.registration_number?.toLowerCase().includes(q)
+          || p.student_name?.toLowerCase().includes(q) || p.supervisor_name?.toLowerCase().includes(q);
+      })
+    : (filter === 'assisted' ? (procedures as any[]) : searchFiltered);
   const tabCounts: Record<string, number> = {
-    all: searchFiltered.length,
-    in_progress: searchFiltered.filter((p: any) => IN_PROGRESS_STATUSES.has(p.status)).length,
-    completed: searchFiltered.filter((p: any) => p.status === 'completed').length,
-    rejected: searchFiltered.filter((p: any) => REJECTED_STATUSES.has(p.status)).length,
+    all: ownSearchFiltered.length,
+    in_progress: ownSearchFiltered.filter((p: any) => IN_PROGRESS_STATUSES.has(p.status)).length,
+    completed: ownSearchFiltered.filter((p: any) => p.status === 'completed').length,
+    rejected: ownSearchFiltered.filter((p: any) => REJECTED_STATUSES.has(p.status)).length,
+    assisted: filter === 'assisted' ? searchFiltered.length : assistedProcedures.length,
   };
 
   const filteredProcedures = (() => {
     const f = String(filter);
     if (f.startsWith('phase_')) return searchFiltered; // phase deep-link
-    if (f === 'all') return searchFiltered;
+    if (f === 'all' || f === 'assisted') return searchFiltered;
     return searchFiltered.filter((p: any) => {
       const s = p.status;
       if (f === 'in_progress') return IN_PROGRESS_STATUSES.has(s);
@@ -410,14 +444,15 @@ function DefaultProceduresScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
 
       <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll} keyboardShouldPersistTaps="handled">
         {filterButtons.map((btn) => {
           const isActive = filter === btn.key;
           const count = tabCounts[btn.key] ?? 0;
           return (
             <TouchableOpacity
               key={btn.key}
-              style={[styles.filterButton, isActive && styles.filterButtonActive]}
-              onPress={() => setFilter(btn.key as any)}
+              style={[styles.filterButton, isActive && styles.filterButtonActive, btn.key === 'assisted' && !isActive && styles.filterButtonAssisted]}
+              onPress={() => { setMenuOpenId(null); setFilter(btn.key as any); }}
               testID={`filter-tab-${btn.key}`}
             >
               <Text style={[styles.filterText, isActive && styles.filterTextActive]} numberOfLines={1}>
@@ -427,6 +462,7 @@ function DefaultProceduresScreen() {
             </TouchableOpacity>
           );
         })}
+        </ScrollView>
       </View>
 
       <View style={styles.searchContainer} data-testid="search-bar-container">
@@ -450,7 +486,9 @@ function DefaultProceduresScreen() {
       {filteredProcedures.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name={searchQuery ? 'search-outline' : 'document-text-outline'} size={64} color="#CCC" />
-          <Text style={styles.emptyText}>{searchQuery ? 'No matching cases found' : 'No procedures found'}</Text>
+          <Text style={styles.emptyText}>
+            {searchQuery ? 'No matching cases found' : filter === 'assisted' ? 'You have not been added as an assistant on any case yet' : 'No procedures found'}
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -518,17 +556,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   filterContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 6,
     backgroundColor: '#FFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5EA',
   },
+  filterScroll: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 6,
+    flexGrow: 1,
+  },
   filterButton: {
-    flex: 1,
+    flexGrow: 1,
+    minHeight: 36,
+    justifyContent: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingHorizontal: 12,
     borderRadius: 8,
     backgroundColor: '#F5F5F5',
     alignItems: 'center',
@@ -536,6 +580,15 @@ const styles = StyleSheet.create({
   filterButtonActive: {
     backgroundColor: '#007AFF',
   },
+  filterButtonAssisted: {
+    backgroundColor: '#EDE7F6',
+  },
+  assistingChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start',
+    marginTop: 4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999,
+    backgroundColor: '#EDE7F6', borderWidth: 1, borderColor: '#D1C4E9',
+  },
+  assistingChipTxt: { fontSize: 10, fontWeight: '700', color: '#4527A0' },
   filterText: {
     fontSize: 11,
     fontWeight: '600',

@@ -19,6 +19,7 @@ import WhatsNewBadge from '../../components/WhatsNewBadge';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AskImplanrAIFab from '../../components/AskImplanrAIFab';
 import SmartTipBanner from '../../components/SmartTipBanner';
+import AssistingTodayStrip from '../../components/AssistingTodayStrip';
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<string, { label: string; icon: string; color: string }> = {
@@ -1110,7 +1111,11 @@ export default function DashboardScreen() {
         {isNurse && <ScheduledCasesSection router={router} />}
 
         {isStudent && (
-          <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id || (user as any)?._id} />
+          <>
+            <StudentDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id || (user as any)?._id} />
+            {/* iter-Jun-2026: cases the PG student is assisting in the next 7 days */}
+            <AssistingTodayStrip />
+          </>
         )}
         {isSupervisor && (
           <SupervisorDashboard stats={stats} procedures={procedures} selectedDate={selectedDate} setSelectedDate={setSelectedDate} router={router} userId={user?.id} />

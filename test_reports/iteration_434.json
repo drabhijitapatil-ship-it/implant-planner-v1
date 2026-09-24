@@ -1,0 +1,35 @@
+{
+  "summary": "iter-Jun-2026 Case Assistant — full backend + frontend verification. Backend: all 16 pytest tests PASSED (candidates excludes self, students-only, nurse 403; create with self/supervisor assistant → 400; create with another student → 200 & persisted; PATCH assistant by owner/incharge OK, by assistant-self/unrelated → 403; Phase 1 approval creates exactly ONE assistant_added notification with assistant_notified_at set; assistant default scope hides case, ?scope=assisted returns viewer_is_assistant=true; GET detail strips followups; assistant PUT → 403; change assistant post-approval fires old assistant_removed + new assistant_added). Frontend: Login → New Case Schedule shows AssistantPicker with 11 other students, self excluded, No assistant option present, opens/selects properly. As assistant Aaditya.patil: Dashboard 'Assisting soon' strip lists 2 upcoming cases; Alerts tab shows 'You have been added as an assistant by Dr. Gaurav Pandey ...' notifications; My Cases has 'Assisted (2)' 5th tab; assisted case shows 'Assisting · read-only' chip; case detail shows purple readonly banner; NO Change/Remove; NO Phase 5. As owner Gaurav / supervisor Paresh / incharge Abhijit: Assistant card visible with Change + Remove; Change modal has AssistantPicker + assistant-save-btn; supervisor & incharge My Cases has NO 'Assisted' filter tab (correct). FIXED: added missing testID prop (in addition to data-testid) on 4 non-interactive React Native components (assistant-card, assistant-name, assistant-readonly-banner, assisting-strip) so RN-Web now emits data-testid attribute for Playwright/QA queries.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AssistantCard/AssistingTodayStrip/[id].tsx banner", "issue": "Non-interactive <View>/<Text> only used data-testid prop; React Native Web does not forward that to DOM without a matching testID prop. Fixed by adding testID alongside data-testid.", "testID": "assistant-card, assistant-name, assistant-readonly-banner, assisting-strip", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Assistant read-only case detail load", "issue": "Console/toast shows '[AugChecklist] load failed: Axios...' when an assistant opens the case (assistant is not allowed to fetch augmentation checklist → 403). The read-only view still renders correctly but the error toast surfaces. Recommend gating the AugChecklist fetch when procedure.viewer_is_assistant is true, or silently swallow 403 for assistant viewers.", "affected_testIDs": ["assistant-readonly-banner"]}
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_case_assistant_iter_jun2026.py", "/app/test_reports/pytest/iter_jun2026_assistant.xml"],
+  "action_items": [
+    "Consider guarding AugChecklist / any Phase 2+ API calls on procedures/[id].tsx when procedure.viewer_is_assistant is true so the assistant does not see the '[AugChecklist] load failed: Axios...' toast.",
+    "Optional: enforce a small delay before the AssistantPicker useEffect fires on /new-procedure or wait for auth token — a hard reload landing directly on /new-procedure occasionally triggers assistant-candidates before axios interceptor attaches the Bearer token (produces a 403 and 'No other Postgraduate Students available'). Normal in-app navigation works fine; only affects direct URL hits."
+  ],
+  "critical_code_review_comments": [
+    "React Native Web only converts the built-in testID prop to a DOM data-testid attribute; passing raw data-testid on <View>/<Text> is silently ignored. Pattern seen in AssistantCard, AssistingTodayStrip, procedures/[id].tsx banner — apply testID (with optional data-testid duplicate) whenever the element needs to be QA-queryable.",
+    "AssistantPicker fetches assistant-candidates unconditionally on mount; if navigated to before axios auth interceptor is ready, list is empty. Consider re-fetch on token-ready event or expose a refresh handle."
+  ],
+  "updated_files": [
+    "/app/frontend/components/AssistantCard.tsx",
+    "/app/frontend/components/AssistingTodayStrip.tsx",
+    "/app/frontend/app/procedures/[id].tsx",
+    "/app/backend/tests/test_case_assistant_iter_jun2026.py"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% flows verified (12/12 checks)"},
+  "seed_data_creation": "Backend tests create TEST_-prefixed procedures with assistant_id; module-scoped fixtures reuse Aaditya.patil as assistant. No cleanup script — TEST_ prefix used so cases are easy to identify. Existing seed case 6ab4bb620dc6e3397a201fa6 still intact (Assistant Flow Patient, phase1_approved).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter-Jun-2026 Case Assistant feature is production-ready. Backend endpoints (/api/procedures/assistant-candidates, POST /api/procedures with assistant fields, PATCH /api/procedures/{id}/assistant, GET /api/procedures?scope=assisted) and UI flows (AssistantPicker, AssistantCard with Change/Remove modal, purple assistant-readonly-banner, Assisted 5th filter tab, 'Assisting soon' dashboard strip, alert notifications) all verified. Reusable pytest at /app/backend/tests/test_case_assistant_iter_jun2026.py. Only follow-up: silence the AugChecklist 403 toast for assistants.",
+  "rca_of_issue": "Missing testID on RN <View>/<Text>: React Native Web's DOM adapter only maps the standard `testID` prop to `data-testid`. Custom lower-case `data-testid` props flow through to <div>/<span> only if the component whitelist-forwards them (TouchableOpacity happens to accept them, plain View/Text do not). Fix: dual-prop `testID` + `data-testid` on non-interactive Views/Texts. Verified after fix — all four testIDs now query-selectable via [data-testid=...]."
+}

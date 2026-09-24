@@ -359,6 +359,9 @@ class ProcedureCreateExistingImplants(BaseModel):
     amount_paid: float
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
+    # iter-Jun-2026: optional Postgraduate-student assistant (read-only observer).
+    assistant_id: Optional[str] = Field("", max_length=50)
+    assistant_name: Optional[str] = Field("", max_length=100)
     existing_implants: List[ExistingImplant] = Field(..., min_length=1)
     prosthesis_history: ProsthesisHistory = Field(default_factory=ProsthesisHistory)
     # iter-213: original procedure that placed these implants (e.g. "All on 4")
@@ -404,6 +407,9 @@ class ProcedureCreate(BaseModel):
     amount_paid: float
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
+    # iter-Jun-2026: optional Postgraduate-student assistant (read-only observer).
+    assistant_id: Optional[str] = Field("", max_length=50)
+    assistant_name: Optional[str] = Field("", max_length=100)
     implant_procedure_type: str = Field(..., max_length=100)
     # iter-307: Number-of-Implants sub-question — only used by the 4
     # procedure types (Immediate / PET / GBR / Guided Surgery) where it
@@ -595,6 +601,9 @@ class ProcedureUpdate(BaseModel):
     amount_paid: Optional[float] = None
     procedure_date: Optional[str] = Field(None, max_length=30)
     procedure_time: Optional[str] = Field(None, max_length=20)
+    # iter-Jun-2026: optional assistant on the draft/update model too.
+    assistant_id: Optional[str] = Field(None, max_length=50)
+    assistant_name: Optional[str] = Field(None, max_length=100)
     implant_procedure_type: Optional[str] = Field(None, max_length=100)
     # iter-307: Number-of-Implants sub-question on the draft model too.
     num_implants: Optional[str] = Field(None, max_length=50)
@@ -1053,6 +1062,107 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
             )
     except Exception as e:
         logging.error(f"Failed to send push notification: {e}")
+
+
+# ───────────────────────────────────────────────────────────────────
+# iter-Jun-2026: Case Assistant (Postgraduate-student read-only observer)
+# ───────────────────────────────────────────────────────────────────
+# A case may carry ONE optional assistant (`assistant_id` / `assistant_name`).
+# The assistant must be a `student` user who is not the case owner. They get
+# read-only access to Phase 1-4 data, are notified once Phase 1 is fully
+# approved (idempotent via `assistant_notified_at`), and every add / change /
+# remove is appended to `assistant_change_log` + the HIPAA access log.
+ASSISTANT_PRE_APPROVAL_STATUSES = {"draft", "pending_phase1", "rejected_phase1", "augmentation_in_progress"}
+
+
+def _scheduler_name(proc: dict) -> str:
+    return proc.get("student_name") or proc.get("created_by_name") or "a colleague"
+
+
+def _assistant_schedule_line(proc: dict) -> str:
+    bits = []
+    if proc.get("patient_name"):
+        bits.append(f"Patient: {proc['patient_name']}")
+    if proc.get("procedure_date"):
+        bits.append(f"scheduled on {proc['procedure_date']}" + (f" at {proc['procedure_time']}" if proc.get("procedure_time") else ""))
+    if proc.get("implant_procedure_type"):
+        bits.append(str(proc["implant_procedure_type"]))
+    return (" · ".join(bits)) if bits else ""
+
+
+async def _resolve_assistant(assistant_id: Optional[str], exclude_ids: List[Optional[str]]) -> Tuple[str, str]:
+    """Validate a requested assistant. Returns (id, name); ("", "") when none.
+    Raises 400/404 when the user is not a Postgraduate student or is one of
+    `exclude_ids` (case owner / scheduling user)."""
+    aid = (assistant_id or "").strip()
+    if not aid:
+        return "", ""
+    if aid in {str(x) for x in exclude_ids if x}:
+        raise HTTPException(status_code=400, detail="You cannot add yourself (or the case owner) as the assistant.")
+    if not ObjectId.is_valid(aid):
+        raise HTTPException(status_code=404, detail="Selected assistant not found.")
+    u = await db.users.find_one({"_id": ObjectId(aid)}, {"name": 1, "role": 1, "username": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="Selected assistant not found.")
+    if u.get("role") != "student":
+        raise HTTPException(status_code=400, detail="Only Postgraduate Students can be added as an assistant.")
+    return aid, (u.get("name") or u.get("username") or "")
+
+
+async def _maybe_notify_assistant_added(procedure_id: str) -> None:
+    """Fire the one-time 'You have been added as an assistant' notification
+    once Phase 1 is fully approved. Safe to call repeatedly."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        return
+    if not proc or not proc.get("assistant_id") or proc.get("assistant_notified_at"):
+        return
+    if proc.get("status") in ASSISTANT_PRE_APPROVAL_STATUSES:
+        return
+    if not (proc.get("supervisor_phase1_approved") and proc.get("implant_incharge_phase1_approved")):
+        return
+    aid = proc["assistant_id"]
+    by = _scheduler_name(proc)
+    detail = _assistant_schedule_line(proc)
+    msg = f"You have been added as an assistant by {by}." + (f" {detail}." if detail else "")
+    now = datetime.utcnow()
+    await db.notifications.insert_one({
+        "user_id": aid,
+        "procedure_id": procedure_id,
+        "message": msg,
+        "type": "assistant_added",
+        "read": False,
+        "created_at": now,
+    })
+    await send_expo_push_notifications(
+        [aid], "Added as case assistant", msg, {"procedure_id": procedure_id, "type": "assistant_added"},
+    )
+    await db.procedures.update_one({"_id": proc["_id"]}, {"$set": {"assistant_notified_at": now}})
+    await db.procedures.update_one(
+        {"_id": proc["_id"]},
+        {"$push": {"assistant_change_log": {
+            "action": "notified", "assistant_id": aid, "assistant_name": proc.get("assistant_name", ""),
+            "at": now.isoformat(),
+        }}},
+    )
+
+
+async def _notify_assistant_removed(procedure_id: str, proc: dict, removed_id: str, by_name: str) -> None:
+    if not removed_id:
+        return
+    msg = f"You have been removed as the assistant for patient {proc.get('patient_name', '')} by {by_name}."
+    await db.notifications.insert_one({
+        "user_id": removed_id,
+        "procedure_id": procedure_id,
+        "message": msg,
+        "type": "assistant_removed",
+        "read": False,
+        "created_at": datetime.utcnow(),
+    })
+    await send_expo_push_notifications(
+        [removed_id], "Removed as case assistant", msg, {"procedure_id": procedure_id, "type": "assistant_removed"},
+    )
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -2000,6 +2110,10 @@ async def create_procedure_with_existing_implants(
 
     procedure_dict = payload.model_dump()
     existing_impl_count = len(payload.existing_implants)
+    # iter-Jun-2026: validate the optional assistant (must be a PG student, not self).
+    procedure_dict["assistant_id"], procedure_dict["assistant_name"] = await _resolve_assistant(
+        payload.assistant_id, [current_user["_id"]]
+    )
 
     # iter-213: status routing based on phase_to_start. 'phase4_step1'
     # (default) preserves the iter-211 behaviour. 'phase3' routes the case
@@ -2262,6 +2376,10 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
                 raise HTTPException(status_code=400, detail=f"Invalid loading type: {lt}")
     
     procedure_dict = procedure.model_dump()
+    # iter-Jun-2026: validate the optional assistant (must be a PG student, not self).
+    procedure_dict["assistant_id"], procedure_dict["assistant_name"] = await _resolve_assistant(
+        procedure.assistant_id, [current_user["_id"]]
+    )
     
     if is_student:
         # Student creates: standard draft flow
@@ -2425,12 +2543,29 @@ async def get_procedures(
     date: Optional[str] = None,
     student_id: Optional[str] = None,
     supervisor_id: Optional[str] = None,
+    scope: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {}
     
     # Exclude archived procedures by default
     query["archived"] = {"$ne": True}
+
+    # iter-Jun-2026: `scope=assisted` → cases where the caller is the named
+    # assistant (read-only observer). Kept strictly separate from the
+    # default "own cases" scope so assisted cases never mix into My Cases.
+    if scope == "assisted":
+        query["assistant_id"] = current_user["_id"]
+        query["status"] = {"$ne": "draft"}
+        cursor = db.procedures.find(query).sort("procedure_date", -1)
+        out = []
+        async for p in cursor:
+            p["_id"] = str(p["_id"])
+            p["id"] = p["_id"]
+            p["viewer_is_assistant"] = True
+            p.pop("followups", None)
+            out.append(p)
+        return out
     
     # Filter based on role
     if current_user["role"] == "student":
@@ -3872,6 +4007,22 @@ async def get_nudge_history(
     }
 
 
+@api_router.get("/procedures/assistant-candidates")
+async def list_assistant_candidates(current_user: dict = Depends(get_current_user)):
+    """Postgraduate students eligible to be added as an assistant. The caller
+    is excluded (a user cannot assist their own case)."""
+    if current_user["role"] == "nurse":
+        raise HTTPException(status_code=403, detail="Not permitted")
+    users = await db.users.find({"role": "student"}, {"name": 1, "username": 1, "email": 1}).sort("name", 1).to_list(500)
+    out = []
+    for u in users:
+        uid = str(u["_id"])
+        if uid == current_user["_id"]:
+            continue
+        out.append({"id": uid, "name": u.get("name") or u.get("username") or u.get("email", "")})
+    return out
+
+
 @api_router.get("/procedures/{procedure_id}")
 async def get_procedure(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
@@ -3880,6 +4031,7 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
         raise HTTPException(status_code=404, detail="Procedure not found")
     
     # Check access
+    viewer_is_assistant = False
     if current_user["role"] == "student":
         # iter-374: current owner OR any previous owner may view (read-only after transfer).
         owner = procedure.get("student_id") == current_user["_id"]
@@ -3889,9 +4041,15 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
             (procedure.get("transfer_request") or {}).get("to_student_id") == current_user["_id"]
             and (procedure.get("transfer_request") or {}).get("status") == "pending_recipient"
         )
-        if not (owner or prev or pending_recipient):
+        # iter-Jun-2026: named assistant → read-only Phase 1-4 view (no drafts).
+        is_assistant = (
+            procedure.get("assistant_id") == current_user["_id"]
+            and procedure.get("status") != "draft"
+        )
+        if not (owner or prev or pending_recipient or is_assistant):
             await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
             raise HTTPException(status_code=403, detail="Access denied")
+        viewer_is_assistant = is_assistant and not (owner or prev or pending_recipient)
     elif current_user["role"] == "supervisor" and procedure["supervisor_id"] != current_user["_id"]:
         await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
         raise HTTPException(status_code=403, detail="Access denied")
@@ -3919,6 +4077,12 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     # keeping the response contract identical to POST mark-instruments-autoclaved and
     # GET /procedures/nurse/scheduled-cases.
     procedure["instruments_autoclaved"] = _serialise_instruments_autoclaved(procedure.get("instruments_autoclaved"))
+    if viewer_is_assistant:
+        # iter-Jun-2026: assistants see Phase 1-4 only — strip Phase 5 data.
+        procedure["viewer_is_assistant"] = True
+        procedure.pop("followups", None)
+        await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name"), "via": "assistant"})
+        return procedure
     await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name")})
     return procedure
 
@@ -3952,6 +4116,15 @@ async def update_procedure(
     
     update_data = {k: v for k, v in procedure_update.model_dump().items() if v is not None}
 
+    # iter-Jun-2026: assistant edits go through the same validation as create.
+    if "assistant_id" in update_data:
+        owner_ids = [procedure.get("student_id"), procedure.get("created_by_id")]
+        update_data["assistant_id"], update_data["assistant_name"] = await _resolve_assistant(
+            update_data.get("assistant_id"), owner_ids
+        )
+        if update_data["assistant_id"] != (procedure.get("assistant_id") or ""):
+            update_data["assistant_notified_at"] = None
+
     # If the FDI `missing_teeth` was edited, re-validate against the procedure type
     # (use the payload's new type if provided, else the stored one) and re-derive
     # `teeth_present` so back-compat fields stay in sync with reality.
@@ -3982,6 +4155,89 @@ async def update_procedure(
     updated_procedure["_id"] = str(updated_procedure["_id"])
     updated_procedure["id"] = updated_procedure["_id"]
     return updated_procedure
+
+
+# ── iter-Jun-2026: Case Assistant — change / remove ────────────────────────
+class AssistantUpdate(BaseModel):
+    # Empty string (or null) removes the assistant.
+    assistant_id: Optional[str] = Field("", max_length=50)
+
+
+@api_router.patch("/procedures/{procedure_id}/assistant")
+async def update_case_assistant(
+    procedure_id: str,
+    body: AssistantUpdate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Add, change or remove the case assistant. Allowed for the case owner
+    (student / creator), the case supervisor, Implant In-Charge and
+    Administrator. When Phase 1 is already approved the new assistant is
+    notified immediately and the removed assistant is told they lost access."""
+    role, uid = current_user["role"], current_user["_id"]
+    if role == "nurse":
+        raise HTTPException(status_code=403, detail="Nurses have read-only access")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    is_owner = proc.get("student_id") == uid or proc.get("created_by_id") == uid
+    is_case_supervisor = role == "supervisor" and proc.get("supervisor_id") == uid
+    if not (is_owner or is_case_supervisor or role in ("implant_incharge", "administrator")):
+        raise HTTPException(status_code=403, detail="Only the case owner, supervisor or Implant In-Charge can change the assistant")
+    if proc.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Completed cases cannot have their assistant changed")
+
+    owner_ids = [proc.get("student_id"), proc.get("created_by_id")]
+    if role == "student":
+        owner_ids.append(uid)
+    new_id, new_name = await _resolve_assistant(body.assistant_id, owner_ids)
+    old_id = proc.get("assistant_id") or ""
+    old_name = proc.get("assistant_name") or ""
+    if new_id == old_id:
+        return {"ok": True, "unchanged": True, "assistant_id": old_id, "assistant_name": old_name}
+
+    now = datetime.utcnow()
+    by_name = current_user.get("name") or current_user.get("username") or ""
+    action = "removed" if not new_id else ("added" if not old_id else "changed")
+    log_entry = {
+        "action": action,
+        "from_id": old_id, "from_name": old_name,
+        "to_id": new_id, "to_name": new_name,
+        "by_id": uid, "by_name": by_name, "by_role": role,
+        "at": now.isoformat(),
+    }
+    await db.procedures.update_one(
+        {"_id": proc["_id"]},
+        {
+            "$set": {
+                "assistant_id": new_id,
+                "assistant_name": new_name,
+                "assistant_notified_at": None,
+                "updated_at": now,
+            },
+            "$push": {"assistant_change_log": log_entry},
+        },
+    )
+    await log_access(
+        action=f"assistant_{action}", resource_type="procedure", resource_id=procedure_id,
+        user=current_user, request=request,
+        extra={"from": old_name, "to": new_name, "patient_name": proc.get("patient_name")},
+    )
+
+    # Notifications — only meaningful once Phase 1 is approved (before that the
+    # add notification fires on approval, and nobody was ever told about it).
+    phase1_done = proc.get("status") not in ASSISTANT_PRE_APPROVAL_STATUSES
+    if phase1_done:
+        if old_id:
+            await _notify_assistant_removed(procedure_id, proc, old_id, by_name)
+        if new_id:
+            await _maybe_notify_assistant_added(procedure_id)
+
+    return {"ok": True, "action": action, "assistant_id": new_id, "assistant_name": new_name, "change": log_entry}
 
 
 @api_router.patch("/procedures/{procedure_id}/edit-fields")
@@ -4176,7 +4432,8 @@ def _is_case_stakeholder(proc: dict, user: dict) -> bool:
         return False
     if user.get("role") in ("administrator", "implant_incharge"):
         return True
-    return uid in (proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id"))
+    # iter-Jun-2026: the named assistant is a read-only stakeholder too.
+    return uid in (proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id"), proc.get("assistant_id"))
 
 
 @api_router.get("/procedures/{procedure_id}/augmentation-checklist")
@@ -4254,6 +4511,8 @@ async def regenerate_augmentation_checklist(procedure_id: str, current_user: dic
         raise HTTPException(status_code=404, detail="Case not found")
     if not _is_case_stakeholder(proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Assistants have read-only access")
     new_items = generate_augmentation_checklist(proc)
     # Preserve completed-state on items whose title still matches.
     old_state = {it.get("title"): it for it in (proc.get("augmentation_checklist") or []) if isinstance(it, dict)}
@@ -4649,6 +4908,7 @@ async def reschedule_procedure(
             proc.get("implant_incharge_id"),
             proc.get("nurse_id"),
             creator_id,
+            proc.get("assistant_id"),  # iter-Jun-2026: assistant must know the new schedule
         ]
         if rid and rid != actor_id
     ]
@@ -5207,16 +5467,22 @@ async def transfer_recipient_accept(procedure_id: str, request: Request,
     tr["recipient_accepted_at"] = now.isoformat()
     tr["completed_at"] = now.isoformat()
 
+    swap_set: Dict[str, Any] = {
+        "student_id": tr["to_student_id"],
+        "student_name": tr["to_student_name"],
+        "previous_students": prev_students,
+        "transfer_count": int(proc.get("transfer_count") or 0) + 1,
+        "last_transfer_attempt": tr,
+    }
+    # iter-Jun-2026: a student cannot assist their own case — if the new
+    # owner was the assistant, clear the assistant slot.
+    if proc.get("assistant_id") and proc.get("assistant_id") == tr["to_student_id"]:
+        swap_set.update({"assistant_id": "", "assistant_name": "", "assistant_notified_at": None})
+
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
         {
-            "$set": {
-                "student_id": tr["to_student_id"],
-                "student_name": tr["to_student_name"],
-                "previous_students": prev_students,
-                "transfer_count": int(proc.get("transfer_count") or 0) + 1,
-                "last_transfer_attempt": tr,
-            },
+            "$set": swap_set,
             "$push": {"transfer_history": history_entry},
             "$unset": {"transfer_request": ""},
         },
@@ -14063,6 +14329,9 @@ async def generate_case_report(
     pdf.set_x(20)
     pdf.cell(80, 7, safe(f"Implant Incharge: {procedure.get('implant_incharge_name', 'N/A')}"))
     pdf.cell(80, 7, safe(f"Procedure: {procedure.get('implant_procedure_type', 'N/A')}"), ln=True)
+    if procedure.get("assistant_name"):
+        pdf.set_x(20)
+        pdf.cell(80, 7, safe(f"Assistant: {procedure.get('assistant_name')}"), ln=True)
     pdf.set_x(20)
     loading = ", ".join(procedure.get("loading_type", [])) or "N/A"
     pdf.cell(80, 7, safe(f"Loading: {loading}"))
@@ -15755,6 +16024,7 @@ async def approve_procedure(
                     {"_id": ObjectId(procedure_id)},
                     {"$set": update_fields}
                 )
+                await _maybe_notify_assistant_added(procedure_id)
                 
                 updated_procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
                 updated_procedure["_id"] = str(updated_procedure["_id"])
@@ -15834,6 +16104,8 @@ async def approve_procedure(
                 {"_id": ObjectId(procedure_id)},
                 {"$set": update_fields}
             )
+            # iter-Jun-2026: notify the assistant once Phase 1 is fully approved.
+            await _maybe_notify_assistant_added(procedure_id)
         else:
             # Reject Phase 1
             rej_type = action.rejection_type or "permanent"
@@ -16066,6 +16338,8 @@ async def request_phase1_approval(
         {"_id": ObjectId(procedure_id)},
         {"$set": update_fields},
     )
+    # iter-Jun-2026: In-Charge self-submit lands directly in phase1_approved → notify assistant.
+    await _maybe_notify_assistant_added(procedure_id)
 
     if is_student:
         student_name = procedure.get("student_name", "A student")
@@ -17531,6 +17805,9 @@ class AugmentationCaseCreate(BaseModel):
     remark: Optional[str] = Field("", max_length=1000)
     # iter-397: multi-implant episodes — link to the patient's prior case.
     linked_parent_case_id: Optional[str] = Field("", max_length=64)
+    # iter-Jun-2026: optional Postgraduate-student assistant (read-only observer).
+    assistant_id: Optional[str] = Field("", max_length=50)
+    assistant_name: Optional[str] = Field("", max_length=100)
 
 
 class AugmentationStep1Submit(BaseModel):
@@ -17654,6 +17931,8 @@ async def create_augmentation_case(payload: AugmentationCaseCreate, current_user
     now = datetime.utcnow()
     now_iso = datetime.now(timezone.utc).isoformat()
     doc = payload.dict()
+    # iter-Jun-2026: validate the optional assistant (must be a PG student, not self).
+    doc["assistant_id"], doc["assistant_name"] = await _resolve_assistant(payload.assistant_id, [current_user["_id"]])
     doc.update({
         "status": "augmentation_in_progress",
         "current_phase": 1,
@@ -22438,6 +22717,8 @@ async def export_drilling_pdf(
         team_bits.append(f"<b>Supervisor:</b> {supervisor_name_ctx}")
     if incharge_name_ctx:
         team_bits.append(f"<b>Implant In-Charge:</b> {incharge_name_ctx}")
+    if proc_doc and proc_doc.get("assistant_name"):
+        team_bits.append(f"<b>Assistant:</b> {proc_doc.get('assistant_name')}")
     if team_bits:
         team_style = ParagraphStyle(
             'team', parent=styles['BodyText'], fontSize=9.5, alignment=TA_CENTER,

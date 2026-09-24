@@ -19,6 +19,7 @@ import ExistingPatientBanner from '../../components/ExistingPatientBanner';
 import PatientNameMatchBanner from '../../components/PatientNameMatchBanner';
 import ZygomaPterygoidPhase1Form, { ZygomaPterygoidPhase1Data } from '../../components/ZygomaPterygoidPhase1Form';
 import GroupedDescDropdown from '../../components/GroupedDescDropdown';
+import AssistantPicker from '../../components/AssistantPicker';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -387,6 +388,9 @@ export default function NewProcedureScreen() {
     amount_paid: '',
     procedure_date: '',
     procedure_time: '',
+    // iter-Jun-2026: optional Postgraduate-student assistant (read-only reviewer)
+    assistant_id: '',
+    assistant_name: '',
     implant_procedure_type: '',
     // iter-307: New "Number of Implants" sub-question — only used for
     // Immediate / PET / GBR / Guided Surgery / Sinus Lift procedure
@@ -641,6 +645,7 @@ export default function NewProcedureScreen() {
         receipt_number: formData.receipt_number,
         amount_paid: parseFloat(String(formData.amount_paid)) || 0,
         procedure_date: formData.procedure_date, procedure_time: formData.procedure_time,
+        assistant_id: formData.assistant_id || '', assistant_name: formData.assistant_name || '',
         remark: (formData as any).remark || '',
       });
       const newId = res.data?.id;
@@ -728,6 +733,8 @@ export default function NewProcedureScreen() {
                 amount_paid: proc.amount_paid != null ? String(proc.amount_paid) : '',
                 procedure_date: proc.procedure_date || '',
                 procedure_time: proc.procedure_time || '',
+                assistant_id: proc.assistant_id || '',
+                assistant_name: proc.assistant_name || '',
                 implant_procedure_type: proc.implant_procedure_type || '',
                 num_implants: proc.num_implants || '',
                 sinus_lift_type: proc.sinus_lift_type || '',
@@ -910,6 +917,7 @@ export default function NewProcedureScreen() {
               implant_incharge_id: proc.implant_incharge_id || '',
               implant_incharge_name: proc.implant_incharge_name || '',
               receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
+              assistant_id: '', assistant_name: '',
             }));
             setStep('details');
           } catch { /* ignore */ }
@@ -930,6 +938,7 @@ export default function NewProcedureScreen() {
           implant_incharge_id: user?.role === 'implant_incharge' ? (user?.id || '') : '',
           implant_incharge_name: user?.role === 'implant_incharge' ? (user?.name || '') : '',
           receipt_number: '', amount_paid: '', procedure_date: '', procedure_time: '',
+          assistant_id: '', assistant_name: '',
           implant_procedure_type: '', num_implants: '', teeth_present: [] as string[], arch: '', loading_type: [] as string[],
           overdenture_type: '',
           prosthetic_plan: '', prosthetic_plan_other: '', attachment_type: '', attachment_type_other: '', bone_graft_specifications: '',
@@ -2580,6 +2589,8 @@ export default function NewProcedureScreen() {
             amount_paid: String(formData.amount_paid || ''),
             procedure_date: formData.procedure_date || '',
             procedure_time: formData.procedure_time || '',
+            assistant_id: formData.assistant_id || '',
+            assistant_name: formData.assistant_name || '',
             remark: (formData as any).remark || '',
           }}
           validatePatient={() => {
@@ -2721,6 +2732,11 @@ export default function NewProcedureScreen() {
                 </View>
               );
             })()}
+            <AssistantPicker
+              valueId={formData.assistant_id}
+              valueName={formData.assistant_name}
+              onChange={(id, name) => { updateForm('assistant_id', id); updateForm('assistant_name', name); }}
+            />
           </View>
           <View style={{ paddingHorizontal: 16, paddingBottom: 28 }}>
             <TouchableOpacity style={[styles.submitBtn, submittingAug && { opacity: 0.6 }]}
@@ -3543,6 +3559,13 @@ export default function NewProcedureScreen() {
             </View>
           );
         })()}
+        {/* iter-Jun-2026: Name of the Assistant — optional PG student who
+            reviews the case read-only and is notified once Phase 1 is approved. */}
+        <AssistantPicker
+          valueId={formData.assistant_id}
+          valueName={formData.assistant_name}
+          onChange={(id, name) => { updateForm('assistant_id', id); updateForm('assistant_name', name); }}
+        />
       </View>
 
       {/* ─── Loading Type ─── */}

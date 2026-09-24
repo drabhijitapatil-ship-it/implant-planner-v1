@@ -50,6 +50,7 @@ import ExportPrintMenu from '../../components/ExportPrintMenu';
 import Phase2EditModal from '../../components/Phase2EditModal';
 import ContributionTimelineCard from '../../components/ContributionTimelineCard';
 import FollowUpSection from '../../components/FollowUpSection';
+import AssistantCard from '../../components/AssistantCard';
 import AugmentationSection from '../../components/AugmentationSection';
 import AugmentationPhase2Review from '../../components/AugmentationPhase2Review';
 import TransferApprovalCard from '../../components/TransferApprovalCard';
@@ -841,7 +842,17 @@ export default function ProcedureDetailScreen() {
           <AugmentationChecklist
             procedureId={String(id)}
             canSignOff={['supervisor', 'implant_incharge', 'administrator'].includes(user?.role || '')}
+            readOnly={!!procedure.viewer_is_assistant}
           />
+        )}
+        {/* iter-Jun-2026: read-only banner for the named assistant */}
+        {procedure.viewer_is_assistant && (
+          <View style={{ backgroundColor: '#EDE7F6', borderBottomWidth: 2, borderBottomColor: '#5E35B1', paddingHorizontal: 16, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 }} testID="assistant-readonly-banner" data-testid="assistant-readonly-banner">
+            <Ionicons name="eye-outline" size={20} color="#4527A0" />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: '#4527A0', flex: 1 }}>
+              Assisting · read-only — you can review Phase 1 to Phase 4 of this case
+            </Text>
+          </View>
         )}
         {/* Edit Mode Banner */}
         {isEditMode && (
@@ -1077,7 +1088,10 @@ export default function ProcedureDetailScreen() {
         {/* iter-388: Phase 5 — Follow-up & Maintenance (completed cases only) */}
         <AugmentationSection procedure={procedure} onChanged={() => loadProcedure()} />
         <AugmentationPhase2Review procedure={procedure} />
-        <FollowUpSection procedure={procedure} onChanged={() => loadProcedure()} />
+        {/* iter-Jun-2026: assistants have Phase 1-4 read-only access — Phase 5 hidden. */}
+        {!procedure.viewer_is_assistant && (
+          <FollowUpSection procedure={procedure} onChanged={() => loadProcedure()} />
+        )}
 
         {/* iter-352: End Treatment REJECTED banner. Shown when the last
             end-treatment request was rejected; auto-hides once a new
@@ -2202,6 +2216,9 @@ export default function ProcedureDetailScreen() {
             </>
           )}
         </View>
+
+        {/* iter-Jun-2026: Case Assistant (PG student, read-only reviewer) */}
+        <AssistantCard procedure={procedure} onChanged={() => loadProcedure()} />
 
         <View style={styles.section}>
           <View style={resStyles.sectionHeaderRow}>

@@ -21,3 +21,8 @@
 ## API Endpoints
 - Login: `POST /api/auth/login` with `{"identifier": "...", "password": "..."}`
 - Backend URL: Same as EXPO_PUBLIC_BACKEND_URL with `/api` prefix
+
+### Student (used as Case Assistant in tests)
+- **Identifier**: `Aaditya.patil`
+- **Password**: `Student@123`
+- **Role**: `student` — assistant on case "Assistant Flow Patient" (pid 6ab4bb620dc6e3397a201fa6)

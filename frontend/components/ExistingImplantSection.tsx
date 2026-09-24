@@ -242,6 +242,8 @@ type Props = {
     amount_paid: string;
     procedure_date: string;
     procedure_time: string;
+    assistant_id?: string;
+    assistant_name?: string;
     remark: string;
   };
   validatePatient: () => string | null;
@@ -786,6 +788,8 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
         amount_paid: parseFloat(patient.amount_paid),
         procedure_date: todayDate,
         procedure_time: todayTime,
+        assistant_id: patient.assistant_id || '',
+        assistant_name: patient.assistant_name || '',
         original_procedure_type: originalProcedure,
         existing_implants: implants.map(r => ({
           tooth: r.tooth,
