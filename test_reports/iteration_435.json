@@ -1,0 +1,36 @@
+{
+  "summary": "iter-Jun-2026 Assistant Logbook — Backend 8/8 and Frontend flows all PASS. Backend: /api/me/assistant-logbook returns correct totals & buckets for Aaditya (total=2, in_progress=2, operator 'Dr. Gaurav Pandey'), 403 for cross-student query, 200 with student_name 'Dr. Aaditya Patil' for supervisor Paresh, and /export returns text/csv with 'Assistant' header + 'Procedure Date/Registration No./Operator' columns; export also 403 cross-student. Frontend (mobile viewport 390x844): Aaditya → avatar tap → Profile shows 'Training Records' → 'Cases assisted' card (count 2, '0 completed · 2 in progress') → Assistant Logbook screen total=2, split correct, chips All(2)/Completed(0)/In progress(2)/Rejected(0), In-progress filter shows 2 cards, Completed shows empty text 'No cases in this category', tap case card → /procedures/<id> renders 'assistant-readonly-banner' (purple 'Assisting · read-only' banner). Gaurav → Profile shows Training Records with 0 count + 'No assisted cases yet…' text, logbook screen shows empty state 'No assisted cases yet.\\nWhen a colleague adds you as an assistant…'. Paresh (supervisor) → Profile does NOT render Training Records section (correct). Minor testability issue: dashboard.tsx line 77 uses raw `data-testid` prop on TouchableOpacity — RN Web does not forward it, so the avatar is only reachable via coord click / initials-text fallback; same for the Profile 'training-records-section' View — should use `testID` instead of/alongside `data-testid` for both.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Dashboard header avatar", "issue": "TouchableOpacity uses raw `data-testid=\"dashboard-profile-avatar\"` prop — React Native Web does not forward unknown props, so no `[data-testid=\"dashboard-profile-avatar\"]` node exists in the DOM. Playwright querySelector returned null; had to click by coordinates. Reference: /app/frontend/app/(tabs)/dashboard.tsx:77", "testID": "dashboard-profile-avatar", "priority": "MEDIUM"},
+      {"component": "Profile → Training Records section wrapper", "issue": "Outer <View> uses only `data-testid=\"training-records-section\"` (no `testID`). RN Web does not forward it to the DOM, so the selector returns null even though the section renders. Reference: /app/frontend/app/(tabs)/profile.tsx:218", "testID": "training-records-section", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_jun2026_assistant_logbook.py",
+    "/app/test_reports/pytest/iter_jun2026_assistant_logbook.xml"
+  ],
+  "action_items": [
+    "Add `testID=\"dashboard-profile-avatar\"` (in addition to or in place of `data-testid`) on the TouchableOpacity at /app/frontend/app/(tabs)/dashboard.tsx:77 so RN Web renders `data-testid` in the DOM — improves testability without changing behavior.",
+    "Add `testID=\"training-records-section\"` on the wrapper <View> at /app/frontend/app/(tabs)/profile.tsx:218 (same rationale). Feature works; only the testID selector is missing at DOM level."
+  ],
+  "critical_code_review_comments": [
+    "Backend endpoint correctly enforces RBAC (student sees own, supervisor/incharge/administrator may pass student_id, other students → 403, nurse → 403).",
+    "assistant_change_log iteration for `assisted_since` uses last matching entry — fine since only the latest add is meaningful.",
+    "CSV export re-uses the JSON handler (single source of truth) — clean.",
+    "server.py is 24,852 lines — >>700 line guideline; not new for this iteration but flagging for future refactor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_jun2026_assistant_logbook.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (3/3 role flows)"},
+  "seed_data_creation": "None — used existing seeded assistant cases for Aaditya.patil (Assistant Flow Patient + TEST_Assistant Case, both in_progress with operator Dr. Gaurav Pandey and supervisor Dr. Paresh Gandhi).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Assistant Logbook backend + UI green. Two low/medium-priority testID forwarding issues (data-testid vs testID) noted but do NOT block functionality — feature works end-to-end when clicking via coordinates or fallback. Pattern to reuse: RN Web only forwards `testID` (which becomes `data-testid`); raw `data-testid` on non-DOM RN components (View, TouchableOpacity, Text) is silently dropped. Use coordinate click (346,120) on 390×844 viewport as a workaround for avatar-open flows until testID is added.",
+  "rca_of_issue": "N/A — no bugs to RCA. Testability observation: React Native Web's createElement pipeline forwards only the `testID` prop as the `data-testid` DOM attribute; passing `data-testid` directly to RN primitives like <View>/<TouchableOpacity> is dropped by the props filter, so the attribute never lands in the DOM. Fix: switch to `testID` (or add both) on those two elements."
+}

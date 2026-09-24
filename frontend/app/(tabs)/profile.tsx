@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import BackToDashboard from '../../components/BackToDashboard';
+import AssistantLogbookCard from '../../components/AssistantLogbookCard';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function ProfileScreen() {
@@ -211,6 +212,14 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
         </View>
+
+        {/* iter-Jun-2026: Training Records — assistant logbook (PG students only) */}
+        {user?.role === 'student' && (
+          <View style={styles.section} testID="training-records-section" data-testid="training-records-section">
+            <Text style={styles.sectionTitle}>Training Records</Text>
+            <AssistantLogbookCard />
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Help</Text>

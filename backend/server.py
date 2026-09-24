@@ -18849,6 +18849,103 @@ async def get_unread_count(current_user: dict = Depends(get_current_user)):
     return {"count": count}
 
 # Dashboard Stats
+# ── iter-Jun-2026: Assistant Logbook (training record) ─────────────────────
+@api_router.get("/me/assistant-logbook")
+async def get_assistant_logbook(
+    student_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Count + list of cases the student assisted on. Students see their own;
+    supervisors / in-charge / administrators may pass `student_id` to review
+    a trainee's record. Excludes drafts and archived cases."""
+    role, uid = current_user["role"], current_user["_id"]
+    target = uid
+    if student_id and student_id != uid:
+        if role not in ("supervisor", "implant_incharge", "administrator"):
+            raise HTTPException(status_code=403, detail="Not permitted")
+        target = student_id
+    elif role == "nurse":
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+    student = await db.users.find_one({"_id": ObjectId(target)}, {"name": 1}) if ObjectId.is_valid(target) else None
+    query = {"assistant_id": target, "status": {"$ne": "draft"}, "archived": {"$ne": True}}
+    proj = {
+        "patient_name": 1, "registration_number": 1, "procedure_date": 1, "procedure_time": 1,
+        "implant_procedure_type": 1, "student_name": 1, "created_by_name": 1, "supervisor_name": 1,
+        "status": 1, "current_phase": 1, "assistant_notified_at": 1, "assistant_change_log": 1,
+        "num_implants": 1, "arch": 1,
+    }
+    docs = await db.procedures.find(query, proj).sort("procedure_date", -1).to_list(1000)
+
+    by_status = {"completed": 0, "in_progress": 0, "rejected": 0}
+    by_type: Dict[str, int] = {}
+    by_year: Dict[str, int] = {}
+    cases = []
+    for d in docs:
+        st = d.get("status") or ""
+        bucket = "completed" if st == "completed" else ("rejected" if st.startswith("rejected") else "in_progress")
+        by_status[bucket] += 1
+        ptype = d.get("implant_procedure_type") or "Other"
+        by_type[ptype] = by_type.get(ptype, 0) + 1
+        yr = (d.get("procedure_date") or "")[:4] or "Unknown"
+        by_year[yr] = by_year.get(yr, 0) + 1
+        added_at = None
+        for e in (d.get("assistant_change_log") or []):
+            if e.get("to_id") == target or (e.get("action") == "notified" and e.get("assistant_id") == target):
+                added_at = e.get("at")
+        cases.append({
+            "id": str(d["_id"]),
+            "patient_name": d.get("patient_name"),
+            "registration_number": d.get("registration_number"),
+            "procedure_date": d.get("procedure_date"),
+            "procedure_time": d.get("procedure_time"),
+            "implant_procedure_type": ptype,
+            "num_implants": d.get("num_implants"),
+            "arch": d.get("arch"),
+            "operator_name": d.get("student_name") or d.get("created_by_name"),
+            "supervisor_name": d.get("supervisor_name"),
+            "status": st,
+            "status_bucket": bucket,
+            "current_phase": d.get("current_phase"),
+            "assisted_since": added_at or (d["assistant_notified_at"].isoformat() if isinstance(d.get("assistant_notified_at"), datetime) else None),
+        })
+    return {
+        "student_id": target,
+        "student_name": (student or {}).get("name"),
+        "total": len(cases),
+        "by_status": by_status,
+        "by_procedure_type": dict(sorted(by_type.items(), key=lambda kv: -kv[1])),
+        "by_year": dict(sorted(by_year.items(), reverse=True)),
+        "cases": cases,
+    }
+
+
+@api_router.get("/me/assistant-logbook/export")
+async def export_assistant_logbook(
+    student_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """CSV export of the assistant logbook (training-record submission)."""
+    data = await get_assistant_logbook(student_id=student_id, current_user=current_user)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Assistant", data.get("student_name") or "", "Total cases assisted", data["total"]])
+    w.writerow([])
+    w.writerow(["Procedure Date", "Time", "Patient", "Registration No.", "Procedure Type", "No. of Implants", "Arch",
+                "Operator", "Supervisor", "Status", "Current Phase"])
+    for c in data["cases"]:
+        w.writerow([
+            c.get("procedure_date") or "", c.get("procedure_time") or "", c.get("patient_name") or "",
+            c.get("registration_number") or "", c.get("implant_procedure_type") or "", c.get("num_implants") or "",
+            c.get("arch") or "", c.get("operator_name") or "", c.get("supervisor_name") or "",
+            c.get("status") or "", c.get("current_phase") or "",
+        ])
+    buf.seek(0)
+    fname = f"assistant-logbook-{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     query = {}
