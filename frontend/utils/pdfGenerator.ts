@@ -4,6 +4,8 @@ import { Alert, Platform } from 'react-native';
 import { format } from 'date-fns';
 import { getImplantSite, getImplantSpec } from './implantPlan';
 import { impressionRows } from './impressionOptions';
+import api from './api';
+import { fmtBytes } from './scanUpload';
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
 
@@ -860,6 +862,24 @@ export const buildLabSlipHtml = (procedure: any): string => {
         </div>
       ` : ''}
 
+      ${procedure.lab_share_block ? `
+        <div class="ls-section" style="border: 2px solid #4527A0; border-radius: 8px; padding: 12px; page-break-inside: avoid;">
+          <h2 style="color: #4527A0;">Digital Scan Files</h2>
+          <div style="display: flex; gap: 16px; align-items: flex-start;">
+            <div style="flex: 1;">
+              ${(procedure.lab_share_block.files || []).length ? `
+                <div style="font-weight: bold; margin-bottom: 4px;">Attached files (${procedure.lab_share_block.files.length})</div>
+                <ul class="bullet-list">${procedure.lab_share_block.files.map((f: any) => `<li>${_esc(f.name)} <span style="color:#777">(${_esc(f.size_label)})</span></li>`).join('')}</ul>
+              ` : '<div style="color:#777">No files attached — see portal link / QR.</div>'}
+              ${procedure.lab_share_block.portal_link ? `<div style="margin-top: 6px;"><b>Scanner portal:</b> <a href="${_esc(procedure.lab_share_block.portal_link)}">${_esc(procedure.lab_share_block.portal_link)}</a></div>` : ''}
+              <div style="margin-top: 8px; font-size: 11px; word-break: break-all;"><b>Secure download link</b> (valid until ${_esc(String(procedure.lab_share_block.expires_at || '').slice(0, 10))}):<br/>${_esc(procedure.lab_share_block.url)}</div>
+              <div style="margin-top: 4px; font-size: 10px; color: #777;">Scan the QR or open the link to download the slip and all scan files as a ZIP. No login required.</div>
+            </div>
+            ${procedure.lab_share_block.qr_png_base64 ? `<img src="data:image/png;base64,${procedure.lab_share_block.qr_png_base64}" alt="QR" style="width: 120px; height: 120px;" />` : ''}
+          </div>
+        </div>
+      ` : ''}
+
       <div class="signature-row">
         <div class="sig-box">${procedure.student_name || procedure.created_by_name || '—'}<br /><span style="color: #888;">Prescribing Dentist</span></div>
         <div class="sig-box">${procedure.implant_incharge_name || procedure.supervisor_name || '—'}<br /><span style="color: #888;">Approving In-Charge</span></div>
@@ -873,9 +893,35 @@ export const buildLabSlipHtml = (procedure: any): string => {
   `;
 };
 
+/**
+ * iter-Jun-2026: for intraoral-scan cases, create/refresh the 30-day secure
+ * lab link (+QR) and gather the attached scan files so the slip can print a
+ * "Digital Scan Files" block. Returns null for conventional cases / errors.
+ */
+export const prepareLabShareBlock = async (procedure: any): Promise<any | null> => {
+  const pid = procedure?.id || procedure?._id;
+  if (!pid || procedure?.phase4_step1_data?.impression_type !== 'intraoral_scans') return null;
+  try {
+    const [share, summary] = await Promise.all([
+      api.post(`/procedures/${pid}/lab-share`),
+      api.get(`/procedures/${pid}/scan-files`),
+    ]);
+    const files = (summary.data?.files || []).map((f: any) => ({ name: f.name, size_label: fmtBytes(f.size) }));
+    return { ...share.data, files, portal_link: summary.data?.scan_portal_link || '' };
+  } catch (e) {
+    console.warn('lab share block unavailable', e);
+    return null;
+  }
+};
+
 export const generateLabSlipPDF = async (procedure: any) => {
   try {
-    const html = buildLabSlipHtml(procedure);
+    const labShare = procedure.lab_share_block === undefined ? await prepareLabShareBlock(procedure) : procedure.lab_share_block;
+    const html = buildLabSlipHtml({ ...procedure, lab_share_block: labShare });
+    if (labShare) {
+      // keep a copy of the slip so the lab download page can offer it too
+      api.put(`/procedures/${procedure.id || procedure._id}/lab-share/slip`, { slip_html: html }).catch(() => {});
+    }
     if (Platform.OS === 'web') {
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);

@@ -13,6 +13,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
 import ScannerPicker, { ScannerValue } from '../../../components/ScannerPicker';
+import ScanFilesSection from '../../../components/ScanFilesSection';
 import { IMPRESSION_TECHNIQUES, IMPRESSION_MATERIAL_GROUPS, SCAN_BODY_MATERIALS, SCAN_BODY_TYPES, SCAN_LEVELS } from '../../../utils/impressionOptions';
 // iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 4 Step 1.
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
@@ -955,6 +956,8 @@ export default function Phase4Step1Screen() {
                       </View>
                     </View>
                   ))}
+                  {/* iter-Jun-2026: attach STL/PLY exports + scanner portal link for the Lab Slip */}
+                  <ScanFilesSection procedureId={String(id)} canEdit compact />
                 </View>
               )}
             </View>

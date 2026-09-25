@@ -52,6 +52,7 @@ import Phase2EditModal from '../../components/Phase2EditModal';
 import ContributionTimelineCard from '../../components/ContributionTimelineCard';
 import FollowUpSection from '../../components/FollowUpSection';
 import AssistantCard from '../../components/AssistantCard';
+import ScanFilesSection from '../../components/ScanFilesSection';
 import AugmentationSection from '../../components/AugmentationSection';
 import AugmentationPhase2Review from '../../components/AugmentationPhase2Review';
 import TransferApprovalCard from '../../components/TransferApprovalCard';
@@ -4328,6 +4329,15 @@ export default function ProcedureDetailScreen() {
                 </View>
               );
             })()}
+
+            {/* iter-Jun-2026: digital scan files + secure lab link (intraoral-scan cases) */}
+            {procedure.phase4_step1_data?.impression_type === 'intraoral_scans' && (
+              <ScanFilesSection
+                procedureId={String(id)}
+                canEdit={!procedure.viewer_is_assistant && (user?.id === procedure.student_id || user?.id === procedure.created_by_id || ['implant_incharge', 'administrator'].includes(user?.role || ''))}
+                onChanged={() => loadProcedure()}
+              />
+            )}
 
             <TouchableOpacity
               style={{ backgroundColor: '#6A1B9A', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: (labSlipNote.trim().split(/\s+/).filter(Boolean).length > 150) ? 0.5 : 1 }}

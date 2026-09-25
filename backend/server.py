@@ -24715,6 +24715,29 @@ async def _internal_screenshots_index():
     return HTMLResponse(html)
 
 
+# iter-Jun-2026: Lab Slip Scan Files (STL/PLY attachments, secure lab link, lab directory, email lab)
+from lab_files import setup_lab_files  # noqa: E402
+
+
+async def _decode_query_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        uid = payload.get("user_id")
+        if uid:
+            u = await db.users.find_one({"_id": ObjectId(uid)}, {"password_hash": 0})
+            if u:
+                u["_id"] = str(u["_id"])
+                return u
+    except Exception:
+        return None
+    return None
+
+
+setup_lab_files(
+    app, api_router, db,
+    get_current_user=get_current_user, get_current_user_optional=get_current_user_optional,
+    log_access=log_access, secret_key=SECRET_KEY, uploads_dir=UPLOADS_DIR, decode_query_token=_decode_query_token,
+)
 app.include_router(api_router)
 
 app.add_middleware(

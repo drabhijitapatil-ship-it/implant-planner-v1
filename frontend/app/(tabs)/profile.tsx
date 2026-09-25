@@ -282,6 +282,16 @@ export default function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.legalRow}
+              onPress={() => router.push('/admin/labs' as any)}
+              data-testid="link-lab-directory"
+              testID="link-lab-directory"
+            >
+              <Ionicons name="business-outline" size={22} color="#1565C0" />
+              <Text style={styles.legalRowText}>Lab directory</Text>
+              <Ionicons name="chevron-forward" size={18} color="#999" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.legalRow}
               onPress={() => router.push('/admin/survival-analytics' as any)}
               data-testid="link-survival-analytics"
               testID="link-survival-analytics"

@@ -1,0 +1,32 @@
+{
+  "summary": "iter-Jun-2026 Lab Slip Scan Files — 29/29 backend tests PASS (chunked upload STL+PLY, base64 encoding, size/ext validation, missing chunk 400, Bearer + query-token download, unrelated student 403, supervisor read-only + DELETE 403, scan-link auto-https + invalid 400, lab-share create/QR/store slip/public HTML page/file/zip/slip/tampered 410/revoke recreate, lab directory RBAC + invalid email, email lab success + revoked 400 + emails_sent recorded, cleanup delete files+lab). Frontend: Gaurav Phase 4 Step 1 → IOS chip → scan-files-section renders with attach + link edit/save (persisted 'https://meditlink.com/case/frontend-test'). Compliance section is correctly HIDDEN for student Gaurav. Abhijit → Profile → link-lab-directory → /admin/labs form and Add-Lab button render. BUG FOUND in labs.tsx: TextInput loses focus/DOM-unmounts after each keystroke because the `Field` component is defined inside the render function (labs.tsx:40) — every setForm rerender recreates Field, remounting the TextInput. Also filed react_native_issue: `props.pointerEvents is deprecated` warning noted (not deprecated package, just style migration).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "admin/labs.tsx Field inner component", "issue": "`Field` is declared inside `LabDirectoryScreen`'s render (labs.tsx:40). Each keystroke triggers setForm → re-render → new Field function identity → React unmounts old TextInput and mounts a new one. On web this loses focus every keystroke and playwright errors with 'Element is not attached to the DOM'; on a real device users can only type one character at a time. Reference: /app/frontend/app/admin/labs.tsx:40-45", "testID": "lab-form-name / lab-form-email / lab-form-* ", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "labs.tsx / Field", "issue": "Inner component definition inside render causes TextInput remount per keystroke. Move `Field` OUT of the parent component (or inline the TextInputs, or wrap with useCallback + stable identity). Reference: /app/frontend/app/admin/labs.tsx:40"}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter_jun2026_labfiles.py", "/app/test_reports/pytest/iter_jun2026_labfiles.xml"],
+  "action_items": [
+    "Fix /app/frontend/app/admin/labs.tsx: move the `Field` component OUT of `LabDirectoryScreen` (or convert to a stable functional component passed props, or inline each TextInput). This unblocks Adding/Editing labs from the UI (currently the Admin can only type ONE character before losing focus).",
+    "After fix, re-run the frontend flow: Abhijit → Profile → Lab directory → add TEST_UI_Lab (delivered@resend.dev) → row appears → edit → remove.",
+    "Then verify end-to-end from case-detail Lab Prescription card (find a case where phase4_step1 approved + impression_type=='intraoral_scans'): lab-share-box → lab-share-create → lab-email-btn → lab-pick-<id> → Generate Lab Slip stores slip via PUT /lab-share/slip."
+  ],
+  "critical_code_review_comments": [
+    "labs.tsx: inner component `Field` defined inside render — anti-pattern causing input remount on every state update. Same pattern must be audited across the codebase.",
+    "ScanFilesSection.tsx (correct pattern): TextInput is inline, no remount issue.",
+    "lab_files.py: overall well-structured; MongoDB _id is excluded from responses; HMAC-signed tokens with nonce+expiry are validated correctly (revoke sets flag AND nonce mismatch); QR uses `qrcode` lib; email HTML is validated by _assert_safe_email (G2/G3). No issues found."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter_jun2026_labfiles.py"],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "~85% — scan-files section + link save + role gating verified; lab directory Add flow blocked by Field-remount bug"},
+  "seed_data_creation": "During backend tests: uploaded 2 files (TEST_upper.stl 6MB, TEST_bite.ply 200KB) then soft-deleted; created + deleted TEST_QA Lab; created + revoked 2 lab-share tokens on case 69cfde8b356c7405230a9dcc. Also set scan_portal_link to 'https://meditlink.com/case/1' (backend test) and 'https://meditlink.com/case/frontend-test' (frontend test) on that case — main agent may want to blank it if the seed case should stay clean.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite: pytest /app/backend/tests/test_iter_jun2026_labfiles.py (29 tests, ~11s). Case 69cfde8b356c7405230a9dcc owned by Gaurav.pandey is the primary seed. Aaditya.patil is correctly a NON-participant on this case → serves as the 'unrelated student → 403' probe. For frontend Lab Slip card end-to-end (case-detail lab-slip-card + Generate Lab Slip button), need a case with status ∈ {stage2_prosthetic_step1_approved, pending_final_delivery, completed} AND phase4_step1_data.impression_type == 'intraoral_scans' — none was searched for this iteration (blocked by the labs.tsx bug taking priority). After the Field bug is fixed, verify Add/Edit/Remove UI, then hunt an eligible case via /api/procedures?status=... as Abhijit.",
+  "rca_of_issue": "labs.tsx Field remount RCA — cause: `const Field = ({...}) => (<TextInput .../>)` is declared inside `LabDirectoryScreen`. React uses component identity for reconciliation; because the arrow function is recreated on every render, React sees a different component type at that tree position and unmounts+remounts the child, discarding the TextInput's native DOM node (and its focus / typed text buffer between events). Reproduction: open /admin/labs as Abhijit, tap Lab name field, type 'ab' → only 'a' (or none) appears and focus jumps out; playwright confirms via 'Element is not attached to the DOM' after the second .fill(). Fix: move `Field` outside the parent, pass `value` + `onChange` as props (or inline each TextInput block). Verified backend is unaffected — POST /labs works fine when called directly."
+}
