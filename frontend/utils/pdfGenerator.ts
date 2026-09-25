@@ -3,6 +3,7 @@ import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
 import { format } from 'date-fns';
 import { getImplantSite, getImplantSpec } from './implantPlan';
+import { impressionRows } from './impressionOptions';
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
 
@@ -421,7 +422,7 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
               ${procedure.phase4_step1_data.prosthetic_material ? `<tr><td class="info-label">Prosthetic Material:</td><td class="info-value">${procedure.phase4_step1_data.prosthetic_material}</td></tr>` : ''}
               ${procedure.phase4_step1_data.custom_abutment ? `<tr><td class="info-label">Custom Abutment:</td><td class="info-value">${procedure.phase4_step1_data.custom_abutment}</td></tr>` : ''}
               ${procedure.phase4_step1_data.overdenture_attachment ? `<tr><td class="info-label">Overdenture Attachment:</td><td class="info-value">${procedure.phase4_step1_data.overdenture_attachment}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.impression_type ? `<tr><td class="info-label">Impression Type:</td><td class="info-value">${procedure.phase4_step1_data.impression_type === 'intraoral_scans' ? 'Intraoral Scans' : 'Conventional Impressions'}</td></tr>` : ''}
+              ${impressionRows(procedure.phase4_step1_data).map(r => `<tr><td class="info-label">${_esc(r.label)}:</td><td class="info-value">${_esc(r.value)}</td></tr>`).join('')}
               ${procedure.phase4_step1_data.payment_complete !== undefined ? `<tr><td class="info-label">Payment Complete:</td><td class="info-value">${procedure.phase4_step1_data.payment_complete ? 'Yes' : 'No'}</td></tr>` : ''}
               ${procedure.phase4_step1_data.components_available !== undefined ? `<tr><td class="info-label">Components Available:</td><td class="info-value">${procedure.phase4_step1_data.components_available ? 'Yes' : 'No'}</td></tr>` : ''}
             </table>
@@ -583,11 +584,6 @@ export const printProcedurePDF = async (procedure: any) => {
 // the case-report HTML→PDF flow so it works on web (open) and
 // native (Print + Sharing) without any backend round-trip.
 // ─────────────────────────────────────────────────────────────────
-const _labelize = (val: string | undefined | null, map: Record<string, string>): string => {
-  if (!val) return '';
-  return map[val] || val.replace(/_/g, ' ');
-};
-
 export const buildLabSlipHtml = (procedure: any): string => {
   const p4 = procedure.phase4_step1_data || {};
   // iter-211: when the case originates from existing implants (Path A), the
@@ -654,31 +650,21 @@ export const buildLabSlipHtml = (procedure: any): string => {
   `;
   }).join('');
 
-  const trayLabel = _labelize(p4.conventional_tray_type, { open_tray: 'Open Tray', closed_tray: 'Closed Tray' });
-  const matLabel = _labelize(p4.impression_material, {
-    polyether: 'Polyether',
-    heavy_light_body: 'Heavy and Light body',
-    putty_light_body: 'Putty and Light body',
-  });
-  const impressionSummary = p4.impression_type === 'intraoral_scans'
-    ? 'Intra-Oral Digital Scans'
-    : `Conventional${trayLabel ? ` — ${trayLabel}` : ''}${matLabel ? ` (${matLabel})` : ''}`;
-
-  // iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-oral scan sub-fields — rendered
-  // as three bulleted lists (Type of Scan Body, Scan Type, Scan Level).
+  // iter-Jun-2026: structured impression block (shared labels with the case
+  // PDF and review card). Multi-value "Type of Scan Body" rendered as bullets.
+  const _impRows = impressionRows(p4);
+  const impressionSummary = _impRows.length ? _esc(_impRows[0].value) : '—';
   const _bulletList = (label: string, values: any) => {
     const arr: string[] = Array.isArray(values) ? values.map((v: any) => String(v || '').trim()).filter(Boolean) : [];
     if (arr.length === 0) return '';
     const items = arr.map(v => `<li>${_esc(v)}</li>`).join('');
     return `<div class="bullet-block"><div class="bullet-label">${_esc(label)}</div><ul class="bullet-list">${items}</ul></div>`;
   };
-  const scanSubfieldsHtml = p4.impression_type === 'intraoral_scans'
-    ? (
-        _bulletList('Type of Scan Body', p4.scan_body_types) +
-        _bulletList('Scan Type', p4.scan_types) +
-        _bulletList('Scan Level', p4.scan_levels)
-      )
-    : '';
+  const scanSubfieldsHtml = _impRows.slice(1).map(r =>
+    r.values && r.values.length > 1
+      ? _bulletList(r.label, r.values)
+      : `<div class="bullet-block"><span class="bullet-label">${_esc(r.label)}:</span> ${_esc(r.value)}</div>`
+  ).join('');
 
   // iter-202: Multi-Unit Abutment block — historically sourced from Phase 2
   // surgical capture (`procedure.phase2_data.multi_unit_abutment_*`). The lab

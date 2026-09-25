@@ -23,6 +23,7 @@ import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip
 import { useAuth } from '../../contexts/AuthContext';
 import { showUploadPicker } from '../../utils/uploadPicker';
 import { downloadConsentTemplate, printConsentTemplate } from '../../utils/consentPdf';
+import { impressionRows } from '../../utils/impressionOptions';
 import BackButton from '../../components/BackButton';
 import ImplantTraceabilityCard from '../../components/ImplantTraceabilityCard';
 import RadiographThumb from '../../components/RadiographThumb';
@@ -4208,27 +4209,15 @@ export default function ProcedureDetailScreen() {
                 {!!procedure.phase4_step1_data.overdenture_attachment && (
                   <InfoRow icon="link" label="Overdenture Attachment" value={procedure.phase4_step1_data.overdenture_attachment} fieldKey="phase4_step1_data.overdenture_attachment" />
                 )}
-                {!!procedure.phase4_step1_data.impression_type && (
-                  <InfoRow icon="scan" label="Impression Type" value={
-                    procedure.phase4_step1_data.impression_type === 'intraoral_scans'
-                      ? 'Intraoral Scans'
-                      : `Conventional Impressions${
-                          procedure.phase4_step1_data.conventional_tray_type
-                            ? ` (${procedure.phase4_step1_data.conventional_tray_type === 'open_tray' ? 'Open Tray' : 'Closed Tray'})`
-                            : ''
-                        }${
-                          procedure.phase4_step1_data.impression_material
-                            ? ` — ${
-                                {
-                                  polyether: 'Polyether',
-                                  heavy_light_body: 'Heavy and Light body',
-                                  putty_light_body: 'Putty and Light body',
-                                }[procedure.phase4_step1_data.impression_material as string] || procedure.phase4_step1_data.impression_material
-                              }`
-                            : ''
-                        }`
-                  } fieldKey="phase4_step1_data.impression_type" />
-                )}
+                {!!procedure.phase4_step1_data.impression_type && impressionRows(procedure.phase4_step1_data).map((row) => (
+                  <InfoRow
+                    key={row.label}
+                    icon={row.icon as any}
+                    label={row.label}
+                    value={row.value}
+                    fieldKey={row.label === 'Impression Type' ? 'phase4_step1_data.impression_type' : undefined}
+                  />
+                ))}
                 {procedure.phase4_step1_data.payment_complete !== undefined && (
                   <InfoRow icon="card" label="Payment Complete" value={procedure.phase4_step1_data.payment_complete ? 'Yes' : 'No'} fieldKey="phase4_step1_data.payment_complete" />
                 )}

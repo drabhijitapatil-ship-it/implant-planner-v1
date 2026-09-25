@@ -5,6 +5,11 @@ from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTM
 from dotenv import load_dotenv
 import io
 import csv
+from impression_options import (
+    INTRAORAL_SCANNERS, IMPRESSION_MATERIALS, LEGACY_MATERIAL_LABELS, IMPRESSION_MATERIAL_GROUPS,
+    IMPRESSION_TECHNIQUES, SCAN_BODY_MATERIALS, SCAN_BODY_TYPES, SCAN_LEVELS,
+    impression_rows, material_label, scanner_label,
+)
 import json
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -828,13 +833,20 @@ class Stage2ProstheticSubmit(BaseModel):
     # iter-191: tray sub-choice required when impression_type == 'conventional'.
     # Validated in submit_stage2_prosthetic; stored alongside impression_type.
     conventional_tray_type: Optional[str] = Field(None, max_length=20)  # open_tray / closed_tray
-    # iter-192: impression material — required when impression_type == 'conventional'.
-    # One of: polyether / heavy_light_body / putty_light_body.
-    impression_material: Optional[str] = Field(None, max_length=30)
-    # iter-Jun-2026 (v13, Chunk G, Ask 3): when impression_type ==
-    # 'intraoral_scans' the operator can further specify the scan modality.
-    # Each field is a multi-select list; validated only at UI level. Values
-    # are echoed to the Lab Slip PDF as a bulleted list.
+    # iter-Jun-2026: impression material — one of impression_options.IMPRESSION_MATERIALS,
+    # "Other" (+ impression_material_other), or a legacy iter-192 id.
+    impression_material: Optional[str] = Field(None, max_length=120)
+    impression_material_other: Optional[str] = Field(None, max_length=200)
+    # iter-Jun-2026: Intraoral scan structured sub-fields (all mandatory when
+    # impression_type == 'intraoral_scans').
+    ios_scanner_company: Optional[str] = Field(None, max_length=120)   # master-list company or "Other"
+    ios_scanner_company_other: Optional[str] = Field(None, max_length=200)
+    ios_scanner_model: Optional[str] = Field(None, max_length=120)     # master-list model or "Other"
+    ios_scanner_model_other: Optional[str] = Field(None, max_length=200)
+    ios_scan_body_material: Optional[str] = Field(None, max_length=30)  # PEEK / Metal / Hybrid
+    ios_scan_body_types: Optional[List[str]] = None                      # multi-select
+    ios_scan_level: Optional[str] = Field(None, max_length=40)           # Abutment / Implant / Multiunit level
+    # Legacy (pre-Jun-2026) multi-select lists — kept so old cases still render.
     scan_body_types: Optional[List[str]] = None      # PEEK / Metal / Hybrid
     scan_types: Optional[List[str]] = None           # Vertical Scan Body / Horizontal Scan Bodies (Flags) / Photogrammetry
     scan_levels: Optional[List[str]] = None          # Abutment/Multiunit Level / Implant Level
@@ -11441,13 +11453,9 @@ def _build_case_context(proc: dict) -> str:
         if p4.get('prosthetic_material'):
             parts.append(f"Prosthetic Material: {p4.get('prosthetic_material')}")
         if p4.get('impression_type'):
-            imp = p4.get('impression_type')
-            tray = p4.get('conventional_tray_type')
-            label = imp + (f" ({tray.replace('_', ' ')})" if imp == 'conventional' and tray else '')
-            parts.append(f"Impression Type: {label}")
-            mat = p4.get('impression_material')
-            if imp == 'conventional' and mat:
-                parts.append(f"Impression Material: {mat.replace('_', ' ')}")
+            # iter-Jun-2026: shared structured rows (technique/material or scanner/scan-body/level)
+            for lbl, val in impression_rows(p4):
+                parts.append(f"{lbl}: {val}")
         if p4.get('custom_abutment'):
             parts.append(f"Custom Abutment: {p4.get('custom_abutment')}")
         if p4.get('overdenture_attachment'):
@@ -12456,6 +12464,148 @@ async def list_implant_catalog(current_user: dict = Depends(get_current_user)):
 
 _TRACE_FIELDS = {"gtin", "lot", "serial", "expiry", "mfg_date", "raw", "model_brand",
                  "model_system", "model_label", "label_photo", "label_photo_name", "source", "scanned_at"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# iter-Jun-2026: Intraoral Scanner master list (Phase 4 Step 1 → "Intraoral
+# Scanner Used"). Seeded from impression_options.INTRAORAL_SCANNERS; "Other"
+# entries typed by users are stored as `pending` and promoted to `verified`
+# by Implant In-Charge / Administrator from the admin screen.
+# ═══════════════════════════════════════════════════════════════════════════
+@app.on_event("startup")
+async def seed_intraoral_scanners_on_startup():
+    """Idempotent upsert of the scanner master list (never touches user-added rows)."""
+    try:
+        await db.intraoral_scanners.create_index([("company_key", 1), ("model_key", 1)], unique=True)
+        n = 0
+        for ci, (company, models) in enumerate(INTRAORAL_SCANNERS):
+            for mi, model in enumerate(models):
+                await db.intraoral_scanners.update_one(
+                    {"company_key": company.lower(), "model_key": model.lower()},
+                    {"$set": {"company": company, "model": model, "status": "verified",
+                              "source": "seed", "company_order": ci, "model_order": mi},
+                     "$setOnInsert": {"created_at": datetime.utcnow()}},
+                    upsert=True,
+                )
+                n += 1
+        logging.info("intraoral-scanners: seeded/updated %d entries", n)
+    except Exception as exc:  # pragma: no cover
+        logging.warning("intraoral scanner seed skipped: %s", exc)
+
+
+@api_router.get("/intraoral-scanners")
+async def list_intraoral_scanners(current_user: dict = Depends(get_current_user)):
+    """Verified scanners grouped by company, in master-list order (user-approved
+    companies appended alphabetically)."""
+    docs = await db.intraoral_scanners.find({"status": "verified"}).sort(
+        [("company_order", 1), ("company", 1), ("model_order", 1), ("model", 1)]
+    ).to_list(2000)
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for d in docs:
+        g = grouped.setdefault(d["company"], {"company": d["company"], "models": []})
+        if d["model"] not in g["models"]:
+            g["models"].append(d["model"])
+    return list(grouped.values())
+
+
+@api_router.get("/impression-options")
+async def get_impression_options(current_user: dict = Depends(get_current_user)):
+    """Static option lists for Phase 4 Step 1 impression capture."""
+    return {
+        "techniques": [{"id": k, "label": v} for k, v in IMPRESSION_TECHNIQUES.items()],
+        "material_groups": [{"family": f, "options": o} for f, o in IMPRESSION_MATERIAL_GROUPS],
+        "scan_body_materials": SCAN_BODY_MATERIALS,
+        "scan_body_types": SCAN_BODY_TYPES,
+        "scan_levels": SCAN_LEVELS,
+    }
+
+
+async def _suggest_scanner_if_other(data, procedure_id: str, current_user: dict) -> None:
+    """When the operator typed an 'Other' company/model, store a pending row
+    (deduped case-insensitively). If an identical verified row already exists,
+    silently normalise the payload to it."""
+    company = (data.ios_scanner_company or "").strip()
+    model = (data.ios_scanner_model or "").strip()
+    if company == "Other":
+        company = (data.ios_scanner_company_other or "").strip()
+    if model == "Other":
+        model = (data.ios_scanner_model_other or "").strip()
+    if not company or not model:
+        return
+    if data.ios_scanner_company != "Other" and data.ios_scanner_model != "Other":
+        return
+    existing = await db.intraoral_scanners.find_one({"company_key": company.lower(), "model_key": model.lower()})
+    if existing:
+        if existing.get("status") == "verified":
+            data.ios_scanner_company, data.ios_scanner_model = existing["company"], existing["model"]
+            data.ios_scanner_company_other = data.ios_scanner_model_other = None
+        else:
+            await db.intraoral_scanners.update_one({"_id": existing["_id"]}, {"$inc": {"uses": 1}})
+        return
+    await db.intraoral_scanners.insert_one({
+        "company": company, "model": model,
+        "company_key": company.lower(), "model_key": model.lower(),
+        "status": "pending", "source": "user", "uses": 1,
+        "company_order": 9999, "model_order": 9999,
+        "suggested_by": current_user["_id"], "suggested_by_name": current_user.get("name"),
+        "procedure_id": procedure_id, "created_at": datetime.utcnow(),
+    })
+
+
+@api_router.get("/intraoral-scanners/pending")
+async def list_pending_scanners(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    docs = await db.intraoral_scanners.find({"status": {"$in": ["pending", "rejected"]}}).sort("created_at", -1).to_list(500)
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return docs
+
+
+class ScannerReview(BaseModel):
+    company: Optional[str] = Field(None, max_length=120)   # optional corrected spelling
+    model: Optional[str] = Field(None, max_length=120)
+
+
+@api_router.post("/intraoral-scanners/{scanner_id}/approve")
+async def approve_scanner(scanner_id: str, body: ScannerReview, request: Request, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    d = await db.intraoral_scanners.find_one({"_id": ObjectId(scanner_id)})
+    if not d:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    company = (body.company or d["company"]).strip()
+    model = (body.model or d["model"]).strip()
+    dup = await db.intraoral_scanners.find_one({
+        "company_key": company.lower(), "model_key": model.lower(), "_id": {"$ne": d["_id"]}, "status": "verified",
+    })
+    if dup:
+        await db.intraoral_scanners.delete_one({"_id": d["_id"]})
+        return {"ok": True, "merged_into": str(dup["_id"])}
+    # keep company order aligned with an existing verified company if present
+    same_company = await db.intraoral_scanners.find_one({"company_key": company.lower(), "status": "verified"})
+    await db.intraoral_scanners.update_one({"_id": d["_id"]}, {"$set": {
+        "company": company, "model": model, "company_key": company.lower(), "model_key": model.lower(),
+        "status": "verified", "company_order": (same_company or {}).get("company_order", 9999),
+        "reviewed_by": current_user["_id"], "reviewed_by_name": current_user.get("name"), "reviewed_at": datetime.utcnow(),
+    }})
+    await log_access(action="scanner_approved", resource_type="intraoral_scanner", resource_id=scanner_id,
+                     user=current_user, request=request, extra={"company": company, "model": model})
+    return {"ok": True}
+
+
+@api_router.post("/intraoral-scanners/{scanner_id}/reject")
+async def reject_scanner(scanner_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    r = await db.intraoral_scanners.update_one(
+        {"_id": ObjectId(scanner_id), "status": {"$ne": "verified"}},
+        {"$set": {"status": "rejected", "reviewed_by": current_user["_id"], "reviewed_by_name": current_user.get("name"), "reviewed_at": datetime.utcnow()}},
+    )
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    await log_access(action="scanner_rejected", resource_type="intraoral_scanner", resource_id=scanner_id, user=current_user, request=request)
+    return {"ok": True}
 
 
 class GtinMapIn(BaseModel):
@@ -15156,38 +15306,18 @@ async def generate_case_report(
         if p4s1.get("overdenture_attachment"):
             add_field("Overdenture Attachment", p4s1["overdenture_attachment"])
         if p4s1.get("impression_type"):
-            imp_type = "Intraoral Scans" if p4s1["impression_type"] == "intraoral_scans" else "Conventional Impressions"
-            tray = p4s1.get("conventional_tray_type")
-            if p4s1["impression_type"] == "conventional" and tray:
-                tray_label = "Open Tray" if tray == "open_tray" else "Closed Tray"
-                imp_type = f"{imp_type} ({tray_label})"
-            add_field("Impression Type", imp_type)
-            # iter-192: impression material (conventional only)
-            mat = p4s1.get("impression_material")
-            if p4s1["impression_type"] == "conventional" and mat:
-                mat_label = {
-                    "polyether": "Polyether",
-                    "heavy_light_body": "Heavy and Light body",
-                    "putty_light_body": "Putty and Light body",
-                }.get(mat, mat)
-                add_field("Impression Material", mat_label)
-            # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — rendered
-            # as bulleted lists per user's preference.
-            if p4s1["impression_type"] == "intraoral_scans":
-                def _bullet_list(label: str, values):
-                    if not values:
-                        return
+            # iter-Jun-2026: structured impression block shared with the case PDF.
+            # Multi-value "Type of Scan Body" is rendered as bullets for the lab.
+            for lbl, val in impression_rows(p4s1):
+                if lbl == "Type of Scan Body" and (p4s1.get("ios_scan_body_types") or p4s1.get("scan_types")):
                     pdf.set_font("Arial", "B", 10)
-                    pdf.cell(0, 6, safe(f"{label}:"), ln=True)
+                    pdf.cell(0, 6, safe(f"{lbl}:"), ln=True)
                     pdf.set_font("Arial", "", 10)
-                    for v in values:
-                        v_str = str(v or "").strip()
-                        if v_str:
-                            pdf.cell(6, 5, "", ln=False)  # indent
-                            pdf.cell(0, 5, safe(f"- {v_str}"), ln=True)
-                _bullet_list("Type of Scan Body", p4s1.get("scan_body_types"))
-                _bullet_list("Scan Type", p4s1.get("scan_types"))
-                _bullet_list("Scan Level", p4s1.get("scan_levels"))
+                    for v in (p4s1.get("ios_scan_body_types") or p4s1.get("scan_types") or []):
+                        pdf.cell(6, 5, "", ln=False)
+                        pdf.cell(0, 5, safe(f"- {v}"), ln=True)
+                else:
+                    add_field(lbl, val)
         if p4s1.get("payment_complete") is not None:
             add_field("Payment Complete", "Yes" if p4s1["payment_complete"] else "No")
         if p4s1.get("components_available") is not None:
@@ -16895,14 +17025,31 @@ async def submit_stage2_prosthetic(
         if data.conventional_tray_type not in ("open_tray", "closed_tray"):
             raise HTTPException(
                 status_code=400,
-                detail="Please choose Open tray or Closed tray for the conventional impression.",
+                detail="Please choose the impression technique (Open Tray / Direct or Closed Tray / Indirect).",
             )
-        # iter-192: impression material is also mandatory for conventional impressions.
-        if data.impression_material not in ("polyether", "heavy_light_body", "putty_light_body"):
-            raise HTTPException(
-                status_code=400,
-                detail="Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).",
-            )
+        # iter-Jun-2026: structured material list + Other (free text).
+        if data.impression_material == "Other":
+            if not (data.impression_material_other or "").strip():
+                raise HTTPException(status_code=400, detail="Please describe the impression material under 'Other'.")
+        elif data.impression_material not in IMPRESSION_MATERIALS and data.impression_material not in LEGACY_MATERIAL_LABELS:
+            raise HTTPException(status_code=400, detail="Please choose an impression material.")
+    elif data.impression_type == "intraoral_scans":
+        # iter-Jun-2026: all four intraoral-scan sub-sections are mandatory.
+        if not (data.ios_scanner_company or "").strip():
+            raise HTTPException(status_code=400, detail="Please select the intraoral scanner company.")
+        if data.ios_scanner_company == "Other" and not (data.ios_scanner_company_other or "").strip():
+            raise HTTPException(status_code=400, detail="Please enter the scanner company under 'Other'.")
+        if not (data.ios_scanner_model or "").strip():
+            raise HTTPException(status_code=400, detail="Please select the intraoral scanner model.")
+        if data.ios_scanner_model == "Other" and not (data.ios_scanner_model_other or "").strip():
+            raise HTTPException(status_code=400, detail="Please enter the scanner model under 'Other'.")
+        if data.ios_scan_body_material not in SCAN_BODY_MATERIALS:
+            raise HTTPException(status_code=400, detail="Please select the scan body material (PEEK, Metal or Hybrid).")
+        sbt = [t for t in (data.ios_scan_body_types or []) if t in SCAN_BODY_TYPES]
+        if not sbt:
+            raise HTTPException(status_code=400, detail="Please select at least one type of scan body.")
+        if data.ios_scan_level not in SCAN_LEVELS:
+            raise HTTPException(status_code=400, detail="Please select the scan level (Abutment, Implant or Multiunit level).")
 
     # iter-194: shade selection is mandatory for both submit and save_only paths.
     sv = [s for s in (data.shade_values or []) if s and s.strip()]
@@ -16915,6 +17062,10 @@ async def submit_stage2_prosthetic(
             raise HTTPException(status_code=400, detail="Please record at least one implant shade.")
 
     # Save Phase 4 Step 1 data
+    _is_ios = data.impression_type == "intraoral_scans"
+    if _is_ios:
+        # iter-Jun-2026: learn "Other" scanners as pending suggestions for In-Charge review.
+        await _suggest_scanner_if_other(data, procedure_id, current_user)
     phase4_step1_data = {
         "final_prosthetic_plan": data.final_prosthetic_plan,
         "prosthetic_material": data.prosthetic_material,
@@ -16933,20 +17084,38 @@ async def submit_stage2_prosthetic(
         "impression_material": (
             data.impression_material if data.impression_type == "conventional" else None
         ),
-        # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — persisted
-        # only when impression_type == 'intraoral_scans'. Nulled out on
-        # switch back to conventional so we don't leak stale data.
+        "impression_material_other": (
+            (data.impression_material_other or "").strip() or None
+            if data.impression_type == "conventional" and data.impression_material == "Other" else None
+        ),
+        # iter-Jun-2026: structured intraoral-scan fields (nulled when conventional).
+        "ios_scanner_company": (data.ios_scanner_company or "").strip() or None if _is_ios else None,
+        "ios_scanner_company_other": (
+            (data.ios_scanner_company_other or "").strip() or None
+            if _is_ios and data.ios_scanner_company == "Other" else None
+        ),
+        "ios_scanner_model": (data.ios_scanner_model or "").strip() or None if _is_ios else None,
+        "ios_scanner_model_other": (
+            (data.ios_scanner_model_other or "").strip() or None
+            if _is_ios and data.ios_scanner_model == "Other" else None
+        ),
+        "ios_scan_body_material": data.ios_scan_body_material if _is_ios else None,
+        "ios_scan_body_types": (
+            [t for t in (data.ios_scan_body_types or []) if t in SCAN_BODY_TYPES] if _is_ios else None
+        ),
+        "ios_scan_level": data.ios_scan_level if _is_ios else None,
+        # Legacy lists — only echoed back if the client still sends them.
         "scan_body_types": (
             [s.strip() for s in (data.scan_body_types or [])]
-            if data.impression_type == "intraoral_scans" else None
+            if _is_ios and data.scan_body_types else None
         ),
         "scan_types": (
             [s.strip() for s in (data.scan_types or [])]
-            if data.impression_type == "intraoral_scans" else None
+            if _is_ios and data.scan_types else None
         ),
         "scan_levels": (
             [s.strip() for s in (data.scan_levels or [])]
-            if data.impression_type == "intraoral_scans" else None
+            if _is_ios and data.scan_levels else None
         ),
         # iter-194: shade is always persisted (mandatory), with the layout flag
         # so renderers can label slots correctly (Anterior/Posterior vs per implant).
@@ -18500,6 +18669,116 @@ async def get_augmentation_analytics(
     }
     await log_access(
         action="analytics_view", outcome="success", resource_type="augmentation_analytics",
+        resource_id="global", user=current_user, request=request,
+        extra={"from_date": from_date, "to_date": to_date},
+    )
+    return result
+
+
+# ── iter-Jun-2026: Impressions & intraoral-scanner analytics ────────────────
+@api_router.get("/analytics/impressions")
+async def get_impression_analytics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """IOS vs conventional split, IOS usage by scanner (company / model),
+    impression-material trends, technique, scan-body and scan-level mix,
+    plus a monthly trend. Role-scoped like the other analytics panes."""
+    role = current_user.get("role")
+    if role not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    match: Dict[str, Any] = {"archived": {"$ne": True}, "phase4_step1_data.impression_type": {"$in": ["conventional", "intraoral_scans"]}}
+    uid = str(current_user.get("_id") or "")
+    uname = current_user.get("name") or current_user.get("username")
+    if role == "student":
+        match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+    elif role == "supervisor":
+        match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["procedure_date"] = date_clause
+    procs = await db.procedures.find(match, {
+        "phase4_step1_data": 1, "stage2_prosthetic_submitted_at": 1, "procedure_date": 1,
+        "implant_procedure_type": 1, "student_name": 1,
+    }).to_list(20000)
+
+    def bump(d: Dict[str, int], k: Optional[str]):
+        if k:
+            d[k] = d.get(k, 0) + 1
+
+    def top(d: Dict[str, int]):
+        return [{"name": k, "count": v} for k, v in sorted(d.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+    total = ios = conv = 0
+    by_company: Dict[str, int] = {}
+    by_scanner: Dict[str, int] = {}
+    by_material: Dict[str, int] = {}
+    by_family: Dict[str, int] = {}
+    by_technique: Dict[str, int] = {}
+    by_sb_material: Dict[str, int] = {}
+    by_sb_type: Dict[str, int] = {}
+    by_level: Dict[str, int] = {}
+    by_ptype: Dict[str, Dict[str, int]] = {}
+    monthly: Dict[str, Dict[str, int]] = {}
+    for p in procs:
+        p4 = p.get("phase4_step1_data") or {}
+        imp = p4.get("impression_type")
+        total += 1
+        sub = p.get("stage2_prosthetic_submitted_at")
+        month_src = sub.strftime("%Y-%m") if isinstance(sub, datetime) else (p.get("procedure_date") or "")[:7]
+        m = monthly.setdefault(month_src or "unknown", {"intraoral": 0, "conventional": 0})
+        pt = by_ptype.setdefault(p.get("implant_procedure_type") or "Other", {"intraoral": 0, "conventional": 0})
+        if imp == "intraoral_scans":
+            ios += 1
+            m["intraoral"] += 1
+            pt["intraoral"] += 1
+            comp = p4.get("ios_scanner_company")
+            if comp == "Other":
+                comp = p4.get("ios_scanner_company_other") or "Other"
+            bump(by_company, comp)
+            bump(by_scanner, scanner_label(p4) or None)
+            bump(by_sb_material, p4.get("ios_scan_body_material") or ", ".join(p4.get("scan_body_types") or []) or None)
+            for t in (p4.get("ios_scan_body_types") or p4.get("scan_types") or []):
+                bump(by_sb_type, t)
+            bump(by_level, p4.get("ios_scan_level") or ", ".join(p4.get("scan_levels") or []) or None)
+        else:
+            conv += 1
+            m["conventional"] += 1
+            pt["conventional"] += 1
+            bump(by_technique, IMPRESSION_TECHNIQUES.get(p4.get("conventional_tray_type") or "", p4.get("conventional_tray_type")))
+            mat = material_label(p4)
+            bump(by_material, mat or None)
+            if mat:
+                fam = "Polyether" if "polyether" in mat.lower() else (
+                    "Condensation Silicone" if "condensation" in mat.lower() else (
+                        "PVS / Addition Silicone" if ("pvs" in mat.lower() or "addition" in mat.lower() or mat in ("Heavy and Light body", "Putty and Light body")) else "Other"))
+                bump(by_family, fam)
+
+    result = {
+        "summary": {
+            "total": total, "intraoral": ios, "conventional": conv,
+            "intraoral_pct": round(ios * 100 / total, 1) if total else None,
+            "distinct_scanners": len(by_scanner),
+        },
+        "scanners_by_company": top(by_company),
+        "scanners": top(by_scanner),
+        "materials": top(by_material),
+        "material_families": top(by_family),
+        "techniques": top(by_technique),
+        "scan_body_materials": top(by_sb_material),
+        "scan_body_types": top(by_sb_type),
+        "scan_levels": top(by_level),
+        "by_procedure_type": [{"name": k, **v} for k, v in sorted(by_ptype.items())],
+        "monthly": [{"month": k, **v} for k, v in sorted(monthly.items()) if k != "unknown"],
+    }
+    await log_access(
+        action="analytics_view", outcome="success", resource_type="impression_analytics",
         resource_id="global", user=current_user, request=request,
         extra={"from_date": from_date, "to_date": to_date},
     )

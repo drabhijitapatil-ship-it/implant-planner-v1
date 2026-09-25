@@ -29,7 +29,7 @@ import { downloadAuthenticated } from '../../utils/csvDownload';
 import CalendarPicker from '../../components/CalendarPicker';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'augmentation' | 'benchmarks' | 'export';
+type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'augmentation' | 'impressions' | 'benchmarks' | 'export';
 
 const SECTIONS: { key: Section; label: string; icon: IoniconsIconName; facultyOnly?: boolean }[] = [
   { key: 'km', label: 'Kaplan-Meier', icon: 'pulse-outline' },
@@ -43,6 +43,7 @@ const SECTIONS: { key: Section; label: string; icon: IoniconsIconName; facultyOn
   { key: 'followup', label: 'Follow-up', icon: 'repeat-outline' },
   { key: 'adherence', label: 'Plan Adherence', icon: 'git-compare-outline' },
   { key: 'augmentation', label: 'Augmentation', icon: 'bandage-outline' },
+  { key: 'impressions', label: 'Impressions & Scanners', icon: 'scan-outline' },
   { key: 'benchmarks', label: 'Benchmarks', icon: 'ribbon-outline' },
   { key: 'export', label: 'Research Export', icon: 'download-outline' },
 ];
@@ -132,6 +133,7 @@ export default function AdvancedAnalyticsHub() {
         {section === 'failures' && <FailurePane fromDate={fromDate} toDate={toDate} />}
         {section === 'followup' && <FollowUpPane fromDate={fromDate} toDate={toDate} />}
         {section === 'augmentation' && <AugmentationPane fromDate={fromDate} toDate={toDate} />}
+        {section === 'impressions' && <ImpressionsPane fromDate={fromDate} toDate={toDate} />}
         {section === 'adherence' && <AdherencePane fromDate={fromDate} toDate={toDate} />}
         {section === 'benchmarks' && <BenchmarksPane fromDate={fromDate} toDate={toDate} />}
         {section === 'export' && <ResearchExportPane fromDate={fromDate} toDate={toDate} />}
@@ -1244,6 +1246,130 @@ function AugmentationPane({ fromDate, toDate }: { fromDate: string; toDate: stri
             </View>
           ))}
       </SectionCard>
+    </View>
+  );
+}
+
+// iter-Jun-2026 — Phase 4 Step 1 impression analytics: IOS vs conventional,
+// IOS usage by scanner (company / model) and impression-material trends.
+function ImpressionsPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const r = await api.get('/analytics/impressions', { params });
+      setData(r.data);
+    } finally { setLoading(false); }
+  }, [fromDate, toDate]);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
+  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  const sm = data.summary || {};
+  const slug = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+  const Pareto = ({ rows, color, testPrefix }: { rows: any[]; color: string; testPrefix: string }) => {
+    if (!rows?.length) return <EmptyMsg />;
+    const max = Math.max(1, ...rows.map((r: any) => r.count));
+    const total = rows.reduce((a: number, r: any) => a + r.count, 0) || 1;
+    return (
+      <>
+        {rows.map((r: any) => (
+          <View key={r.name} style={{ marginBottom: 8 }} testID={`${testPrefix}-${slug(r.name)}`}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={s.paretoLbl} numberOfLines={2}>{r.name}</Text>
+              <Text style={s.paretoRight}>{r.count} · {Math.round((r.count / total) * 100)}%</Text>
+            </View>
+            <View style={s.paretoBar}>
+              <View style={[s.paretoBarFill, { width: `${(r.count / max) * 100}%`, backgroundColor: color }]} />
+            </View>
+          </View>
+        ))}
+      </>
+    );
+  };
+
+  const monthly: any[] = data.monthly || [];
+  const maxMonth = Math.max(1, ...monthly.map((m: any) => m.intraoral + m.conventional));
+
+  return (
+    <View style={s.pane} testID="impressions-analytics-pane">
+      <SectionCard title="Impression modality" hint="Phase 4 Step 1 — final impression method recorded per case.">
+        <View style={s.bucketsRow}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{sm.total ?? 0}</Text><Text style={s.bucketLbl}>Cases with impressions</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#2E7D32' }]}>{sm.intraoral ?? 0}</Text><Text style={s.bucketLbl}>Intraoral scans{sm.intraoral_pct != null ? ` (${sm.intraoral_pct}%)` : ''}</Text></View>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#E65100' }]}>{sm.conventional ?? 0}</Text><Text style={s.bucketLbl}>Conventional</Text></View>
+        </View>
+        {monthly.length > 0 ? (
+          <View style={{ marginTop: 14 }}>
+            <Text style={s.failN}>Monthly trend — green = intraoral scan, orange = conventional</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 90, marginTop: 8 }}>
+              {monthly.slice(-12).map((m: any) => (
+                <View key={m.month} style={{ flex: 1, alignItems: 'center' }} testID={`imp-month-${m.month}`}>
+                  <View style={{ width: '100%', height: 70, justifyContent: 'flex-end' }}>
+                    <View style={{ height: `${(m.conventional / maxMonth) * 100}%`, backgroundColor: '#FB8C00', borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />
+                    <View style={{ height: `${(m.intraoral / maxMonth) * 100}%`, backgroundColor: '#43A047' }} />
+                  </View>
+                  <Text style={{ fontSize: 8, color: '#78909C', marginTop: 3 }}>{m.month.slice(2).replace('-', '/')}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="IOS usage by scanner" hint={`${sm.distinct_scanners ?? 0} distinct scanner model(s) recorded.`}>
+        <Pareto rows={data.scanners || []} color="#2E7D32" testPrefix="imp-scanner" />
+        {(data.scanners_by_company || []).length > 1 ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={[s.failName, { marginBottom: 6 }]}>By company</Text>
+            <Pareto rows={data.scanners_by_company || []} color="#00838F" testPrefix="imp-company" />
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="Impression material trends" hint="Conventional impressions — material used (structured list + Other).">
+        <Pareto rows={data.materials || []} color="#E65100" testPrefix="imp-material" />
+        {(data.material_families || []).length > 1 ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={[s.failName, { marginBottom: 6 }]}>By material family</Text>
+            <Pareto rows={data.material_families || []} color="#8E24AA" testPrefix="imp-family" />
+          </View>
+        ) : null}
+        {(data.techniques || []).length ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={[s.failName, { marginBottom: 6 }]}>Impression technique</Text>
+            <Pareto rows={data.techniques || []} color="#6D4C41" testPrefix="imp-technique" />
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="Digital workflow details" hint="Scan body material, type of scan body and scan level for intraoral-scan cases.">
+        <Text style={[s.failName, { marginBottom: 6 }]}>Scan body material</Text>
+        <Pareto rows={data.scan_body_materials || []} color="#1E88E5" testPrefix="imp-sbm" />
+        <Text style={[s.failName, { marginBottom: 6, marginTop: 12 }]}>Type of scan body</Text>
+        <Pareto rows={data.scan_body_types || []} color="#5E35B1" testPrefix="imp-sbt" />
+        <Text style={[s.failName, { marginBottom: 6, marginTop: 12 }]}>Scan level</Text>
+        <Pareto rows={data.scan_levels || []} color="#00838F" testPrefix="imp-level" />
+      </SectionCard>
+
+      {(data.by_procedure_type || []).length ? (
+        <SectionCard title="Modality by procedure type" hint="Intraoral vs conventional split per implant procedure type.">
+          {(data.by_procedure_type || []).map((r: any) => (
+            <View key={r.name} style={s.failRow} testID={`imp-ptype-${slug(r.name)}`}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{r.name}</Text>
+                <Text style={s.failN}>IOS {r.intraoral} · conventional {r.conventional}</Text>
+              </View>
+              <Text style={[s.failRate, { color: '#2E7D32' }]}>{Math.round((r.intraoral / Math.max(1, r.intraoral + r.conventional)) * 100)}% IOS</Text>
+            </View>
+          ))}
+        </SectionCard>
+      ) : null}
     </View>
   );
 }

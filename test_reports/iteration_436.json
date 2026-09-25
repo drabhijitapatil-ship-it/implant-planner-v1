@@ -1,0 +1,35 @@
+{
+  "summary": "iter-Jun-2026 Phase 4 Step 1 (Prosthetic Planning) Impressions + Intraoral scanner learning. Backend fully covered by /app/backend/tests/test_iter_jun2026_impressions_ios.py: 18/18 tests pass — master lists (35 companies, iTero=5, 3Shape=6, Medit=7; impression-options with 2 techniques, 3 material groups totalling 8 materials, 3/3/3 chip lists), full validation matrix (missing scanner company / other-empty / missing scan-body material / empty scan-body types / missing scan level / conventional missing tray / bad material / Other-without-text), happy paths (IOS 3Shape/TRIOS 5 + closed_tray Polyether Medium + Other/Custom mix — all persisted correctly with correct null-on-switch semantics), scanner learning end-to-end (Other/Other suggestion → pending visible to in-charge but 403 for student → approve with corrected model 'QA-1 Pro' → verified list contains new company/model → Other-with-matching-text auto-normalises company/model and clears *_other → separate reject flow), analytics/impressions (in-charge summary.total>=1, keys scanners/materials/scan_levels/monthly present; student 200 scoped). Cleanup: source='user' rows deleted from intraoral_scanners at end of run. Frontend (390x844): login as Gaurav.pandey succeeds and lands on /dashboard; /procedures/submit-stage2-prosthetic/69cfde8b356c7405230a9dcc renders Impressions section; Conventional → tray-open_tray + tray-closed_tray cards with new labels; closed_tray reveals grouped materials — all 8 testIDs found (pvs-.../polyether-.../condensation-...); Other → impression-material-other-input appears. Intra-Oral Scans path renders ScannerPicker: scanner-company-dropdown opens, scanner-company-search filters and scanner-company-medit selectable; after picking Medit the model dropdown label switches to 'Select Medit model'. Chip rows visible (PEEK/Metal/Hybrid, three scan-body-type chips, three scan-level chips). Case detail rows verified via API-side impression_rows helper. Analytics 'Impressions & Scanners' pane testID `impressions-analytics-pane` is present in code. No React Native red-screen; only pre-existing deprecation warnings from RN Web (shadow*, useNativeDriver, style.tintColor, style.resizeMode, props.pointerEvents) — not regressions from this iteration.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ScannerPicker model dropdown", "issue": "After picking a company from scanner-company-dropdown, the ScannerPicker model dropdown occasionally needs an explicit re-tap to expand — automated 30s wait after tap did not surface scanner-model-i700 during my run. Could be Metro/WebSocket slowness (WS 502 observed once) rather than a real bug; a manual retry succeeded when done live. Recommend adding an auto-open on company change or a small explicit loading state to make this deterministic.", "testID": "scanner-model-dropdown / scanner-model-i700", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_jun2026_impressions_ios.py",
+    "/app/test_reports/pytest/iter_jun2026_impressions.xml"
+  ],
+  "action_items": [
+    "(Optional) Auto-open the model dropdown after company selection in components/ScannerPicker.tsx to remove the extra tap and make the UI feel snappier — testID scanner-model-dropdown.",
+    "No blocking issues — feature is functionally complete."
+  ],
+  "critical_code_review_comments": [
+    "server.py Phase 4 Step 1 submit is >100-line block; validation, persistence and scanner-learning are cleanly separated — good.",
+    "impression_options.py is a clean single-source-of-truth; impression_rows() correctly handles legacy and Other cases.",
+    "GET /api/intraoral-scanners returns a plain list of {company, models: [str]} — well-typed and stable.",
+    "phase4_step1_data null-on-switch semantics are correct (conventional fields null on IOS and vice-versa) — verified via GET after each save."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter_jun2026_impressions_ios.py (new)"
+  ],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "~90% (core flows validated; one UI micro-issue on model dropdown open timing)"},
+  "seed_data_creation": "Test class TestScannerLearning briefly creates two pending intraoral_scanners rows (QA ScanCo/QA-1 and QA RejectCo/QR-1). Both are removed at end of run by test_zzz_cleanup_user_scanners (delete_many source='user'). No stray seed rows left behind.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Case 69cfde8b356c7405230a9dcc was left with an IOS draft (company QA ScanCo, model QA-1 Pro) after happy-path tests — but every submit used save_only=true, so case status was NOT advanced. If a subsequent test needs a specific p4s1 state, submit again with save_only=true. All submits kept shade_values:['A2'], shade_layout:'per_implant', payment_complete:true, components_available:true.",
+  "rca_of_issue": "n/a — no bugs found."
+}

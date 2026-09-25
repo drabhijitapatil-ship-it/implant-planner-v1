@@ -12,6 +12,8 @@ import { getImplantSite } from '../../../utils/implantPlan';
 import { useAuth } from '../../../contexts/AuthContext';
 import BackToDashboard from '../../../components/BackToDashboard';
 import { PhaseHeader } from '../../../components/PhaseHeader';
+import ScannerPicker, { ScannerValue } from '../../../components/ScannerPicker';
+import { IMPRESSION_TECHNIQUES, IMPRESSION_MATERIAL_GROUPS, SCAN_BODY_MATERIALS, SCAN_BODY_TYPES, SCAN_LEVELS } from '../../../utils/impressionOptions';
 // iter-Jun-2026 (v13, Chunk D, Ask 1): PhaseTabbedAutoFetch removed from Phase 4 Step 1.
 import DoneDatePicker, { todayIso } from '../../../components/DoneDatePicker';
 import Ionicons from '@react-native-vector-icons/ionicons';
@@ -68,8 +70,15 @@ export default function Phase4Step1Screen() {
   // iter-191: when impressionType === 'conventional', the user must pick
   // between an open-tray and a closed-tray technique.
   const [conventionalTrayType, setConventionalTrayType] = useState<'' | 'open_tray' | 'closed_tray'>('');
-  // iter-192: impression material — required when conventional. Three fixed options.
-  const [impressionMaterial, setImpressionMaterial] = useState<'' | 'polyether' | 'heavy_light_body' | 'putty_light_body'>('');
+  // iter-Jun-2026: structured impression material (8 options + Other free text).
+  const [impressionMaterial, setImpressionMaterial] = useState<string>('');
+  const [impressionMaterialOther, setImpressionMaterialOther] = useState('');
+  // iter-Jun-2026: Intraoral scan — scanner (company/model), scan body material,
+  // type(s) of scan body (multi-select) and scan level. All mandatory when IOS.
+  const [scanner, setScanner] = useState<ScannerValue>({ company: '', companyOther: '', model: '', modelOther: '' });
+  const [scanBodyMaterial, setScanBodyMaterial] = useState('');
+  const [iosScanBodyTypes, setIosScanBodyTypes] = useState<string[]>([]);
+  const [scanLevel, setScanLevel] = useState('');
   // iter-194: Shade selection
   // - For non-full-arch: one shade text per implant (positions[i] → shadeValues[i]).
   // - For full-arch: exactly two entries — index 0 = Anterior, 1 = Posterior.
@@ -94,12 +103,6 @@ export default function Phase4Step1Screen() {
   type MuaRow = { tooth: string; angulation: string; cuff_height: string; confirmed?: boolean };
   const [muaRows, setMuaRows] = useState<MuaRow[]>([]);
   const [muaTouched, setMuaTouched] = useState(false);
-
-  // iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-Oral Scan sub-fields —
-  // multi-select. Exported to Lab Slip PDF as bulleted lists.
-  const [scanBodyTypes, setScanBodyTypes] = useState<string[]>([]);
-  const [scanTypes, setScanTypes] = useState<string[]>([]);
-  const [scanLevels, setScanLevels] = useState<string[]>([]);
 
   // Per-implant prosthetic plan for multiple implants (non-bridge)
   const [perImplantPlans, setPerImplantPlans] = useState<{ prosthesis: string; material: string; openProsthesis: boolean; openMaterial: boolean }[]>([]);
@@ -199,11 +202,21 @@ export default function Phase4Step1Screen() {
         }
       }
 
-      // iter-Jun-2026 (v13, Chunk G, Ask 3): hydrate Intra-Oral Scan sub-fields.
+      // iter-Jun-2026: hydrate impression fields (re-submission after rejection / draft).
       const p4 = procRes.data?.phase4_step1_data || {};
-      setScanBodyTypes(Array.isArray(p4.scan_body_types) ? p4.scan_body_types : []);
-      setScanTypes(Array.isArray(p4.scan_types) ? p4.scan_types : []);
-      setScanLevels(Array.isArray(p4.scan_levels) ? p4.scan_levels : []);
+      if (p4.impression_type) setImpressionType(p4.impression_type);
+      if (p4.conventional_tray_type) setConventionalTrayType(p4.conventional_tray_type);
+      if (p4.impression_material) setImpressionMaterial(p4.impression_material);
+      setImpressionMaterialOther(p4.impression_material_other || '');
+      setScanner({
+        company: p4.ios_scanner_company || '',
+        companyOther: p4.ios_scanner_company_other || '',
+        model: p4.ios_scanner_model || '',
+        modelOther: p4.ios_scanner_model_other || '',
+      });
+      setScanBodyMaterial(p4.ios_scan_body_material || '');
+      setIosScanBodyTypes(Array.isArray(p4.ios_scan_body_types) ? p4.ios_scan_body_types : []);
+      setScanLevel(p4.ios_scan_level || '');
 
       // iter-Feb-2026 / -C — Hydrate Single-Conventional-Implant Final Plan.
       // Applies for pure SC AND overlap types with num_implants='Single Implant'.
@@ -329,8 +342,18 @@ export default function Phase4Step1Screen() {
       if (!finalProsthesis) return 'Please select Final Prosthesis';
     }
     if (!impressionType) return 'Please select impression type';
-    if (impressionType === 'conventional' && !conventionalTrayType) return 'Please choose Open tray or Closed tray for the conventional impression.';
-    if (impressionType === 'conventional' && !impressionMaterial) return 'Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).';
+    if (impressionType === 'conventional' && !conventionalTrayType) return 'Please choose the impression technique (Open Tray / Direct or Closed Tray / Indirect).';
+    if (impressionType === 'conventional' && !impressionMaterial) return 'Please choose the impression material used.';
+    if (impressionType === 'conventional' && impressionMaterial === 'Other' && !impressionMaterialOther.trim()) return "Please describe the impression material under 'Other'.";
+    if (impressionType === 'intraoral_scans') {
+      if (!scanner.company) return 'Please select the intraoral scanner company.';
+      if (scanner.company === 'Other' && !scanner.companyOther.trim()) return "Please enter the scanner company under 'Other'.";
+      if (!scanner.model) return 'Please select the intraoral scanner model.';
+      if (scanner.model === 'Other' && !scanner.modelOther.trim()) return "Please enter the scanner model under 'Other'.";
+      if (!scanBodyMaterial) return 'Please select the scan body material (PEEK, Metal or Hybrid).';
+      if (iosScanBodyTypes.length === 0) return 'Please select at least one type of scan body.';
+      if (!scanLevel) return 'Please select the scan level.';
+    }
     // iter-194: shade is mandatory for every implant slot (or for both A/P in full arch).
     if (isFullArch) {
       if (!shadeValues[0]?.trim()) return 'Please enter the Anterior shade';
@@ -359,11 +382,15 @@ export default function Phase4Step1Screen() {
       impression_type: impressionType,
       conventional_tray_type: impressionType === 'conventional' ? conventionalTrayType : null,
       impression_material: impressionType === 'conventional' ? impressionMaterial : null,
-      // iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields persisted only
-      // when intra-oral scan is picked.
-      scan_body_types: impressionType === 'intraoral_scans' ? scanBodyTypes : null,
-      scan_types: impressionType === 'intraoral_scans' ? scanTypes : null,
-      scan_levels: impressionType === 'intraoral_scans' ? scanLevels : null,
+      impression_material_other: impressionType === 'conventional' && impressionMaterial === 'Other' ? impressionMaterialOther.trim() : null,
+      // iter-Jun-2026: structured intraoral-scan fields, persisted only when IOS is picked.
+      ios_scanner_company: impressionType === 'intraoral_scans' ? scanner.company : null,
+      ios_scanner_company_other: impressionType === 'intraoral_scans' && scanner.company === 'Other' ? scanner.companyOther.trim() : null,
+      ios_scanner_model: impressionType === 'intraoral_scans' ? scanner.model : null,
+      ios_scanner_model_other: impressionType === 'intraoral_scans' && scanner.model === 'Other' ? scanner.modelOther.trim() : null,
+      ios_scan_body_material: impressionType === 'intraoral_scans' ? scanBodyMaterial : null,
+      ios_scan_body_types: impressionType === 'intraoral_scans' ? iosScanBodyTypes : null,
+      ios_scan_level: impressionType === 'intraoral_scans' ? scanLevel : null,
       // iter-194: shade
       shade_values: (isFullArch ? shadeValues.slice(0, 2) : shadeValues.slice(0, Math.max(1, implantPositions.length || 1))).map(v => (v || '').trim()),
       shade_notes: shadeNotes ? shadeNotes.trim() : null,
@@ -790,11 +817,17 @@ export default function Phase4Step1Screen() {
                 <TouchableOpacity key={opt.id} style={[s.impressionCard, impressionType === opt.id && s.impressionCardActive]}
                   onPress={() => {
                     setImpressionType(opt.id);
-                    // iter-191: clear tray choice if the user moves away from
-                    // 'conventional', so we never persist a stale tray-type.
+                    // Clear the other modality's sub-fields so nothing stale is persisted.
                     if (opt.id !== 'conventional') {
                       setConventionalTrayType('');
                       setImpressionMaterial('');
+                      setImpressionMaterialOther('');
+                    }
+                    if (opt.id !== 'intraoral_scans') {
+                      setScanner({ company: '', companyOther: '', model: '', modelOther: '' });
+                      setScanBodyMaterial('');
+                      setIosScanBodyTypes([]);
+                      setScanLevel('');
                     }
                   }}
                   testID={`impression-${opt.id}`}>
@@ -804,29 +837,22 @@ export default function Phase4Step1Screen() {
                 </TouchableOpacity>
               ))}
 
-              {/* iter-191: Tray-type sub-choice — required when conventional is selected. */}
+              {/* iter-Jun-2026: Conventional impression — technique + material */}
               {impressionType === 'conventional' && (
                 <View style={{ marginTop: 4, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#FFB74D' }} testID="conventional-tray-options">
                   <Text style={[s.label, { marginTop: 8 }]}>
-                    Tray Technique <Text style={{ color: '#DC3545' }}>*</Text>
+                    Impression Technique <Text style={{ color: '#DC3545' }}>*</Text>
                   </Text>
-                  {[
-                    { id: 'open_tray', label: 'Open Tray Impression', sub: 'Direct technique — copings unscrewed through the tray' },
-                    { id: 'closed_tray', label: 'Closed Tray Impression', sub: 'Indirect technique — transfer copings reseated after pickup' },
-                  ].map(opt => {
+                  {IMPRESSION_TECHNIQUES.map(opt => {
                     const active = conventionalTrayType === opt.id;
                     return (
                       <TouchableOpacity
                         key={opt.id}
                         style={[s.impressionCard, active && s.impressionCardActive, { marginTop: 6 }]}
-                        onPress={() => setConventionalTrayType(opt.id as any)}
+                        onPress={() => setConventionalTrayType(opt.id)}
                         testID={`tray-${opt.id}`}
                       >
-                        <Ionicons
-                          name={opt.id === 'open_tray' ? 'open-outline' : 'lock-closed-outline'}
-                          size={22}
-                          color={active ? '#1A73E8' : '#999'}
-                        />
+                        <Ionicons name={opt.icon as any} size={22} color={active ? '#1A73E8' : '#999'} />
                         <View style={{ flex: 1, marginLeft: 10 }}>
                           <Text style={[s.impressionLabel, active && { color: '#1A73E8', fontWeight: '700' }, { marginLeft: 0 }]}>{opt.label}</Text>
                           <Text style={{ fontSize: 11, color: '#78909C', marginTop: 2 }}>{opt.sub}</Text>
@@ -836,75 +862,90 @@ export default function Phase4Step1Screen() {
                     );
                   })}
 
-                  {/* iter-192: Impression material — only after tray is picked. */}
                   {!!conventionalTrayType && (
                     <View style={{ marginTop: 12 }} testID="impression-material-options">
                       <Text style={[s.label, { marginTop: 0 }]}>
-                        Impression material used <Text style={{ color: '#DC3545' }}>*</Text>
+                        Impression Material Used <Text style={{ color: '#DC3545' }}>*</Text>
                       </Text>
-                      {[
-                        { id: 'polyether', label: 'Polyether' },
-                        { id: 'heavy_light_body', label: 'Heavy and Light body' },
-                        { id: 'putty_light_body', label: 'Putty and Light body' },
-                      ].map(opt => {
-                        const active = impressionMaterial === opt.id;
-                        return (
-                          <TouchableOpacity
-                            key={opt.id}
-                            style={[s.impressionCard, active && s.impressionCardActive, { marginTop: 6 }]}
-                            onPress={() => setImpressionMaterial(opt.id as any)}
-                            testID={`impression-material-${opt.id}`}
-                          >
-                            <Ionicons
-                              name="flask-outline"
-                              size={20}
-                              color={active ? '#1A73E8' : '#999'}
-                            />
-                            <Text style={[s.impressionLabel, active && { color: '#1A73E8', fontWeight: '700' }]}>{opt.label}</Text>
-                            {active && <Ionicons name="checkmark-circle" size={20} color="#1A73E8" />}
-                          </TouchableOpacity>
-                        );
-                      })}
+                      {IMPRESSION_MATERIAL_GROUPS.map(group => (
+                        <View key={group.family} style={{ marginTop: 8 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#78909C', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{group.family}</Text>
+                          {group.options.map(opt => {
+                            const active = impressionMaterial === opt;
+                            return (
+                              <TouchableOpacity
+                                key={opt}
+                                style={[s.impressionCard, active && s.impressionCardActive, { marginTop: 4, paddingVertical: 10 }]}
+                                onPress={() => { setImpressionMaterial(opt); setImpressionMaterialOther(''); }}
+                                testID={`impression-material-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
+                              >
+                                <Ionicons name="flask-outline" size={18} color={active ? '#1A73E8' : '#999'} />
+                                <Text style={[s.impressionLabel, { fontSize: 13 }, active && { color: '#1A73E8', fontWeight: '700' }]}>{opt}</Text>
+                                {active && <Ionicons name="checkmark-circle" size={18} color="#1A73E8" />}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      ))}
+                      <TouchableOpacity
+                        style={[s.impressionCard, impressionMaterial === 'Other' && s.impressionCardActive, { marginTop: 10, paddingVertical: 10 }]}
+                        onPress={() => setImpressionMaterial('Other')}
+                        testID="impression-material-other"
+                      >
+                        <Ionicons name="create-outline" size={18} color={impressionMaterial === 'Other' ? '#1A73E8' : '#999'} />
+                        <Text style={[s.impressionLabel, { fontSize: 13 }, impressionMaterial === 'Other' && { color: '#1A73E8', fontWeight: '700' }]}>Other</Text>
+                        {impressionMaterial === 'Other' && <Ionicons name="checkmark-circle" size={18} color="#1A73E8" />}
+                      </TouchableOpacity>
+                      {impressionMaterial === 'Other' && (
+                        <TextInput
+                          style={[s.input, { marginTop: 8, borderColor: '#FFB74D', backgroundColor: '#FFF8E1' }]}
+                          placeholder="Describe the impression material"
+                          placeholderTextColor="#999"
+                          value={impressionMaterialOther}
+                          onChangeText={setImpressionMaterialOther}
+                          testID="impression-material-other-input"
+                        />
+                      )}
                     </View>
                   )}
                 </View>
               )}
 
-              {/* iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-Oral Scan sub-fields.
-                  When "Intra-Oral Scans Made" is picked, capture the scan
-                  body type, scan technique and scan level as multi-select
-                  chip rows. All 3 lists are exported to the Lab Slip PDF
-                  as bulleted lists per implant order. */}
+              {/* iter-Jun-2026: Intraoral scan — scanner, scan body material, type(s), level (all mandatory) */}
               {impressionType === 'intraoral_scans' && (
                 <View style={{ marginTop: 4, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: '#4CAF50' }} testID="intraoral-scan-options">
+                  <Text style={[s.label, { marginTop: 8 }]}>
+                    Intraoral Scanner Used <Text style={{ color: '#DC3545' }}>*</Text>
+                  </Text>
+                  <ScannerPicker value={scanner} onChange={setScanner} />
+
                   {([
-                    { field: 'scan_body_types', label: 'Type of Scan Body', state: scanBodyTypes, setState: setScanBodyTypes, options: ['PEEK', 'Metal', 'Hybrid'] },
-                    { field: 'scan_types', label: 'Scan Type', state: scanTypes, setState: setScanTypes, options: ['Vertical Scan Body', 'Horizontal Scan Bodies (Flags)', 'Photogrammetry'] },
-                    { field: 'scan_levels', label: 'Scan Level', state: scanLevels, setState: setScanLevels, options: ['Abutment/Multiunit Level', 'Implant Level'] },
-                  ] as const).map(group => (
-                    <View key={group.field} style={{ marginTop: 12 }} testID={`intraoral-${group.field}`}>
+                    { field: 'scan_body_material', label: 'Scan Body Material', multi: false, options: SCAN_BODY_MATERIALS, selected: scanBodyMaterial ? [scanBodyMaterial] : [], onPick: (opt: string) => setScanBodyMaterial(opt) },
+                    { field: 'scan_body_types', label: 'Type of Scan Body', multi: true, options: SCAN_BODY_TYPES, selected: iosScanBodyTypes, onPick: (opt: string) => setIosScanBodyTypes(prev => prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]) },
+                    { field: 'scan_level', label: 'Scan Level', multi: false, options: SCAN_LEVELS, selected: scanLevel ? [scanLevel] : [], onPick: (opt: string) => setScanLevel(opt) },
+                  ]).map(group => (
+                    <View key={group.field} style={{ marginTop: 14 }} testID={`intraoral-${group.field}`}>
                       <Text style={[s.label, { marginTop: 0 }]}>
-                        {group.label} <Text style={{ fontSize: 11, color: '#78909C', fontWeight: '500' }}>(choose one or more)</Text>
+                        {group.label} <Text style={{ color: '#DC3545' }}>*</Text>{' '}
+                        <Text style={{ fontSize: 11, color: '#78909C', fontWeight: '500' }}>{group.multi ? '(choose one or more)' : '(choose one)'}</Text>
                       </Text>
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
                         {group.options.map(opt => {
-                          const active = group.state.includes(opt);
+                          const active = group.selected.includes(opt);
                           return (
                             <TouchableOpacity
                               key={opt}
-                              onPress={() => {
-                                group.setState(prev => active ? prev.filter(x => x !== opt) : [...prev, opt]);
-                              }}
+                              onPress={() => group.onPick(opt)}
                               style={{
                                 flexDirection: 'row', alignItems: 'center', gap: 6,
-                                paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+                                paddingHorizontal: 12, paddingVertical: 9, borderRadius: 20, minHeight: 40,
                                 borderWidth: 1.5,
                                 borderColor: active ? '#2E7D32' : '#CFD8DC',
                                 backgroundColor: active ? '#E8F5E9' : '#FFF',
                               }}
                               testID={`intraoral-${group.field}-${opt.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}`}
                             >
-                              <Ionicons name={active ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={active ? '#2E7D32' : '#78909C'} />
+                              <Ionicons name={active ? (group.multi ? 'checkbox' : 'radio-button-on') : (group.multi ? 'square-outline' : 'radio-button-off')} size={16} color={active ? '#2E7D32' : '#78909C'} />
                               <Text style={{ fontSize: 13, color: active ? '#1B5E20' : '#37474F', fontWeight: active ? '700' : '500' }}>
                                 {opt}
                               </Text>
