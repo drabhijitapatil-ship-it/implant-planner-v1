@@ -21,7 +21,7 @@ import ZygomaPterygoidPhase1Form, { ZygomaPterygoidPhase1Data } from '../../comp
 import GroupedDescDropdown from '../../components/GroupedDescDropdown';
 import AssistantPicker from '../../components/AssistantPicker';
 import AestheticRiskSection from '../../components/AestheticRiskSection';
-import { isAnteriorMaxillaCase, ERA_SELECTABLE_FACTORS, eraValue } from '../../utils/aestheticRisk';
+import { isAnteriorMaxillaCase, ERA_PATIENT_FACTORS, ERA_SITE_SELECTABLE, anteriorAreas, eraValue } from '../../utils/aestheticRisk';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -1999,8 +1999,15 @@ export default function NewProcedureScreen() {
     // iter-Jun-2026: Esthetic Risk Assessment is mandatory once any anterior
     // maxillary tooth (FDI 11–13 / 21–23) is marked on the chart.
     if (isNonFullArch && !isOverdentureNonFullArch && !isExistingImplantCase && isAnteriorMaxillaCase(missingTeeth)) {
-      for (const f of ERA_SELECTABLE_FACTORS) {
+      for (const f of ERA_PATIENT_FACTORS) {
         if (!eraValue(formData, f.key)) missClinical.push(`Aesthetic Risk — ${f.label}`);
+      }
+      const areas = anteriorAreas(missingTeeth);
+      for (const area of areas) {
+        const tag = areas.length > 1 ? ` (${area.label})` : '';
+        for (const f of ERA_SITE_SELECTABLE) {
+          if (!eraValue(formData, f.key, area.leader)) missClinical.push(`Aesthetic Risk — ${f.label}${tag}`);
+        }
       }
     }
 
@@ -3496,9 +3503,19 @@ export default function NewProcedureScreen() {
             <AestheticRiskSection
               values={formData}
               anterior={!isOverdentureNonFullArch && isAnteriorMaxillaCase(formData.missing_teeth)}
-              onChange={(key, v, topLevel) => {
-                if (topLevel) updateForm(key, v);
-                else setFormData(prev => ({ ...prev, aesthetic_risk: { ...(prev.aesthetic_risk || {}), [key]: v } }));
+              onChange={(key, v, topLevel, leader) => {
+                if (topLevel) { updateForm(key, v); return; }
+                setFormData(prev => {
+                  const era = { ...(prev.aesthetic_risk || {}) } as Record<string, any>;
+                  if (leader) {
+                    const sites = { ...(era.sites || {}) };
+                    sites[leader] = { ...(sites[leader] || {}), [key]: v };
+                    era.sites = sites;
+                  } else {
+                    era[key] = v;
+                  }
+                  return { ...prev, aesthetic_risk: era };
+                });
               }}
             />
           )}

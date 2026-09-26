@@ -96,12 +96,24 @@ def _create(ctx, missing, **extra):
 # ---------------------------------------------------------------- module --
 
 def test_span_derivation():
-    assert era.derive_edentulous_span(["11"]) == "Single tooth"
-    assert era.derive_edentulous_span(["11", "21"]) == "Two or more teeth"     # contiguous across midline
-    assert era.derive_edentulous_span(["12", "14"]) == "Single tooth"          # non-adjacent gaps
-    assert era.derive_edentulous_span(["13", "14"]) == "Two or more teeth"     # run touches anterior
-    assert era.derive_edentulous_span(["16", "36"]) == ""                      # posterior only → n/a
+    a = era.anterior_areas(["11"])[0]
+    assert a["leader"] == "11" and era.span_value_for(a, 7.5) == "Single tooth ≥ 7 mm"
+    assert era.span_value_for(a, 6.5) == "Single tooth < 7 mm" and era.span_value_for(a, None) == ""
+    b = era.anterior_areas(["11", "21"])
+    assert len(b) == 1 and era.span_value_for(b[0], None) == "Two or more teeth"   # contiguous across midline
+    c = era.anterior_areas(["12", "14"])                                            # 14 is posterior → only area 12
+    assert [x["leader"] for x in c] == ["12"] and c[0]["positions"] == ["12"]
+    d = era.anterior_areas(["11", "22"])                                            # 21 present → 2 separate anterior areas
+    assert [x["positions"] for x in d] == [["11"], ["22"]]
+    assert era.anterior_areas(["16", "36"]) == []                                   # posterior only → n/a
     assert era.is_anterior_maxilla_case(["23"]) and not era.is_anterior_maxilla_case(["33"])
+    # mm resolution: cluster measurements first, then flat mesiodistal_space
+    proc = {"missing_teeth": ["11"], "mesiodistal_space": "6.5"}
+    assert era.span_mm_for(proc, a) == 6.5
+    proc2 = {"missing_teeth": ["11", "22"], "edentulous_site_measurements": {"11": {"md": "8"}, "22": {"md": "6"}}}
+    s2 = era.compute_era(proc2)["sites"]
+    assert [x["span_mm"] for x in s2] == [8.0, 6.0]
+    assert [x["rows"][-1]["risk"] for x in s2] == ["Low", "Medium"]
 
 
 def test_overall_iti_style_and_legacy_biotype():
@@ -109,8 +121,9 @@ def test_overall_iti_style_and_legacy_biotype():
            "aesthetic_risk": {"smile_type": "Toothy", "adjacent_teeth_right": "Non-restored", "adjacent_teeth_left": "Non-restored",
                               "infection_at_site": "Absent", "ridge_condition": "No hard tissue defect",
                               "bone_level_adjacent": "≤ 5 mm to contact point", "patient_expectations": "Realistic esthetic demands"}}
+    low["mesiodistal_space"] = "7"
     s = era.compute_era(low)
-    assert s["overall"] == "Low" and s["assessed"] == 10 and s["total"] == 10
+    assert s["overall"] == "Low" and s["assessed"] == 10 and s["total"] == 10 and s["complete"]
     assert era.normalize_gingival_biotype("Thick") == "Thick, Low scalloped"
     med = dict(low, aesthetic_risk=dict(low["aesthetic_risk"], infection_at_site="Chronic"))
     assert era.compute_era(med)["overall"] == "Medium"
@@ -134,11 +147,13 @@ def test_create_stores_sanitised_era(ctx, created):
     r = requests.get(f"{API}/procedures/{created}", headers=ctx["student"]["headers"], timeout=20)
     assert r.status_code == 200
     ar = r.json()["aesthetic_risk"]
-    assert "junk_key" not in ar
-    assert ar["smile_type"] == "Gummy" and ar["ridge_condition"] == "Horizontal bone defect"
-    assert ar["edentulous_span"] == "Two or more teeth"
+    assert "junk_key" not in ar and "ridge_condition" not in ar            # site keys live under sites
+    assert ar["smile_type"] == "Gummy"
+    site = ar["sites"]["11"]
+    assert site["positions"] == ["11", "21"] and site["ridge_condition"] == "Horizontal bone defect"
+    assert site["edentulous_span"] == "Two or more teeth" and site["overall_risk"] == "High"
     assert ar["overall_risk"] == "High" and ar["anterior_maxilla"] is True
-    assert ar["assessed_count"] == 10
+    assert ar["assessed_count"] == 10 and ar["total_factors"] == 10
 
 
 def test_edit_fields_restamps_overall(ctx, created):
@@ -147,12 +162,15 @@ def test_edit_fields_restamps_overall(ctx, created):
               "aesthetic_risk": {"smile_type": "Toothy", "adjacent_teeth_right": "Non-restored", "adjacent_teeth_left": "Non-restored",
                                  "infection_at_site": "Absent", "ridge_condition": "Horizontal bone defect",
                                  "bone_level_adjacent": "≤ 5 mm to contact point", "patient_expectations": "Realistic esthetic demands"},
-              "missing_teeth": ["11"]}
+              "missing_teeth": ["11"], "mesiodistal_space": "8"}
+    fields["aesthetic_risk"] = {"smile_type": "Toothy", "patient_expectations": "Realistic esthetic demands",
+                                "sites": {"11": fields["aesthetic_risk"]}}
     r = requests.patch(f"{API}/procedures/{created}/edit-fields", json={"fields": fields}, headers=ctx["admin"]["headers"], timeout=20)
     assert r.status_code == 200, r.text
     ar = r.json()["aesthetic_risk"]
     assert ar["overall_risk"] == "Medium"
-    assert ar["edentulous_span"] == "Single tooth"
+    assert ar["sites"]["11"]["edentulous_span"] == "Single tooth ≥ 7 mm" and ar["sites"]["11"]["span_mm"] == 8.0
+    assert "21" not in ar["sites"]
 
 
 def test_pdf_contains_overall(ctx, created):
@@ -172,7 +190,7 @@ def test_posterior_case_has_no_span_and_no_anterior_flag(ctx):
     pid = r.json().get("id") or r.json().get("_id")
     doc = requests.get(f"{API}/procedures/{pid}", headers=ctx["student"]["headers"], timeout=20).json()
     ar = doc["aesthetic_risk"]
-    assert "edentulous_span" not in ar and ar["anterior_maxilla"] is False
+    assert "sites" not in ar and ar["anterior_maxilla"] is False
     assert ar["overall_risk"] == "High"  # smile_line High + Thin biotype
 
 
@@ -191,9 +209,34 @@ def test_aesthetic_risk_analytics(ctx, created):
     smile_type = next(f for f in j["factors"] if f["key"] == "smile_type")
     assert all(o["risk"] in ("Low", "Medium", "High") for o in smile_type["options"])
     assert set(j["overall_outcomes"]) == {"Low", "Medium", "High"}
+    assert sm["anterior_areas"] >= sm["anterior_cases"] and set(sm["area_distribution"]) == {"Low", "Medium", "High"}
     assert "survival_rate" in j["overall_outcomes"]["High"]
     # student scope → own cases only, still 200
     r2 = requests.get(f"{API}/analytics/aesthetic-risk", headers=ctx["student"]["headers"], timeout=30)
     assert r2.status_code == 200 and r2.json()["scope"]["own_only"] is True
     # nurse / unauthenticated → blocked
     assert requests.get(f"{API}/analytics/aesthetic-risk", timeout=20).status_code in (401, 403)
+
+
+def test_two_separate_anterior_areas(ctx):
+    """11 and 22 missing with 21 present → two areas, per-area span from cluster measurements."""
+    r = _create(ctx, ["11", "22"], implant_procedure_type="Multiple Conventional Implants", num_implants="Multiple Implants",
+                edentulous_site_measurements={"11": {"oc": "7", "md": "8"}, "22": {"oc": "7", "md": "6"}},
+                aesthetic_risk={"smile_type": "Toothy", "patient_expectations": "Realistic esthetic demands",
+                                "sites": {"11": {"adjacent_teeth_right": "Non-restored", "adjacent_teeth_left": "Non-restored",
+                                                 "infection_at_site": "Absent", "ridge_condition": "No hard tissue defect",
+                                                 "bone_level_adjacent": "≤ 5 mm to contact point"},
+                                          "22": {"adjacent_teeth_right": "Restored", "adjacent_teeth_left": "Non-restored",
+                                                 "infection_at_site": "Absent", "ridge_condition": "No hard tissue defect",
+                                                 "bone_level_adjacent": "≤ 5 mm to contact point"}}},
+                smile_line="Low", gingival_biotype="Thick, Low scalloped")
+    assert r.status_code in (200, 201), r.text
+    pid = r.json().get("id") or r.json().get("_id")
+    ar = requests.get(f"{API}/procedures/{pid}", headers=ctx["student"]["headers"], timeout=20).json()["aesthetic_risk"]
+    assert set(ar["sites"]) == {"11", "22"}
+    assert ar["sites"]["11"]["edentulous_span"] == "Single tooth ≥ 7 mm" and ar["sites"]["11"]["overall_risk"] == "Low"
+    assert ar["sites"]["22"]["edentulous_span"] == "Single tooth < 7 mm" and ar["sites"]["22"]["overall_risk"] == "High"
+    assert ar["overall_risk"] == "High" and ar["total_factors"] == 16 and ar["assessed_count"] == 16
+    lines = era.era_text_lines({**{"missing_teeth": ["11", "22"], "smile_line": "Low", "gingival_biotype": "Thick",
+                                    "edentulous_site_measurements": {"11": {"md": "8"}, "22": {"md": "6"}}}, "aesthetic_risk": ar})
+    assert any("Area 2" in l for l in lines)

@@ -1,0 +1,45 @@
+{
+  "summary": "iter-440 ERA per-area + Guidance collapse — backend verified with 14/15 pytest passing (1 skip for missing nurse role). Backend suites test_iter_jun2026_aesthetic_risk.py (8/8 including test_two_separate_anterior_areas + test_aesthetic_risk_analytics with anterior_areas & area_distribution assertions) and test_iter439_analytics_edges.py (4 passed, 1 skipped) both pass. NEW suite test_iter440_era_additional.py added with 3 tests: (a) POST legacy flat aesthetic_risk (no 'sites') for missing_teeth=['11'] → server correctly nests under sites['11'], drops flat root site keys, computes span_mm=8.0, edentulous_span='Single tooth ≥ 7 mm', overall_risk='Medium' — PASS. (b) analytics summary.anterior_areas & summary.area_distribution present, and sum(area_distribution)==anterior_areas — PASS. (c) FAIL: legacy iter-438 doc (aesthetic_risk.ridge_condition set, no 'sites', no mesiodistal_space) case-report PDF is missing the 'Width of Edentulous Span' row entirely (PDF reports 9/10 factors assessed instead of 10/10, and label absent). Root cause: compute_era() derives span from span_mm_for() which returns None for legacy docs → span_value_for() returns '' → row value is empty → PDF's `if _r['value']:` gate drops the row. Legacy docs stored a flat aesthetic_risk.edentulous_span value directly, which is never read back for the derived row. Frontend smoke: student login OK, /new-procedure loads, aug-required-no + dropdown-type-of-implant-procedure open (Single Conventional Implant option visible). Detailed form flow was validated in iteration 439 already; the same testids (era-edentulous-span, era-guidance, era-guidance-toggle, era-guidance-body, era-overall, era-site-<leader>, era-site-<leader>-overall, era-site-<leader>-guidance, era-detail-site-<leader>, era-detail-guidance-<leader>) are wired per code review of aestheticRisk.ts, AestheticRiskSection.tsx, EraGuidance.tsx and procedures/[id].tsx. No React Native issues (no deprecated packages, all text wrapped, StyleSheet used).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/procedures/{id}/case-report (legacy iter-438 docs)", "issue": "Case-report PDF omits the 'Width of Edentulous Span' row (and shows only 9/10 factors assessed) when the doc has flat site keys and no mesiodistal_space captured. compute_era's derived span returns '' because span_mm_for() cannot resolve mm, and the flat aesthetic_risk.edentulous_span value stored by iter-438 is never used as a fallback. Fix: in aesthetic_risk.py::compute_era (or stamp_overall), when spanMm is None but a legacy flat era.edentulous_span exists, surface that value in the derived row (and add it to counts). File: /app/backend/aesthetic_risk.py:180-193, /app/backend/server.py:14735-14751."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_jun2026_aesthetic_risk.py",
+    "/app/backend/tests/test_iter439_analytics_edges.py",
+    "/app/backend/tests/test_iter440_era_additional.py",
+    "/app/test_reports/pytest/iter440_era.xml",
+    "/app/test_reports/pytest/iter440_full.xml"
+  ],
+  "action_items": [
+    "In /app/backend/aesthetic_risk.py::compute_era, when a legacy doc (no aesthetic_risk.sites) has aesthetic_risk.edentulous_span set as a flat value AND span_mm_for() returns None, fall back to that flat value for the derived row so the case-report PDF continues to include 'Width of Edentulous Span' and total assessed reaches 10/10.",
+    "Consider adding a one-shot migration inside stamp_overall(): when lifting flat legacy site keys into sites[leader], also copy the flat edentulous_span into sites[leader].edentulous_span (only if span_mm is still unknown) so it displays consistently in both UI and PDF.",
+    "Optional: verify Case Details (procedures/[id].tsx) also handles the same legacy-no-mm case — the era-detail-row-edentulous-span row should not disappear."
+  ],
+  "critical_code_review_comments": [
+    "aesthetic_risk.py sanitize_aesthetic_risk correctly whitelists site keys per current anterior_areas and never persists client-supplied 'edentulous_span' (derived). ✓",
+    "stamp_overall() correctly migrates legacy flat site keys into sites[leader] on first re-save AND clears the flat root keys (verified in test_edit_fields_restamps_overall). ✓",
+    "spanMmFor (frontend) and span_mm_for (backend) correctly derive from cluster edentulous_site_measurements[leader].md first, then fall back to any position in the run, then to flat mesiodistal_space for single-flow. Two-area path (Multiple Conventional Implants, 11+22) correctly reads per-area md. ✓",
+    "computeEra returns overall = highest area for multi-area cases (verified in test_two_separate_anterior_areas: 11 md=8 → Low, 22 md=6 → High, case overall High, total_factors=16, assessed_count=16). ✓",
+    "Analytics endpoint exposes both anterior_cases + anterior_areas + area_distribution; distribution sums cases, area_distribution sums areas. ✓",
+    "eraGuidance() returns null when !complete || overall === 'Low' — matches spec. Footer 'Guidance only' is hard-coded (no 'supervisor's discretion'). ✓ (already visually verified iter-439)",
+    "MINOR: In aesthetic_risk.py::_value, legacy flat lookup only fires for non-derived site keys — the derived 'edentulous_span' bypasses it and always relies on span_mm which is None for legacy → row disappears. This is the root cause of the failing PDF test."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter440_era_additional.py (new — 3 additional ERA tests: legacy flat POST nesting, legacy PDF regression, analytics anterior_areas/area_distribution)"
+  ],
+  "success_rate": {"backend": "93% (14/15 pytest; 1 skip; 1 legacy-PDF failure — real regression to fix)", "frontend": "Static code review + spot-check only this iteration; iteration 439 report retains full form-flow verification"},
+  "seed_data_creation": "test_iter440_era_additional.py::test_legacy_flat_era_post_is_nested_under_sites creates 1 new 'ERA Test Patient' case with missing_teeth=['11']; picks an existing legacy doc found in Mongo (5 present) for the PDF test.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite for ERA now spans 3 files: test_iter_jun2026_aesthetic_risk.py, test_iter439_analytics_edges.py, test_iter440_era_additional.py (15 tests total incl. 1 xfail-style legacy PDF check). After the main agent fixes compute_era's legacy-span fallback, rerun the whole set. Legacy iter-438 docs to target (Mongo _id): 6ab7dff3f465840388ec3b22 (no span_flat, no md), 6ab7e00d23723950cb013d96 (span_flat='Single tooth', no md), 6ab7e07923723950cb013dab (same). Frontend: use placeholder locators for md inputs ('e.g. 15'); option testids in the type-of-implant-procedure dropdown are visible via text but not always via [data-testid=option-single-conventional-implant] on web — use page.get_by_text('Single Conventional Implant') as a fallback.",
+  "rca_of_issue": "Regression path: iter-438 stored aesthetic_risk with flat keys including a user-selected 'edentulous_span' string. iter-440 rewrote compute_era to DERIVE edentulous_span from spanMm (mesiodistal_space or edentulous_site_measurements). For legacy docs that were never edited under the new schema and never had mm captured, span_mm_for() returns None → derived value is '' → PDF drops the row entirely and 'total factors assessed' shows 9/10. Repro: pytest backend/tests/test_iter440_era_additional.py::test_legacy_iter438_doc_read_and_pdf. Mitigation: fallback to aesthetic_risk.edentulous_span (legacy flat) inside compute_era when spanMm is None; when stamp_overall lifts flat keys into sites, preserve the legacy edentulous_span so both UI and PDF render it. This preserves the 'Width of Edentulous Span' label and 10/10 count for legacy anterior cases."
+}

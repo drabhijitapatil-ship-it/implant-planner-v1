@@ -210,15 +210,24 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
             const era = computeEra(procedure);
             if (era.assessed === 0) return '';
             const anterior = isAnteriorMaxillaCase(procedure.missing_teeth);
-            const rows = era.rows.filter(r => r.value && (anterior || r.key === 'smile_line' || r.key === 'gingival_biotype'));
+            const multi = era.sites.length > 1;
             const pill = (lvl: string | null) => lvl ? `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:700;color:${RISK_COLORS[lvl as 'Low'].fg};background:${RISK_COLORS[lvl as 'Low'].bg};border:1px solid ${RISK_COLORS[lvl as 'Low'].border}">${lvl} risk</span>` : '';
+            const row = (r: any) => `<tr><td class="info-label">${r.label}:</td><td class="info-value">${r.value} &nbsp;${pill(r.risk)}</td></tr>`;
+            const overallRow = (title: string, o: any) => o.overall ? `<tr><td class="info-label"><strong>${title}:</strong></td><td class="info-value"><strong>${o.overall}</strong> &nbsp;${pill(o.overall)} <span style="color:#666;font-size:10px">(${o.assessed}/${o.total} factors · ${o.counts.High} high · ${o.counts.Medium} medium · ${o.counts.Low} low)</span></td></tr>` : '';
+            const patientRows = era.patientRows.filter(r => r.value && (anterior || r.key === 'smile_line' || r.key === 'gingival_biotype'));
             return `
           <div class="section">
             <div class="section-title">Aesthetic Risk Assessment${anterior && era.overall ? ` — Overall: ${era.overall} risk` : ''}</div>
             <table>
-              ${rows.map(r => `<tr><td class="info-label">${r.label}:</td><td class="info-value">${r.value} &nbsp;${pill(r.risk)}</td></tr>`).join('')}
-              ${anterior && era.overall ? `<tr><td class="info-label"><strong>Overall Aesthetic Risk:</strong></td><td class="info-value"><strong>${era.overall}</strong> &nbsp;${pill(era.overall)} <span style="color:#666;font-size:10px">(${era.assessed}/${era.total} factors · ${era.counts.High} high · ${era.counts.Medium} medium · ${era.counts.Low} low)</span></td></tr>` : ''}
+              ${patientRows.map(row).join('')}
             </table>
+            ${anterior ? era.sites.map((s, i) => `
+            <table style="margin-top:6px">
+              ${multi ? `<tr><td colspan="2" style="font-weight:700;color:#880E4F;padding-top:6px">Area ${i + 1} — ${s.label}</td></tr>` : ''}
+              ${s.rows.filter(r => r.value).map(row).join('')}
+              ${overallRow(multi ? `Aesthetic Risk — ${s.label}` : 'Overall Aesthetic Risk', s)}
+            </table>`).join('') : ''}
+            ${anterior && multi ? `<table style="margin-top:6px">${overallRow('Overall Aesthetic Risk (case — highest area)', era)}</table>` : ''}
           </div>`;
           })()}
 

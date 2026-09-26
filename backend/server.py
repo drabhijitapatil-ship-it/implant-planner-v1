@@ -8557,6 +8557,7 @@ async def _load_advanced_analytics_docs(
         "implants": 1, "implant_plans": 1, "existing_implants": 1,
         # iter-Jun-2026: Esthetic Risk Assessment analytics
         "smile_line": 1, "gingival_biotype": 1, "aesthetic_risk": 1, "missing_teeth": 1,
+        "edentulous_site_measurements": 1, "mesiodistal_space": 1,
     }
     return await db.procedures.find(match, projection).to_list(20000)
 
@@ -14734,10 +14735,20 @@ async def generate_case_report(
     _era_summary = _era.compute_era(procedure)
     if _era_summary["assessed"] > 0:
         add_section_title("Aesthetic Risk Assessment", 233, 30, 99)
-        for _r in _era_summary["rows"]:
+        for _r in _era_summary["patient_rows"]:
             if _r["value"]:
                 add_field(_r["label"], f"{_r['value']}  [{_r['risk']} risk]")
-        add_field("Overall Aesthetic Risk", f"{_era_summary['overall']} ({_era_summary['assessed']}/{_era_summary['total']} factors assessed)")
+        _multi = len(_era_summary["sites"]) > 1
+        for _i, _s in enumerate(_era_summary["sites"]):
+            if _multi:
+                add_field(f"Area {_i + 1}", _s["label"])
+            for _r in _s["rows"]:
+                if _r["value"]:
+                    add_field(_r["label"], f"{_r['value']}  [{_r['risk']} risk]")
+            if _multi and _s["overall"]:
+                add_field(f"Aesthetic Risk — {_s['label']}", f"{_s['overall']} ({_s['assessed']}/{_s['total']} factors)")
+        if _era_summary["overall"]:
+            add_field("Overall Aesthetic Risk", f"{_era_summary['overall']} ({_era_summary['assessed']}/{_era_summary['total']} factors assessed)")
         pdf.ln(3)
 
     # ── Medical Assessment ───────────────────────────────────
@@ -18827,7 +18838,8 @@ async def get_aesthetic_risk_analytics(
     }
     by_ptype: Dict[str, Dict[str, int]] = {}
     monthly: Dict[str, Dict[str, int]] = {}
-    total_assessed = anterior_cases = complete_cases = 0
+    total_assessed = anterior_cases = complete_cases = anterior_areas_n = 0
+    area_dist = {"Low": 0, "Medium": 0, "High": 0}
     for p in procs:
         summ = _era.compute_era(p)
         if summ["assessed"] == 0:
@@ -18853,6 +18865,10 @@ async def get_aesthetic_risk_analytics(
             complete_cases += 1
         ov = summ["overall"]
         overall_dist[ov] += 1
+        for _s in summ["sites"]:
+            anterior_areas_n += 1
+            if _s["overall"]:
+                area_dist[_s["overall"]] += 1
         b = overall_out[ov]
         b["cases"] += 1; b["implants"] += n_impl; b["failed"] += n_failed; b["ended"] += ended
         pt = by_ptype.setdefault(_po_pick_procedure_type(p) or "Other", {"Low": 0, "Medium": 0, "High": 0})
@@ -18889,6 +18905,8 @@ async def get_aesthetic_risk_analytics(
             "anterior_cases": anterior_cases,
             "complete_cases": complete_cases,
             "distribution": overall_dist,
+            "anterior_areas": anterior_areas_n,
+            "area_distribution": area_dist,
             "high_pct": round(100.0 * overall_dist["High"] / anterior_cases, 1) if anterior_cases else None,
         },
         "overall_outcomes": {k: _finish(v) for k, v in overall_out.items()},

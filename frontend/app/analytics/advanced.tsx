@@ -1424,7 +1424,7 @@ function AestheticRiskPane({ fromDate, toDate }: { fromDate: string; toDate: str
             </View>
           ))}
         </View>
-        <Text style={[s.failN, { marginTop: 8 }]}>{sm.total_assessed ?? 0} case(s) with any aesthetic data · {sm.complete_cases ?? 0} fully graded (10/10).</Text>
+        <Text style={[s.failN, { marginTop: 8 }]}>{sm.total_assessed ?? 0} case(s) with any aesthetic data · {sm.complete_cases ?? 0} fully graded · {sm.anterior_areas ?? 0} anterior area(s){sm.area_distribution ? ` (L ${sm.area_distribution.Low} · M ${sm.area_distribution.Medium} · H ${sm.area_distribution.High})` : ''}.</Text>
         {monthly.length > 0 ? (
           <View style={{ marginTop: 14 }}>
             <Text style={s.failN}>Monthly trend — green Low · orange Medium · red High</Text>

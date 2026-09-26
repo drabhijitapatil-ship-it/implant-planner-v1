@@ -4,21 +4,21 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import RiskPill from './RiskPill';
 import EraGuidance from './EraGuidance';
 import {
-  ERA_FACTORS, ERA_SELECTABLE_FACTORS, EraFactor, EraValues, computeEra, eraValue, riskFor, RISK_COLORS,
+  ERA_PATIENT_FACTORS, ERA_SITE_FACTORS, EraFactor, EraValues, EraSiteSummary, computeEra, eraValue, riskFor, RISK_COLORS,
 } from '../utils/aestheticRisk';
 
 interface Props {
   values: EraValues;
   anterior: boolean;                       // ≥1 of FDI 11–13 / 21–23 selected
-  onChange: (key: string, value: string, topLevel: boolean) => void;
+  /** leader is set for site-scoped factors */
+  onChange: (key: string, value: string, topLevel: boolean, leader?: string) => void;
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-function FactorDropdown({ factor, value, onChange, required }: { factor: EraFactor; value: string; onChange: (v: string) => void; required: boolean }) {
+function FactorDropdown({ factor, value, onChange, required, tid }: { factor: EraFactor; value: string; onChange: (v: string) => void; required: boolean; tid: string }) {
   const [open, setOpen] = useState(false);
   const risk = riskFor(factor.key, value);
-  const tid = `era-${slug(factor.key)}`;
   return (
     <View style={styles.field}>
       <View style={styles.labelRow}>
@@ -48,11 +48,74 @@ function FactorDropdown({ factor, value, onChange, required }: { factor: EraFact
   );
 }
 
+function OverallCard({ title, overall, assessed, total, counts, testID }: { title: string; overall: any; assessed: number; total: number; counts: Record<string, number>; testID: string }) {
+  return (
+    <View style={[styles.overall, overall && { borderColor: RISK_COLORS[overall as 'Low'].border, backgroundColor: RISK_COLORS[overall as 'Low'].bg }]}
+      testID={testID} data-testid={testID}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.overallTitle}>{title}</Text>
+        <Text style={styles.overallMeta} testID={`${testID}-meta`} data-testid={`${testID}-meta`}>
+          {assessed}/{total} factors assessed · {counts.High} high · {counts.Medium} medium · {counts.Low} low
+        </Text>
+      </View>
+      {overall ? <RiskPill level={overall} large testID={`${testID}-pill`} /> : <Text style={styles.pending}>Pending</Text>}
+    </View>
+  );
+}
+
 export default function AestheticRiskSection({ values, anterior, onChange }: Props) {
-  const factors = anterior ? ERA_FACTORS : ERA_FACTORS.filter(f => f.topLevel);
   const summary = computeEra(values);
-  const spanValue = eraValue(values, 'edentulous_span');
-  const spanRisk = riskFor('edentulous_span', spanValue);
+  const multi = summary.sites.length > 1;
+
+  const renderSite = (site: EraSiteSummary, idx: number) => {
+    const sid = `era-site-${site.leader}`;
+    return (
+      <View key={site.leader} style={[styles.siteCard, multi && styles.siteCardMulti]} testID={sid} data-testid={sid}>
+        {multi && (
+          <View style={styles.siteHead}>
+            <Ionicons name="location" size={14} color="#AD1457" />
+            <Text style={styles.siteTitle}>Area {idx + 1} — {site.label}</Text>
+            <RiskPill level={site.overall} testID={`${sid}-pill`} />
+          </View>
+        )}
+        {ERA_SITE_FACTORS.map(f => {
+          const tid = multi ? `era-${slug(f.key)}-${site.leader}` : `era-${slug(f.key)}`;
+          if (f.derived) {
+            const row = site.rows.find(r => r.key === f.key)!;
+            return (
+              <View key={f.key} style={styles.field} testID={tid} data-testid={tid}>
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>{f.label}</Text>
+                  <RiskPill level={row.risk} testID={`${tid}-pill`} />
+                </View>
+                <View style={[styles.dropdown, styles.readonly]}>
+                  <Text style={[styles.dropdownText, !row.value && { color: '#999' }]}>
+                    {row.value || (site.positions.length >= 2 ? 'Two or more teeth' : 'Awaiting Mesiodistal Space (mm) from Clinical Examination')}
+                  </Text>
+                  <Ionicons name="lock-closed-outline" size={16} color="#90A4AE" />
+                </View>
+                <Text style={styles.derivedNote}>
+                  {site.positions.length >= 2
+                    ? `Auto-filled from the FDI chart (${site.positions.length} adjacent teeth${site.spanMm != null ? `, ${site.spanMm} mm` : ''}).`
+                    : 'Auto-filled from Mesiodistal Space (mm) in Clinical Examination → Edentulous Site. ≥ 7 mm = Low · < 7 mm = Medium.'}
+                </Text>
+              </View>
+            );
+          }
+          return (
+            <FactorDropdown key={f.key} factor={f} tid={tid} value={eraValue(values, f.key, site.leader)} required={anterior}
+              onChange={v => onChange(f.key, v, false, site.leader)} />
+          );
+        })}
+        <OverallCard title={multi ? `Aesthetic Risk — ${site.label}` : 'Overall Aesthetic Risk'} overall={site.overall} assessed={site.assessed}
+          total={site.total} counts={site.counts} testID={multi ? `${sid}-overall` : 'era-overall'} />
+        <EraGuidance rows={[...summary.patientRows, ...site.rows]} overall={site.overall} complete={site.assessed >= site.total}
+          testID={multi ? `${sid}-guidance` : 'era-guidance'} />
+      </View>
+    );
+  };
+
+  const missingCount = summary.total - summary.assessed;
 
   return (
     <View testID="aesthetic-risk-section" data-testid="aesthetic-risk-section">
@@ -60,49 +123,29 @@ export default function AestheticRiskSection({ values, anterior, onChange }: Pro
       {anterior && (
         <View style={styles.hint} testID="era-anterior-hint" data-testid="era-anterior-hint">
           <Ionicons name="sparkles" size={14} color="#AD1457" />
-          <Text style={styles.hintText}>Anterior maxilla selected — complete all factors. Each factor is graded Low / Medium / High; the overall risk follows the highest grade.</Text>
+          <Text style={styles.hintText}>
+            Anterior maxilla selected — complete all factors. Each factor is graded Low / Medium / High; the overall risk follows the highest grade.
+            {multi ? ` ${summary.sites.length} separate anterior edentulous areas detected — site factors are assessed per area.` : ''}
+          </Text>
         </View>
       )}
-      {factors.map(f => {
-        if (f.derived) {
-          return (
-            <View key={f.key} style={styles.field} testID="era-edentulous-span" data-testid="era-edentulous-span">
-              <View style={styles.labelRow}>
-                <Text style={styles.label}>{f.label}</Text>
-                <RiskPill level={spanRisk} testID="era-edentulous-span-pill" />
-              </View>
-              <View style={[styles.dropdown, styles.readonly]}>
-                <Text style={[styles.dropdownText, !spanValue && { color: '#999' }]}>{spanValue || 'Derived from the FDI chart'}</Text>
-                <Ionicons name="lock-closed-outline" size={16} color="#90A4AE" />
-              </View>
-              <Text style={styles.derivedNote}>Auto-calculated from the missing teeth marked on the FDI chart.</Text>
-            </View>
-          );
-        }
-        return (
-          <FactorDropdown key={f.key} factor={f} value={eraValue(values, f.key)} required={anterior}
-            onChange={v => onChange(f.key, v, !!f.topLevel)} />
-        );
-      })}
 
-      {anterior && (
-        <View style={[styles.overall, summary.overall && { borderColor: RISK_COLORS[summary.overall].border, backgroundColor: RISK_COLORS[summary.overall].bg }]}
-          testID="era-overall" data-testid="era-overall">
-          <View style={{ flex: 1 }}>
-            <Text style={styles.overallTitle}>Overall Aesthetic Risk</Text>
-            <Text style={styles.overallMeta} testID="era-overall-meta" data-testid="era-overall-meta">
-              {summary.assessed}/{summary.total} factors assessed · {summary.counts.High} high · {summary.counts.Medium} medium · {summary.counts.Low} low
-            </Text>
-          </View>
-          {summary.overall
-            ? <RiskPill level={summary.overall} large testID="era-overall-pill" />
-            : <Text style={styles.pending}>Pending</Text>}
-        </View>
+      {/* Patient-level factors (once per case) */}
+      {ERA_PATIENT_FACTORS.filter(f => anterior || f.topLevel).map(f => (
+        <FactorDropdown key={f.key} factor={f} tid={`era-${slug(f.key)}`} value={eraValue(values, f.key)} required={anterior}
+          onChange={v => onChange(f.key, v, !!f.topLevel)} />
+      ))}
+
+      {/* Site-level factors — one block per anterior edentulous area */}
+      {anterior && summary.sites.map(renderSite)}
+
+      {anterior && multi && (
+        <OverallCard title="Overall Aesthetic Risk (case — highest area)" overall={summary.overall} assessed={summary.assessed}
+          total={summary.total} counts={summary.counts} testID="era-overall" />
       )}
-      {anterior && <EraGuidance summary={summary} />}
-      {anterior && ERA_SELECTABLE_FACTORS.some(f => !eraValue(values, f.key)) && (
+      {anterior && missingCount > 0 && (
         <Text style={styles.incomplete} testID="era-incomplete" data-testid="era-incomplete">
-          Incomplete — {ERA_SELECTABLE_FACTORS.filter(f => !eraValue(values, f.key)).length} factor(s) still to grade.
+          Incomplete — {missingCount} factor(s) still to grade.
         </Text>
       )}
     </View>
@@ -126,6 +169,10 @@ const styles = StyleSheet.create({
   itemTextActive: { color: '#1A73E8', fontWeight: '600' },
   miniDot: { width: 8, height: 8, borderRadius: 4, marginLeft: 8 },
   derivedNote: { fontSize: 11, color: '#78909C', marginTop: 4 },
+  siteCard: { marginBottom: 4 },
+  siteCardMulti: { borderWidth: 1.5, borderColor: '#F8BBD0', borderRadius: 14, padding: 12, marginBottom: 14, backgroundColor: '#FFFBFC' },
+  siteHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  siteTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: '#880E4F' },
   overall: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderColor: '#D0DCE8', borderRadius: 14, padding: 14, marginTop: 4, backgroundColor: '#F8FAFC' },
   overallTitle: { fontSize: 15, fontWeight: '700', color: '#1A1A2E' },
   overallMeta: { fontSize: 12, color: '#546E7A', marginTop: 3 },
