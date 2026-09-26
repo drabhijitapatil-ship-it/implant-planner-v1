@@ -6,6 +6,7 @@ import { getImplantSite, getImplantSpec } from './implantPlan';
 import { impressionRows } from './impressionOptions';
 import api from './api';
 import { fmtBytes } from './scanUpload';
+import { computeEra, isAnteriorMaxillaCase, RISK_COLORS } from './aestheticRisk';
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
 
@@ -205,14 +206,21 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
             </table>
           </div>` : ''}
 
-          ${(procedure.smile_line || procedure.gingival_biotype) ? `
+          ${(() => {
+            const era = computeEra(procedure);
+            if (era.assessed === 0) return '';
+            const anterior = isAnteriorMaxillaCase(procedure.missing_teeth);
+            const rows = era.rows.filter(r => r.value && (anterior || r.key === 'smile_line' || r.key === 'gingival_biotype'));
+            const pill = (lvl: string | null) => lvl ? `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:700;color:${RISK_COLORS[lvl as 'Low'].fg};background:${RISK_COLORS[lvl as 'Low'].bg};border:1px solid ${RISK_COLORS[lvl as 'Low'].border}">${lvl} risk</span>` : '';
+            return `
           <div class="section">
-            <div class="section-title">Aesthetic Risk Assessment</div>
+            <div class="section-title">Aesthetic Risk Assessment${anterior && era.overall ? ` — Overall: ${era.overall} risk` : ''}</div>
             <table>
-              ${procedure.smile_line ? `<tr><td class="info-label">Smile Line:</td><td class="info-value">${procedure.smile_line}</td></tr>` : ''}
-              ${procedure.gingival_biotype ? `<tr><td class="info-label">Gingival Biotype:</td><td class="info-value">${procedure.gingival_biotype}</td></tr>` : ''}
+              ${rows.map(r => `<tr><td class="info-label">${r.label}:</td><td class="info-value">${r.value} &nbsp;${pill(r.risk)}</td></tr>`).join('')}
+              ${anterior && era.overall ? `<tr><td class="info-label"><strong>Overall Aesthetic Risk:</strong></td><td class="info-value"><strong>${era.overall}</strong> &nbsp;${pill(era.overall)} <span style="color:#666;font-size:10px">(${era.assessed}/${era.total} factors · ${era.counts.High} high · ${era.counts.Medium} medium · ${era.counts.Low} low)</span></td></tr>` : ''}
             </table>
-          </div>` : ''}
+          </div>`;
+          })()}
 
           ${procedure.medical_assessment && Object.keys(procedure.medical_assessment).length > 0 ? `
           <div class="section">

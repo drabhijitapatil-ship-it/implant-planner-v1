@@ -29,6 +29,7 @@ import jwt
 from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
+import aesthetic_risk as _era
 from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -468,7 +469,11 @@ class ProcedureCreate(BaseModel):
     tmj: Optional[str] = Field("", max_length=30)
     # Aesthetic Risk Assessment
     smile_line: Optional[str] = Field("", max_length=30)
-    gingival_biotype: Optional[str] = Field("", max_length=20)
+    gingival_biotype: Optional[str] = Field("", max_length=40)
+    # iter-Jun-2026: Esthetic Risk Assessment factors for anterior-maxilla cases
+    # (smile_type, adjacent_teeth_right/left, infection_at_site, ridge_condition,
+    # bone_level_adjacent, patient_expectations). Sanitised via aesthetic_risk.py.
+    aesthetic_risk: Optional[Dict[str, Any]] = None
     # Medical Assessment
     medical_assessment: Optional[Dict[str, str]] = None
     medical_risk_level: Optional[str] = Field("", max_length=30)
@@ -2457,6 +2462,8 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     # per-procedure-type count rules and derive `teeth_present` for back-compat.
     _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
     _apply_missing_teeth_derive(procedure_dict)
+    procedure_dict["aesthetic_risk"] = _era.sanitize_aesthetic_risk(procedure.aesthetic_risk, procedure_dict.get("missing_teeth"))
+    _era.stamp_overall(procedure_dict)
 
     # Pre-Op Augmentation Checklist (iter-136) — deterministic, AI-free items
     # derived from per-site clinical findings. Stored alongside the procedure
@@ -4316,6 +4323,13 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     fields["updated_at"] = now_iso
     fields["last_edited_by"] = editor_name
     fields["last_edited_at"] = now_iso
+
+    # iter-Jun-2026: keep the stamped overall aesthetic risk in sync when any ERA
+    # factor (smile_line / gingival_biotype / aesthetic_risk.*) is inline-edited.
+    if any(k in fields for k in ("smile_line", "gingival_biotype", "aesthetic_risk", "missing_teeth")):
+        _merged = {**proc, **fields}
+        _era.stamp_overall(_merged)
+        fields["aesthetic_risk"] = _merged.get("aesthetic_risk")
 
     # iter-311: Prosthetic Component cascade — when the operator
     # changes the parent (Cover Screw / Healing Abutment / Immediate
@@ -11317,10 +11331,7 @@ def _build_case_context(proc: dict) -> str:
         if site_lines:
             parts.append("Per-Site Intraoral Findings:")
             parts.extend(site_lines)
-    if proc.get('smile_line'):
-        parts.append(f"Smile Line: {proc.get('smile_line')}")
-    if proc.get('gingival_biotype'):
-        parts.append(f"Gingival Biotype: {proc.get('gingival_biotype')}")
+    parts.extend(_era.era_text_lines(proc))
     teeth = proc.get('teeth_present') or []
     if teeth:
         parts.append(f"Teeth Present: {', '.join(sorted(teeth, key=lambda x: int(x) if x.isdigit() else 0))}")
@@ -14718,11 +14729,13 @@ async def generate_case_report(
         pdf.ln(3)
 
     # ── Aesthetic Risk Assessment ────────────────────────────
-    has_aesthetic = any(procedure.get(k) for k in ["smile_line", "gingival_biotype"])
-    if has_aesthetic:
+    _era_summary = _era.compute_era(procedure)
+    if _era_summary["assessed"] > 0:
         add_section_title("Aesthetic Risk Assessment", 233, 30, 99)
-        add_field("Smile Line", procedure.get("smile_line"))
-        add_field("Gingival Biotype", procedure.get("gingival_biotype"))
+        for _r in _era_summary["rows"]:
+            if _r["value"]:
+                add_field(_r["label"], f"{_r['value']}  [{_r['risk']} risk]")
+        add_field("Overall Aesthetic Risk", f"{_era_summary['overall']} ({_era_summary['assessed']}/{_era_summary['total']} factors assessed)")
         pdf.ln(3)
 
     # ── Medical Assessment ───────────────────────────────────
@@ -18335,6 +18348,8 @@ async def complete_phase1_after_augmentation(
     _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
     procedure_dict = procedure.model_dump()
     _apply_missing_teeth_derive(procedure_dict)
+    procedure_dict["aesthetic_risk"] = _era.sanitize_aesthetic_risk(procedure.aesthetic_risk, procedure_dict.get("missing_teeth"))
+    _era.stamp_overall(procedure_dict)
     role = proc.get("created_by_role") or "student"
     procedure_dict.update({
         "status": "draft",

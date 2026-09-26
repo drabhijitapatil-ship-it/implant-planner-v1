@@ -18,6 +18,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import RiskPill from '../../components/RiskPill';
+import { computeEra, isAnteriorMaxillaCase, ERA_FACTORS, RISK_COLORS } from '../../utils/aestheticRisk';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip';
 import { useAuth } from '../../contexts/AuthContext';
@@ -188,6 +190,7 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
   // Aesthetic Risk
   smile_line: { options: SMILE_LINE_OPTIONS },
   gingival_biotype: { options: GINGIVAL_BIOTYPE_OPTIONS },
+  ...Object.fromEntries(ERA_FACTORS.filter(f => !f.topLevel && !f.derived).map(f => [`aesthetic_risk.${f.key}`, { options: f.options.map(o => o.value) }])),
 
   // Medical Assessment (nested) — handled per-field
   'medical_assessment.diabetes': { options: ['No', 'Controlled', 'Uncontrolled'] },
@@ -2646,21 +2649,43 @@ export default function ProcedureDetailScreen() {
           </View>
         )}
 
-        {/* Aesthetic Risk Assessment */}
-        {!!(procedure.smile_line || procedure.gingival_biotype) && (
-          <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#E91E63' }]} data-testid="aesthetic-risk-section">
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <Ionicons name="happy" size={20} color="#E91E63" />
-              <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#C2185B' }]}>Aesthetic Risk Assessment</Text>
+        {/* Aesthetic Risk Assessment (ERA) */}
+        {(() => {
+          const era = computeEra(procedure);
+          if (era.assessed === 0) return null;
+          const anterior = isAnteriorMaxillaCase(procedure.missing_teeth);
+          const rows = era.rows.filter(r => r.value && (anterior || r.key === 'smile_line' || r.key === 'gingival_biotype'));
+          const oc = era.overall ? RISK_COLORS[era.overall] : null;
+          return (
+            <View style={[styles.section, { borderLeftWidth: 4, borderLeftColor: '#E91E63' }]} data-testid="aesthetic-risk-section">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Ionicons name="happy" size={20} color="#E91E63" />
+                <Text style={[styles.sectionTitle, { marginBottom: 0, color: '#C2185B', flex: 1 }]}>Aesthetic Risk Assessment</Text>
+                <RiskPill level={era.overall} testID="era-detail-overall-pill" />
+              </View>
+              {rows.map(r => (
+                <View key={r.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} testID={`era-detail-row-${r.key}`} data-testid={`era-detail-row-${r.key}`}>
+                  <View style={{ flex: 1 }}>
+                    <InfoRow icon={r.key === 'smile_line' ? 'eye' : r.key === 'gingival_biotype' ? 'leaf' : 'ellipse-outline'} label={r.label} value={r.value}
+                      readOnly={r.key === 'edentulous_span'}
+                      fieldKey={r.key === 'smile_line' || r.key === 'gingival_biotype' ? r.key : `aesthetic_risk.${r.key}`} />
+                  </View>
+                  <RiskPill level={r.risk} testID={`era-detail-pill-${r.key}`} />
+                </View>
+              ))}
+              {anterior && oc && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10, padding: 12, borderRadius: 12, borderWidth: 1.5, borderColor: oc.border, backgroundColor: oc.bg }}
+                  testID="era-detail-overall" data-testid="era-detail-overall">
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#1A1A2E' }}>Overall Aesthetic Risk</Text>
+                    <Text style={{ fontSize: 12, color: '#546E7A', marginTop: 2 }}>{era.assessed}/{era.total} factors assessed · {era.counts.High} high · {era.counts.Medium} medium · {era.counts.Low} low</Text>
+                  </View>
+                  <RiskPill level={era.overall} large />
+                </View>
+              )}
             </View>
-            {!!procedure.smile_line && (
-              <InfoRow icon="eye" label="Smile Line" value={procedure.smile_line} fieldKey="smile_line" />
-            )}
-            {!!procedure.gingival_biotype && (
-              <InfoRow icon="leaf" label="Gingival Biotype" value={procedure.gingival_biotype} fieldKey="gingival_biotype" />
-            )}
-          </View>
-        )}
+          );
+        })()}
 
         {/* Medical Assessment */}
         {procedure.medical_assessment && Object.keys(procedure.medical_assessment).length > 0 && (
@@ -5171,11 +5196,11 @@ export default function ProcedureDetailScreen() {
   );
 }
 
-function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingProp, editValue: editValueProp, onEditChange: onEditChangeProp, onSave: onSaveProp, onCancel: onCancelProp, saving: savingProp }: {
+function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingProp, editValue: editValueProp, onEditChange: onEditChangeProp, onSave: onSaveProp, onCancel: onCancelProp, saving: savingProp, readOnly }: {
   icon: string; label: string; value: string;
   fieldKey?: string; onEdit?: (key: string, val: string) => void;
   isEditing?: boolean; editValue?: string; onEditChange?: (v: string) => void;
-  onSave?: () => void; onCancel?: () => void; saving?: boolean;
+  onSave?: () => void; onCancel?: () => void; saving?: boolean; readOnly?: boolean;
 }) {
   const editCtx = useReactContext(EditContext);
   
@@ -5224,7 +5249,7 @@ function InfoRow({ icon, label, value, fieldKey, onEdit, isEditing: isEditingPro
     if (useCtx) editCtx.setEditValues(prev => ({ ...prev, [key]: v }));
   };
 
-  const showPencil = (editCtx?.isEditMode || !!onEdit) && !isEditing;
+  const showPencil = !readOnly && (editCtx?.isEditMode || !!onEdit) && !isEditing;
 
   // Resolve picker config if the field has predefined options
   const pickerCfg = useCtx && isEditing ? resolveFieldOptions(key, editCtx.procedure) : null;

@@ -421,7 +421,7 @@ export const TMJ_OPTIONS = ['Normal', 'Deviation Present'];
 
 // Aesthetic Risk Assessment (for non-full-arch types)
 export const SMILE_LINE_OPTIONS = ['Low', 'Medium', 'High'];
-export const GINGIVAL_BIOTYPE_OPTIONS = ['Thin', 'Thick'];
+export const GINGIVAL_BIOTYPE_OPTIONS = ['Thick, Low scalloped', 'Medium, Medium Scalloped', 'Thin, High scalloped'];
 
 // ─── Medical Assessment Risk Factors ──────────────────
 export const MEDICAL_RISK_FACTORS = [

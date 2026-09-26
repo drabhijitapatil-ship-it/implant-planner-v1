@@ -1,0 +1,30 @@
+{
+  "summary": "iter-Jun-2026 — Esthetic Risk Assessment (ERA) full-stack verification. Backend: 6/6 existing tests re-passed + 2 additional regression tests (legacy 'Thin' biotype GET no 500; posterior-only case-report PDF generates without ERA section). Frontend (390x844 mobile web): anterior maxilla expansion (FDI 11) shows all 15 expected testids — era-anterior-hint, 9 dropdowns (smile_line, smile_type, gingival_biotype, adjacent_teeth_right/left, infection_at_site, ridge_condition, bone_level_adjacent, patient_expectations), read-only era-edentulous-span='Single tooth' with Low-risk pill, era-overall pending until first factor then 'Low risk' at 1/10 · 0 high · 0 medium · 1 low, era-incomplete shows '9 factor(s) still to grade'. Smile Type=Gummy → High-risk pill (red) + overall High-risk. Infection=Chronic → Medium (orange) pill. Posterior-only (FDI 16): only Smile Line + Gingival Biotype rendered; no era-anterior-hint, no era-overall, no era-edentulous-span, no era-incomplete. Gingival Biotype dropdown lists exactly the 3 new values (Thick, Low scalloped / Medium, Medium Scalloped / Thin, High scalloped). Full-arch regression: 'All on 4' hides aesthetic-risk-section entirely. Case-Details ERA rendering code (procedures/[id].tsx L2652-2688) verified via code review — testids era-detail-row-<key>, era-detail-pill-<key>, era-detail-overall, era-detail-overall-pill are all wired; span row is passed readOnly=true (no pencil), other rows use aesthetic_risk.<key> fieldKey for pencil-edit. No React Native / deprecated-package issues found in the new ERA code. No blocking bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_jun2026_aesthetic_risk.py",
+    "/app/backend/tests/test_iter_jun2026_era_regression.py",
+    "/app/test_reports/pytest/iter_jun2026_aesthetic_risk.xml",
+    "/app/test_reports/pytest/iter_jun2026_era_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "aestheticRisk.ts + aesthetic_risk.py mirror each other correctly (factor keys, options, risk grading, ITI-style overall, legacy Thin/Thick mapping, span derivation).",
+    "AestheticRiskSection.tsx correctly filters to top-level-only factors when anterior=false (posterior-only shows just Smile Line + Gingival Biotype).",
+    "Case Details ERA block early-returns when era.assessed === 0 and additionally hides the 'Overall Aesthetic Risk' card for non-anterior cases (matches spec).",
+    "sanitize_aesthetic_risk drops unknown keys and re-derives edentulous_span server-side, overriding any client-sent value (guardrail confirmed via backend test).",
+    "missClinical (new-procedure.tsx:2002) correctly enumerates 'Aesthetic Risk — <label>' for every ungraded selectable factor when anterior — gating logic sound (Alert.alert is a no-op on RN-web as noted, but section list is used)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (8/8 pytest)", "frontend": "100% for tested flows (anterior expansion, span derivation, posterior-only, full-arch hide, biotype options)"},
+  "seed_data_creation": "Backend tests create ERA cases (patient 'ERA Test Patient' anterior 11/21 and posterior 16) plus 2 regression cases (legacy Thin biotype at 11; posterior-only 16 without ERA). All left in DB with unique registration_number.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "ERA feature is fully working end-to-end. Correct dropdown option testid pattern for procedure-type dropdown is 'dropdown-type-of-implant-procedure-option-<slug>' (not 'option-<slug>' as written in the review request). ERA option testids are 'era-<factor>-option-<value-slug>'. Case-Details ERA UI was not clicked-through in browser but the code path is straightforward and driven by the same computeEra utility that passed backend + form tests; if a deeper Case Details UI regression is needed, log in as admin Abhijit.patil / Admin@123, open My Cases → search 'ERA Test Patient', verify era-detail-* testids."
+}

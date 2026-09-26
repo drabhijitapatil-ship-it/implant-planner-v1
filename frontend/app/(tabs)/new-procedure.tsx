@@ -20,6 +20,8 @@ import PatientNameMatchBanner from '../../components/PatientNameMatchBanner';
 import ZygomaPterygoidPhase1Form, { ZygomaPterygoidPhase1Data } from '../../components/ZygomaPterygoidPhase1Form';
 import GroupedDescDropdown from '../../components/GroupedDescDropdown';
 import AssistantPicker from '../../components/AssistantPicker';
+import AestheticRiskSection from '../../components/AestheticRiskSection';
+import { isAnteriorMaxillaCase, ERA_SELECTABLE_FACTORS, eraValue } from '../../utils/aestheticRisk';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
   PROCEDURE_TYPES,  LOADING_TYPES,
@@ -41,8 +43,6 @@ import {
   VERTICAL_DIMENSION_OPTIONS,
   OPPOSING_DENTITION_OPTIONS,
   TMJ_OPTIONS,
-  SMILE_LINE_OPTIONS,
-  GINGIVAL_BIOTYPE_OPTIONS,
   MEDICAL_RISK_FACTORS,
   calculateMedicalRisk,
   getProstheticOptions,
@@ -471,6 +471,8 @@ export default function NewProcedureScreen() {
     // Aesthetic Risk Assessment
     smile_line: '',
     gingival_biotype: '',
+    // iter-Jun-2026: ERA factors for anterior-maxilla cases (FDI 11–13 / 21–23)
+    aesthetic_risk: {} as Record<string, string>,
     // Full-Arch atrophy assessment (anterior/posterior bone height + width per arch, mm)
     atrophy_max_ant_h: '',
     atrophy_max_post_h: '',
@@ -798,6 +800,7 @@ export default function NewProcedureScreen() {
                 // Aesthetic Risk Assessment
                 smile_line: proc.smile_line || '',
                 gingival_biotype: proc.gingival_biotype || '',
+                aesthetic_risk: (proc.aesthetic_risk && typeof proc.aesthetic_risk === 'object') ? proc.aesthetic_risk : {},
                 // Medical Assessment
                 medical_assessment: proc.medical_assessment || prev.medical_assessment,
                 medical_risk_level: proc.medical_risk_level || '',
@@ -957,6 +960,7 @@ export default function NewProcedureScreen() {
           soft_tissue_thickness: '', keratinized_mucosa: '', periodontal_status: '', occlusal_scheme: '',
           parafunction_habit: '', vertical_dimension: '', opposing_dentition: '',
           vertical_dimension_mm: '', available_interarch_space: '', opposing_arch: '', tmj: '', smile_line: '', gingival_biotype: '',
+          aesthetic_risk: {} as Record<string, string>,
           medical_assessment: {} as Record<string, string>, medical_risk_level: '',
         });
         setChecklistItems({});
@@ -1990,6 +1994,14 @@ export default function NewProcedureScreen() {
       if (!formData.occlusocervical_height) missClinical.push('Occlusocervical height');
       if (!formData.mesiodistal_space) missClinical.push('Mesiodistal space');
       if (!formData.ridge_contour) missClinical.push('Ridge contour');
+    }
+
+    // iter-Jun-2026: Esthetic Risk Assessment is mandatory once any anterior
+    // maxillary tooth (FDI 11–13 / 21–23) is marked on the chart.
+    if (isNonFullArch && !isOverdentureNonFullArch && !isExistingImplantCase && isAnteriorMaxillaCase(missingTeeth)) {
+      for (const f of ERA_SELECTABLE_FACTORS) {
+        if (!eraValue(formData, f.key)) missClinical.push(`Aesthetic Risk — ${f.label}`);
+      }
     }
 
     if (isExistingImplantCase) {
@@ -3479,15 +3491,16 @@ export default function NewProcedureScreen() {
             </>
           )}
 
-          {/* Aesthetic Risk Assessment – Non-Full-Arch */}
+          {/* Aesthetic Risk Assessment – Non-Full-Arch (ERA expands for anterior maxilla) */}
           {isNonFullArch && (
-            <>
-              <Text style={styles.subSectionTitle}>Aesthetic Risk Assessment</Text>
-              <Dropdown label="Smile Line" value={formData.smile_line}
-                options={SMILE_LINE_OPTIONS} onChange={v => updateForm('smile_line', v)} />
-              <Dropdown label="Gingival Biotype" value={formData.gingival_biotype}
-                options={GINGIVAL_BIOTYPE_OPTIONS} onChange={v => updateForm('gingival_biotype', v)} />
-            </>
+            <AestheticRiskSection
+              values={formData}
+              anterior={!isOverdentureNonFullArch && isAnteriorMaxillaCase(formData.missing_teeth)}
+              onChange={(key, v, topLevel) => {
+                if (topLevel) updateForm(key, v);
+                else setFormData(prev => ({ ...prev, aesthetic_risk: { ...(prev.aesthetic_risk || {}), [key]: v } }));
+              }}
+            />
           )}
         </View>
       )}
