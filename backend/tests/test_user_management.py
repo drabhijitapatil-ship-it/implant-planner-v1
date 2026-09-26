@@ -14,7 +14,7 @@ import requests
 import os
 import uuid
 
-BASE_URL = "https://prosthetic-preview.preview.emergentagent.com"
+BASE_URL = "https://dental-implant-hub-14.preview.emergentagent.com"
 
 # Test credentials
 CREDENTIALS = {

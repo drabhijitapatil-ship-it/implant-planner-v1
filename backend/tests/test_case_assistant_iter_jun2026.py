@@ -16,7 +16,7 @@ import time
 import pytest
 import requests
 
-BASE = (os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://prosthetic-preview.preview.emergentagent.com").rstrip("/") + "/api"
+BASE = (os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://dental-implant-hub-14.preview.emergentagent.com").rstrip("/") + "/api"
 
 STUDENT_OWNER = ("Gaurav.pandey", "Student@123")
 STUDENT_ASSIST = ("Aaditya.patil", "Student@123")

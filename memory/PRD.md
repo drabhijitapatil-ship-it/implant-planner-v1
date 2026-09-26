@@ -7751,3 +7751,6 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - **Email lab**: `POST /procedures/{id}/lab-share/email {lab_id}` via Emergent-managed Resend (`EMERGENT_EMAIL_KEY`, `EMAIL_FROM_NAME=Implanr` in backend/.env; guardrail gate `_assert_safe_email`; server-side template; 5/day/case). Records `lab_share.emails_sent`.
 - **Frontend**: `components/ScanFilesSection.tsx` (compact in Phase 4 Step 1 when IOS selected; full mode on case-detail Lab Prescription card with Create/Copy/Preview/Email lab/Revoke), `utils/scanUpload.ts` (expo-document-picker + 5 MB chunks; web Blob slices, native expo-file-system FileHandle base64), `pdfGenerator.ts` → `prepareLabShareBlock` auto-creates the link on Generate Lab Slip and prints a "Digital Scan Files" block (file list, portal link, secure URL, QR) and stores the slip copy.
 - Tests: `backend/tests/test_iter_jun2026_labfiles.py` (29/29); UI verified (form section, lab directory, full-mode card, Generate Lab Slip → stored slip with QR).
+
+## Fork smoke test (Jun 2026, post iter-437)
+- Forked environment: backend was STOPPED on fork → restarted; expo running. Login (student), dashboard, /procedures, /labs, /intraoral-scanners, /me/assistant-logbook all 200. No code changes. Iterations 431–437 still await user redeploy (Publish).

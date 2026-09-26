@@ -13,7 +13,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://prosthetic-preview.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://dental-implant-hub-14.preview.emergentagent.com')
 
 # Test credentials
 STUDENT_EMAIL = "Gaurav.pandey"

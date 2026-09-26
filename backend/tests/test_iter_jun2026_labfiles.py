@@ -8,7 +8,7 @@ import zipfile
 import pytest
 import requests
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/") or "https://prosthetic-preview.preview.emergentagent.com"
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/") or "https://dental-implant-hub-14.preview.emergentagent.com"
 API = f"{BASE_URL}/api"
 CASE_ID = "69cfde8b356c7405230a9dcc"
 
@@ -168,7 +168,7 @@ class TestLabShare:
         r = requests.post(f"{API}/procedures/{CASE_ID}/lab-share", headers=_h(tokens["gaurav"]), timeout=30)
         assert r.status_code == 200, r.text
         j = r.json()
-        assert j["url"].startswith("https://prosthetic-preview.preview.emergentagent.com/api/lab/")
+        assert j["url"].startswith("https://dental-implant-hub-14.preview.emergentagent.com/api/lab/")
         assert j["qr_png_base64"]
         assert len(base64.b64decode(j["qr_png_base64"])) > 100
         SHARE["url"] = j["url"]

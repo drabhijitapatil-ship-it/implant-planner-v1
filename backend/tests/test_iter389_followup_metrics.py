@@ -6,7 +6,7 @@ import os
 import requests
 import pytest
 
-BASE_URL = "https://prosthetic-preview.preview.emergentagent.com"
+BASE_URL = "https://dental-implant-hub-14.preview.emergentagent.com"
 
 CREDS = {
     "admin": ("Abhijit.patil", "Admin@123"),

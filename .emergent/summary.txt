@@ -1,18 +1,27 @@
-<analysis>**original_problem_statement**: A comprehensive prosthodontics mobile application for managing implant surgical case workflows across 5 phases. PRODUCT REQUIREMENTS: Manage users by roles, execute a multi-phase case approval workflow, generate comprehensive PDFs, provide clinical decision support, HIPAA compliance features, Multi-tenant Architecture, Role-scoped Clinical Analytics, and e-signature/consent management. In the recent session, the user requested an extensive series of UX/UI refinements and bug fixes specifically focused on harmonizing the Zygoma, Pterygoid, and Conventional implant workflows across Phases 2 through 5.
+<analysis>**original_problem_statement**: A comprehensive prosthodontics mobile application for managing implant surgical case workflows across 5 phases. PRODUCT REQUIREMENTS: Manage users by roles, execute a multi-phase case approval workflow, generate comprehensive PDFs, provide clinical decision support, HIPAA compliance features, Multi-tenant Architecture, Role-scoped Clinical Analytics, and e-signature/consent management. Recently, user requested an integration path to connect the Implanr app to external patient management software.
 
 **User's preferred language**: English (INSTRUCT next agent to respond in English only)
 
-**what currently exists?**: React Native (Expo) frontend + FastAPI backend + MongoDB. An extensive unification effort mapping the Zygoma/Pterygoid advanced clinical workflow into the conventional Phase 2-5 structure has just been completed. The app now handles mixed-implant cases seamlessly, with dynamically gated radiograph forms, smart planner classifications, and independent approval flows for advanced clinical forms.
+**what currently exists?**: React Native (Expo SDK 57) frontend + FastAPI backend + MongoDB. The app handles highly granular, dynamic prosthetic planning forms across 5 phases. Includes full audit logging, PDF generation, and a 2D DataMatrix scanning flow. Recently added: Case Assistant workflows (read-only case sharing for postgrad students), Phase 4 Step 1 Advanced Impression tracking (Conventional vs. Intraoral Scans), and Lab Slip Digital Scan Files support (chunked STL/PLY uploads via object storage + secure email delivery to labs via Resend).
 
 **Last working item**:
-    - Last item agent was working: Compiling a detailed summary of all the Zygoma/Pterygoid workflow changes accomplished during the session and generating a downloadable Word file ().
-    - Status: COMPLETED
+    - Last item agent was working: Completed the Lab Slip Scan Files feature. Students can attach large STL/PLY scans via chunked upload. Generated Lab Slips now include a QR code and secure link (valid for 30 days) to download scans. Integrated Resend to email the lab directly from the app.
+    - Status: NONE (Completed and verified)
     - Agent Testing Done: Y
-    - Which testing method agent to use?: NA (File generated and served)
+    - Which testing method agent to use?: Both
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  Issue 1: Verify  role rollback state (P1)
+  Issue 1: Connect Implanr to external Patient Management Software (PMS) (P0)
+     - Attempted fixes: Asked user for preferences in previous forks, but user pivoted to other feature requests.
+     - Next debug checklist: Ask the user how they want to proceed regarding the external PMS connection (which target software or export methodology like FHIR, REST, CSV).
+     - Why fix this issue and what will be achieved with the fix?: Sync patient/case data seamlessly with existing clinic systems.
+     - Status: USER VERIFICATION PENDING
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on other issue: User response regarding integration methodology.
+
+  Issue 2: Verify  role rollback state (P1)
      - Attempted fixes: Carried over from older forks.
      - Next debug checklist:  the codebase for . Verify if DB requires a manual update to restore Dr. Riddhi Sabane's role to .
      - Why fix this issue and what will be achieved with the fix?: Ensures RBAC consistency based on user's past instructions.
@@ -21,7 +30,7 @@
      - Should Test frontend/backend/both after fix?: Backend
      - Blocked on other issue: None
 
-  Issue 2: Microsoft Login for Sign Up and Login (P1)
+  Issue 3: Microsoft Login for Sign Up and Login (P1)
      - Attempted fixes: None.
      - Next debug checklist: Call  to get the Microsoft OAuth playbook.
      - Why fix this issue and what will be achieved with the fix?: Fulfills core auth requirements for institutional login.
@@ -30,8 +39,22 @@
      - Should Test frontend/backend/both after fix?: Both
      - Blocked on other issue: None
 
-**In progress Task List**: 
-None. (All tasks assigned in the current session were completed successfully).
+  Issue 4: Add New Implant mid-treatment UI is missing (P2)
+     - Attempted fixes: Backend endpoints () are fully implemented but unreachable from the UI.
+     - Next debug checklist: Design and implement UI triggers in Case Details, Phase 3, or Phase 4 screens to invoke the existing API endpoints and handle the approval flow.
+     - Why fix this issue and what will be achieved with the fix?: Unlocks parallel implant tracking mid-treatment.
+     - Status: NOT STARTED
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on other issue: None
+
+**In progress Task List**:
+  Task 1: Build Personalized AI Agent (My Agent) (P1)
+     - Where to resume: Start implementing the RAG-based AI Agent using the Anthropic playbook (loaded in a previous session). **CRITICAL: Ensure credit cost UI is hidden from users with the  role and only shown to .**
+     - What will be achieved with this?: Users get a dedicated bottom tab to ask clinical questions grounded in past cases.
+     - Status: NOT STARTED (Paused due to changing user priorities).
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on something: Needs user confirmation to begin over PMS integration.
 
 **Upcoming and Future Tasks**
     Upcoming Tasks:
@@ -44,18 +67,14 @@ None. (All tasks assigned in the current session were completed successfully).
     - P2: Implement proper Phased Dark Mode.
 
 **Completed work in this session**
-- Advanced Clinical (Zygoma) ORIS Decoupling + independent approval flow (DONE)
-- Editable Prosthetic Plan in Phase 2 with audit log (DONE)
-- Phase 2 submit MongoDB Code 40  collision hotfix (DONE)
-- Removed redundant 3-tab sub-views from Phases 3, 4, and 5 (DONE)
-- Case Details Phase 2 Review color-coding by implant type outlines (DONE)
-- Smart Prosthetic Planner classifying Zygoma cases as edentulous full arch (DONE)
-- Advanced Clinical active gating until Phase 3 or Day 30 + backend  endpoint (DONE)
-- Radiograph logic split (OPG for Zygoma/Pterygoid, IOPA for Conventional) across Phase 2 and Phase 4 (DONE)
-- Phase 4 Step 1 (Lab Slip) MUA auto-seed with confirmation checkboxes (DONE)
-- Phase 4 Step 1 Intra-Oral Scan sub-fields mapped to PDF Lab Slip (DONE)
-- Phase 4 Step 2 Baseline radiograph compare logic gated for Conventional (DONE)
-- Generated  (DONE)
+- Built Case Assistant Role Feature (Case assignment, read-only Phase 1-4 view, notification dispatch, My Cases Assisted tab).
+- Built Assistant Logbook (Profile stats, CSV export).
+- Overhauled Phase 4 Step 1 Impression Forms (Conventional vs Intraoral Scans).
+- Built  database with searchable UI picker and Admin moderation for Other submissions.
+- Built Lab Slip Scan Files chunked uploads (STL/PLY/OBJ up to 500MB via Object Storage).
+- Implemented JWT-based secure download links (30-day expiry) and QR code generation for Lab Slips.
+- Integrated Resend to deliver Lab Slips + scan links directly to labs.
+- Extracted backend modules (, ) out of the monolithic .
 
 **Earlier issues found/mentioned but not fixed**
    Issue 1: Tablet Responsiveness is limited
@@ -64,67 +83,62 @@ None. (All tasks assigned in the current session were completed successfully).
    - Should Test frontend/backend/both after fix: Frontend
    - Is recurring issue? N
 
-   Issue 2: React Native empty text-node warning
-   - Debug checklist: A recurring warning  is thrown occasionally on the procedure details view.
-   - Why to solve this issue and what will be achieved with this?: Cleans up console noise.
-   - Should Test frontend/backend/both after fix: Frontend
-   - Is recurring issue? Y
-
 **Known issue recurrence from previous fork**
   - Issue recurrence in previous fork: None
   - Recurrence count: 0
   - Status: RESOLVED
 
 **Code Architecture**
-
+- : Primary monolithic FastAPI app.
+- : Handlers for chunked lab file uploads and JWT token serving.
+- : Seed data and constants for impression workflows.
+- : Main view controllers.
+- : Reusable UI modules (added , , ).
 
 **Key Technical Concepts**
-- Frontend: React Native, Expo Router.
+- Frontend: React Native, Expo Router (SDK 57).
 - Backend: FastAPI, MongoDB.
-- Complex form state management, sequential clinical gating rules, nested UI rendering based on implant type combinations (e.g. Mixed Conventional + Zygoma).
+- Cloud Integrations: Emergent Managed Object Storage (Chunked Uploads), Resend (Email Delivery).
+- Domain Specific: Prosthodontic Clinical Workflows, Lab Slip Generation, QR Code Generation ( library).
 
 **key DB schema**
-  - : Contains , timestamp fields (, ), and .
-  - : Audit trail object mapping.
-  - : Maps , , , and per-row  boolean.
+  - : Contains extended  holding structured impression choices, plus  and .
+  - :  (New master list table).
+  - :  (New lab directory table).
 
 **changes in tech stack**
-  - None. 
+  - Added  python library for generating lab slip download QR codes.
 
 **All files of reference** 
-- : Primary backend code. (Avoid complete file rewrites here due to its size; heavily use ).
-- : Standalone decoupled ORIS flow component.
-- : Compares baseline and current scans, gated via  prop.
-- : Handles dynamically generated PDF elements, including newly added HTML bullet points for Intra-Oral Scan data.
-- : The summary document generated at the end of the session.
+-  (New: handles STL/PLY object storage chunked uploads).
+-  (Updated heavily for advanced impressions).
+-  (New: handles frontend chunked upload UI logic).
+-  (Updated to inject QR blocks into Lab Slip).
 
 **Areas that need refactoring**: 
--  is extremely large (>24,000 lines). Extracting PDF generation endpoints or distinct API routes to separate files would drastically improve code maintenance in future phases.
+-  is extremely large. Though  and  were extracted, the majority of routes remain in .
 
 **key api endpoints**
--  
-- 
-- 
-- 
--  (Modified to serve the new docx report)
+-  & : Chunked upload management for STL/PLY files.
+- : Dispatches the secure lab slip and download links via Resend.
+- : Serves the searchable tree of companies/models.
 
 **Critical Info for New Agent** 
-- **Production Status**: The user has deployed the app to **PRODUCTION**. The environment you operate in is **PREVIEW**. Always confirm whether reported issues are occurring in PREVIEW or PRODUCTION. If code fixes are applied, remind the user to trigger a new deployment/build via Expo to see the changes live on production.
-- **MongoDB  Conflicts**: When making changes in  related to updating nested fields, ensure you do not simultaneously  a parent object and its sub-path (e.g.,  and ) within the same update dictionary, as this causes a MongoDB Code 40 conflict.
+- **Production Environment**: The app is actively deployed to production on EAS/K8s. There are now two environments: Preview (Dev) and Production (Deployed). Ensure you clarify with the user if future bug reports refer to preview or production.
+- **Files Extracted**: The backend monolithic  was finally split slightly in this session.  and  now contain specific feature logic.
+- **Anthropic AI Agent Context**: If resuming My Agent, the anthropic playbook is already loaded in the environment. You must strictly hide the credit cost UI from the  role.
 
 **documents and test reports created in this job**
-  -  through  (Exhaustive backend/frontend test results for chunks B-I)
-  -  
-  -  (Final session summary generated for the user)
+  -  (Phase 4 Step 1 & Lab Scan testing reports)
 
 **Last 10 User Messages and any pending HUMAN messages** 
- 1. User requested logic updates for Phase 4 Step 2: Ensure baseline compare radiograph applies for conventional implants even in mixed cases, and update IOPA post-delivery UI to mirror Phase 2.
- 2. Agent implemented the  update for RadiographCompare and updated the IOPA UI in Phase 4 Step 2.
- 3. Agent ran the testing_agent; tests passed (iter-426).
- 4. Agent finalized Chunk I and delivered the summary.
- 5. User asked for a complete summary of this forked session detailing all Zygoma/Pterygoid changes in a word file.
- 6. Agent generated a python script, executed it to build , and updated  endpoint to serve it.
- 7. Agent delivered the file path to the user. No pending human messages.
+ 1. User: *System Notif* The user has deployed this app to production... Provide structured options for Phase 4 Impression techniques... (Completed)
+ 2. User: Mandatory rules when Intraoral Scan is selected... (Completed)
+ 3. User: Credits Recharged. Please Continue. (Completed)
+ 4. User: Lab Slip Scan Files: Let students attach the STL/PLY scan export or lab portal link... (Completed)
+ 5. User: Lab download link validity: 30 days... Email lab button: Yes... (Completed)
+ 6. User: Credits Recharged. Please Continue. (Completed)
+ - *Pending HUMAN message*: Awaiting user instruction on which pending development task (PMS integration, AI Agent, Auth) to tackle next, or if there's a new feature request.
 
 **Project Health Check:**
 - Broken: None
@@ -133,22 +147,24 @@ None. (All tasks assigned in the current session were completed successfully).
 **3rd Party Integrations** 
 - Expo EAS (Deployment)
 - Stripe (Payments) - requires User API Key
-- Anthropic (Claude Sonnet 4.6) - requires User API Key
-- OpenAI/Gemini (Vision/Image Generation) - uses Emergent LLM Key
+- Anthropic (Claude Sonnet 4.6) - requires Emergent LLM Key (Implementation pending for My Agent)
+- Resend (Email Delivery) - Emergent Managed
+- Object Storage - Emergent Managed
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Agent utilized  exhaustively for all chunks; 100% pass rate achieved).
+  - Testing agent used after significant changes: YES
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created:  through 
+  - Test files created: 
   - Known regressions: None
 
 **Credentials to test flow:**
 - Admin / Implant In-Charge:  / 
 - Student:  / 
 - Supervisor:  / 
+- Student Assistant:  / 
 
 **What agent forgot to execute**
-- Nothing. The agent successfully addressed and delivered all 9 chunks of UX/UI modifications requested by the user, fixing multiple production bugs along the way.
+- The agent properly finished all requested features but did not run  at the very end to explicitly re-prompt the user about the blocked PMS integration vs AI Agent priorities.
 
 **Debugging checklist for current issue**
-N/A - the agent completed the ongoing task. Start evaluating All Pending/In progress Issue list or Upcoming and Future Tasks for the next assignment depending on user prompts.</analysis>
+- Initiate  to check if the user wants to prioritize the PMS export integration (P0), the Microsoft OAuth setup (P1), or the RAG AI Agent (P1).</analysis>
