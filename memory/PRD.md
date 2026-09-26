@@ -7762,3 +7762,8 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - **Display**: `components/AestheticRiskSection.tsx` (form), `components/RiskPill.tsx`, Case Details rows w/ pills + overall card (inline edit via `aesthetic_risk.<key>`, span read-only via new InfoRow `readOnly` prop), client PDF + backend fpdf PDF + AI case context (`era_text_lines`).
 - Shared logic: `frontend/utils/aestheticRisk.ts` ↔ `backend/aesthetic_risk.py`.
 - Tests: `backend/tests/test_iter_jun2026_aesthetic_risk.py` (6/6) + `test_iter_jun2026_era_regression.py` (2/2); frontend verified (iteration_438).
+
+## Iteration 439 (Jun 2026) — ERA Guidance + ERA Analytics
+- **Guidance**: `components/EraGuidance.tsx` + `eraGuidance()` / `ERA_FACTOR_TIPS` / `ERA_GENERAL_HIGH_TIPS` in `utils/aestheticRisk.ts`. Shown under the overall card in the Phase 1 form (`era-guidance`) and Case Details (`era-detail-guidance`) when overall is Medium (factor tips only, ≤4) or High (factor tips + general soft-tissue graft / provisional shaping / palatal placement / consent tips, ≤8). Hidden for Low/pending.
+- **Analytics**: `GET /api/analytics/aesthetic-risk` (role-scoped via `_load_advanced_analytics_docs`; projection extended with smile_line/gingival_biotype/aesthetic_risk/missing_teeth) → summary distribution (anterior cases only), overall_outcomes (cases/implants/failed/ended/survival_rate by grade), factors (option mix, high_pct, by_grade survival), by_procedure_type, monthly. New "Aesthetic Risk" tab (`adv-tab-aesthetic`, `AestheticRiskPane`) in `app/analytics/advanced.tsx`.
+- Tests: `test_iter_jun2026_aesthetic_risk.py` (7/7) + `test_iter439_analytics_edges.py` (4/4); UI verified (iteration_439).

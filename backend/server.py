@@ -8555,6 +8555,8 @@ async def _load_advanced_analytics_docs(
         "stage2_prosthetic_data.prosthesis_type": 1,
         "final_prosthetic_plan": 1,
         "implants": 1, "implant_plans": 1, "existing_implants": 1,
+        # iter-Jun-2026: Esthetic Risk Assessment analytics
+        "smile_line": 1, "gingival_biotype": 1, "aesthetic_risk": 1, "missing_teeth": 1,
     }
     return await db.procedures.find(match, projection).to_list(20000)
 
@@ -18798,6 +18800,102 @@ async def get_impression_analytics(
         extra={"from_date": from_date, "to_date": to_date},
     )
     return result
+
+
+@api_router.get("/analytics/aesthetic-risk")
+async def get_aesthetic_risk_analytics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Esthetic Risk Assessment analytics — overall-risk distribution, per-factor
+    option mix, and outcomes (implant failure / replacement, early termination)
+    grouped by risk grade for each factor and for the overall grade."""
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    def _bucket():
+        return {"cases": 0, "implants": 0, "failed": 0, "ended": 0}
+
+    overall_dist = {"Low": 0, "Medium": 0, "High": 0}
+    overall_out = {k: _bucket() for k in ("Low", "Medium", "High")}
+    factors: Dict[str, Dict[str, Any]] = {
+        f["key"]: {"key": f["key"], "label": f["label"], "options": {}, "by_grade": {k: _bucket() for k in ("Low", "Medium", "High")}}
+        for f in _era.ERA_FACTORS
+    }
+    by_ptype: Dict[str, Dict[str, int]] = {}
+    monthly: Dict[str, Dict[str, int]] = {}
+    total_assessed = anterior_cases = complete_cases = 0
+    for p in procs:
+        summ = _era.compute_era(p)
+        if summ["assessed"] == 0:
+            continue
+        total_assessed += 1
+        anterior = _era.is_anterior_maxilla_case(p.get("missing_teeth"))
+        recs = _implant_records(p)
+        n_impl = len(recs)
+        n_failed = sum(1 for r in recs if r["status"] in ("Failed", "Replaced"))
+        ended = 1 if p.get("status") in _ANALYTICS_TERMINATED_STATUSES else 0
+        for r in summ["rows"]:
+            if not r["risk"]:
+                continue
+            f = factors[r["key"]]
+            opt = f["options"].setdefault(r["value"], {"name": r["value"], "risk": r["risk"], "count": 0})
+            opt["count"] += 1
+            b = f["by_grade"][r["risk"]]
+            b["cases"] += 1; b["implants"] += n_impl; b["failed"] += n_failed; b["ended"] += ended
+        if not anterior:
+            continue
+        anterior_cases += 1
+        if summ["assessed"] >= summ["total"]:
+            complete_cases += 1
+        ov = summ["overall"]
+        overall_dist[ov] += 1
+        b = overall_out[ov]
+        b["cases"] += 1; b["implants"] += n_impl; b["failed"] += n_failed; b["ended"] += ended
+        pt = by_ptype.setdefault(_po_pick_procedure_type(p) or "Other", {"Low": 0, "Medium": 0, "High": 0})
+        pt[ov] += 1
+        month = (p.get("procedure_date") or "")[:7]
+        if month:
+            monthly.setdefault(month, {"Low": 0, "Medium": 0, "High": 0})[ov] += 1
+
+    def _finish(b: Dict[str, int]) -> Dict[str, Any]:
+        out = dict(b)
+        out["failure_rate"] = round(100.0 * b["failed"] / b["implants"], 1) if b["implants"] else None
+        out["survival_rate"] = round(100.0 - out["failure_rate"], 1) if out["failure_rate"] is not None else None
+        return out
+
+    factor_rows = []
+    for f in factors.values():
+        opts = sorted(f["options"].values(), key=lambda o: (-o["count"], o["name"]))
+        factor_rows.append({
+            "key": f["key"], "label": f["label"],
+            "options": opts,
+            "high_pct": round(100.0 * sum(o["count"] for o in opts if o["risk"] == "High") / max(1, sum(o["count"] for o in opts)), 1) if opts else None,
+            "by_grade": {k: _finish(v) for k, v in f["by_grade"].items()},
+        })
+    factor_rows.sort(key=lambda r: -(r["high_pct"] or 0))
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="aesthetic_risk_analytics", resource_id="global",
+                     user=current_user, request=request,
+                     extra={"from_date": from_date, "to_date": to_date})
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "summary": {
+            "total_assessed": total_assessed,
+            "anterior_cases": anterior_cases,
+            "complete_cases": complete_cases,
+            "distribution": overall_dist,
+            "high_pct": round(100.0 * overall_dist["High"] / anterior_cases, 1) if anterior_cases else None,
+        },
+        "overall_outcomes": {k: _finish(v) for k, v in overall_out.items()},
+        "factors": factor_rows,
+        "by_procedure_type": [{"name": k, **v} for k, v in sorted(by_ptype.items())],
+        "monthly": [{"month": k, **v} for k, v in sorted(monthly.items())],
+    }
 
 
 @api_router.get("/analytics/followup-metrics")

@@ -174,3 +174,26 @@ def test_posterior_case_has_no_span_and_no_anterior_flag(ctx):
     ar = doc["aesthetic_risk"]
     assert "edentulous_span" not in ar and ar["anterior_maxilla"] is False
     assert ar["overall_risk"] == "High"  # smile_line High + Thin biotype
+
+
+# ------------------------------------------------------------ analytics --
+
+def test_aesthetic_risk_analytics(ctx, created):
+    r = requests.get(f"{API}/analytics/aesthetic-risk", headers=ctx["admin"]["headers"], timeout=30)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    sm = j["summary"]
+    assert sm["anterior_cases"] >= 1 and sm["total_assessed"] >= sm["anterior_cases"]
+    assert set(sm["distribution"]) == {"Low", "Medium", "High"}
+    assert sum(sm["distribution"].values()) == sm["anterior_cases"]
+    keys = {f["key"] for f in j["factors"]}
+    assert {"smile_line", "smile_type", "edentulous_span", "patient_expectations"} <= keys
+    smile_type = next(f for f in j["factors"] if f["key"] == "smile_type")
+    assert all(o["risk"] in ("Low", "Medium", "High") for o in smile_type["options"])
+    assert set(j["overall_outcomes"]) == {"Low", "Medium", "High"}
+    assert "survival_rate" in j["overall_outcomes"]["High"]
+    # student scope → own cases only, still 200
+    r2 = requests.get(f"{API}/analytics/aesthetic-risk", headers=ctx["student"]["headers"], timeout=30)
+    assert r2.status_code == 200 and r2.json()["scope"]["own_only"] is True
+    # nurse / unauthenticated → blocked
+    assert requests.get(f"{API}/analytics/aesthetic-risk", timeout=20).status_code in (401, 403)

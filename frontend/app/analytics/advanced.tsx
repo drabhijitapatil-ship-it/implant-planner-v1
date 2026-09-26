@@ -29,7 +29,7 @@ import { downloadAuthenticated } from '../../utils/csvDownload';
 import CalendarPicker from '../../components/CalendarPicker';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'augmentation' | 'impressions' | 'benchmarks' | 'export';
+type Section = 'km' | 'scatter' | 'heatmap' | 'crosstab' | 'learning' | 'cmi' | 'complications' | 'failures' | 'followup' | 'adherence' | 'augmentation' | 'impressions' | 'aesthetic' | 'benchmarks' | 'export';
 
 const SECTIONS: { key: Section; label: string; icon: IoniconsIconName; facultyOnly?: boolean }[] = [
   { key: 'km', label: 'Kaplan-Meier', icon: 'pulse-outline' },
@@ -44,6 +44,7 @@ const SECTIONS: { key: Section; label: string; icon: IoniconsIconName; facultyOn
   { key: 'adherence', label: 'Plan Adherence', icon: 'git-compare-outline' },
   { key: 'augmentation', label: 'Augmentation', icon: 'bandage-outline' },
   { key: 'impressions', label: 'Impressions & Scanners', icon: 'scan-outline' },
+  { key: 'aesthetic', label: 'Aesthetic Risk', icon: 'happy-outline' },
   { key: 'benchmarks', label: 'Benchmarks', icon: 'ribbon-outline' },
   { key: 'export', label: 'Research Export', icon: 'download-outline' },
 ];
@@ -134,6 +135,7 @@ export default function AdvancedAnalyticsHub() {
         {section === 'followup' && <FollowUpPane fromDate={fromDate} toDate={toDate} />}
         {section === 'augmentation' && <AugmentationPane fromDate={fromDate} toDate={toDate} />}
         {section === 'impressions' && <ImpressionsPane fromDate={fromDate} toDate={toDate} />}
+        {section === 'aesthetic' && <AestheticRiskPane fromDate={fromDate} toDate={toDate} />}
         {section === 'adherence' && <AdherencePane fromDate={fromDate} toDate={toDate} />}
         {section === 'benchmarks' && <BenchmarksPane fromDate={fromDate} toDate={toDate} />}
         {section === 'export' && <ResearchExportPane fromDate={fromDate} toDate={toDate} />}
@@ -1366,6 +1368,143 @@ function ImpressionsPane({ fromDate, toDate }: { fromDate: string; toDate: strin
                 <Text style={s.failN}>IOS {r.intraoral} · conventional {r.conventional}</Text>
               </View>
               <Text style={[s.failRate, { color: '#2E7D32' }]}>{Math.round((r.intraoral / Math.max(1, r.intraoral + r.conventional)) * 100)}% IOS</Text>
+            </View>
+          ))}
+        </SectionCard>
+      ) : null}
+    </View>
+  );
+}
+
+function AestheticRiskPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const r = await api.get('/analytics/aesthetic-risk', { params });
+      setData(r.data);
+    } finally { setLoading(false); }
+  }, [fromDate, toDate]);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
+  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  const sm = data.summary || {};
+  const dist = sm.distribution || { Low: 0, Medium: 0, High: 0 };
+  const GRADES: Array<'Low' | 'Medium' | 'High'> = ['Low', 'Medium', 'High'];
+  const GC: Record<string, string> = { Low: '#2E7D32', Medium: '#EF6C00', High: '#C62828' };
+  const slug = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const anterior = sm.anterior_cases || 0;
+  const monthly: any[] = data.monthly || [];
+  const maxMonth = Math.max(1, ...monthly.map((m: any) => m.Low + m.Medium + m.High));
+  const oo = data.overall_outcomes || {};
+
+  const StackBar = ({ row }: { row: any }) => {
+    const tot = Math.max(1, (row.Low || 0) + (row.Medium || 0) + (row.High || 0));
+    return (
+      <View style={{ flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: '#ECEFF1' }}>
+        {GRADES.map(g => (row[g] ? <View key={g} style={{ width: `${(row[g] / tot) * 100}%`, backgroundColor: GC[g] }} /> : null))}
+      </View>
+    );
+  };
+
+  return (
+    <View style={s.pane} testID="aesthetic-analytics-pane">
+      <SectionCard title="Overall aesthetic risk" hint="Phase 1 ERA — anterior-maxilla cases (FDI 11–13 / 21–23) graded ITI-style.">
+        <View style={s.bucketsRow}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{anterior}</Text><Text style={s.bucketLbl}>Anterior cases</Text></View>
+          {GRADES.map(g => (
+            <View key={g} style={s.bucketCard} testID={`era-an-dist-${g.toLowerCase()}`}>
+              <Text style={[s.bucketCount, { color: GC[g] }]}>{dist[g] ?? 0}</Text>
+              <Text style={s.bucketLbl}>{g}{anterior ? ` (${Math.round(((dist[g] || 0) / anterior) * 100)}%)` : ''}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={[s.failN, { marginTop: 8 }]}>{sm.total_assessed ?? 0} case(s) with any aesthetic data · {sm.complete_cases ?? 0} fully graded (10/10).</Text>
+        {monthly.length > 0 ? (
+          <View style={{ marginTop: 14 }}>
+            <Text style={s.failN}>Monthly trend — green Low · orange Medium · red High</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 90, marginTop: 8 }}>
+              {monthly.slice(-12).map((m: any) => (
+                <View key={m.month} style={{ flex: 1, maxWidth: 48, alignItems: 'center' }} testID={`era-an-month-${m.month}`}>
+                  <View style={{ width: '100%', height: 70, justifyContent: 'flex-end' }}>
+                    <View style={{ height: `${(m.High / maxMonth) * 100}%`, backgroundColor: GC.High, borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />
+                    <View style={{ height: `${(m.Medium / maxMonth) * 100}%`, backgroundColor: GC.Medium }} />
+                    <View style={{ height: `${(m.Low / maxMonth) * 100}%`, backgroundColor: GC.Low }} />
+                  </View>
+                  <Text style={{ fontSize: 8, color: '#78909C', marginTop: 3 }}>{m.month.slice(2).replace('-', '/')}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="Outcomes by overall grade" hint="Implant failure / replacement and early treatment termination per overall risk grade.">
+        {GRADES.map(g => {
+          const b = oo[g] || {};
+          return (
+            <View key={g} style={s.failRow} testID={`era-an-outcome-${g.toLowerCase()}`}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: GC[g], marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{g} risk</Text>
+                <Text style={s.failN}>{b.cases ?? 0} case(s) · {b.implants ?? 0} implant(s) · {b.failed ?? 0} failed · {b.ended ?? 0} ended early</Text>
+              </View>
+              <Text style={[s.failRate, { color: b.failure_rate == null ? '#B0BEC5' : b.failure_rate > 5 ? '#C62828' : '#2E7D32' }]}>
+                {b.survival_rate != null ? `${b.survival_rate}% surv.` : '—'}
+              </Text>
+            </View>
+          );
+        })}
+      </SectionCard>
+
+      <SectionCard title="Risk factors" hint="Option mix per factor (sorted by share of High grades) and implant survival by grade.">
+        {(data.factors || []).map((f: any) => {
+          const tot = Math.max(1, (f.options || []).reduce((a: number, o: any) => a + o.count, 0));
+          return (
+            <View key={f.key} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' }} testID={`era-an-factor-${slug(f.key)}`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={s.failName}>{f.label}</Text>
+                <Text style={[s.paretoRight, { color: (f.high_pct || 0) >= 40 ? '#C62828' : '#78909C' }]}>{f.high_pct != null ? `${f.high_pct}% high` : '—'}</Text>
+              </View>
+              {(f.options || []).length === 0 ? <EmptyMsg /> : (f.options || []).map((o: any) => (
+                <View key={o.name} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: GC[o.risk] }} />
+                  <Text style={[s.paretoLbl, { fontWeight: '500' }]} numberOfLines={2}>{o.name}</Text>
+                  <View style={[s.paretoBar, { width: 70 }]}><View style={[s.paretoBarFill, { width: `${(o.count / tot) * 100}%`, backgroundColor: GC[o.risk] }]} /></View>
+                  <Text style={[s.paretoRight, { width: 34, textAlign: 'right' }]}>{o.count}</Text>
+                </View>
+              ))}
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                {GRADES.map(g => {
+                  const b = f.by_grade?.[g] || {};
+                  return (
+                    <View key={g} style={{ flex: 1, backgroundColor: '#F5F7FB', borderRadius: 8, paddingVertical: 6, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 10, color: GC[g], fontWeight: '700' }}>{g}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '800', color: '#1A2332' }}>{b.survival_rate != null ? `${b.survival_rate}%` : '—'}</Text>
+                      <Text style={{ fontSize: 9, color: '#90A4AE' }}>{b.implants ?? 0} impl · {b.cases ?? 0} cases</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
+      </SectionCard>
+
+      {(data.by_procedure_type || []).length ? (
+        <SectionCard title="Overall grade by procedure type" hint="Low / Medium / High split per implant procedure type (anterior cases).">
+          {(data.by_procedure_type || []).map((r: any) => (
+            <View key={r.name} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' }} testID={`era-an-ptype-${slug(r.name)}`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={s.failName}>{r.name}</Text>
+                <Text style={s.failN}>L {r.Low} · M {r.Medium} · H {r.High}</Text>
+              </View>
+              <StackBar row={r} />
             </View>
           ))}
         </SectionCard>

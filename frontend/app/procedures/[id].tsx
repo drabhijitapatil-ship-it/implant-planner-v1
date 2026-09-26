@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import RiskPill from '../../components/RiskPill';
+import EraGuidance from '../../components/EraGuidance';
 import { computeEra, isAnteriorMaxillaCase, ERA_FACTORS, RISK_COLORS } from '../../utils/aestheticRisk';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
 import { CaramesSeverityStrip } from '../../components/AtrophyClassificationChip';
@@ -2683,6 +2684,7 @@ export default function ProcedureDetailScreen() {
                   <RiskPill level={era.overall} large />
                 </View>
               )}
+              {anterior && <EraGuidance summary={era} testID="era-detail-guidance" />}
             </View>
           );
         })()}

@@ -1,0 +1,31 @@
+{
+  "summary": "iter-Jun-2026 (ERA Guidance + ERA Analytics) — full-stack verification passed. Backend: 7/7 tests in test_iter_jun2026_aesthetic_risk.py pass (including test_aesthetic_risk_analytics) + 4/4 new edge tests in test_iter439_analytics_edges.py (far-past filter → 200 anterior_cases=0 & high_pct=null; sum(distribution)==anterior_cases on unfiltered call; every factor option has risk in {Low,Medium,High}; unauthenticated → 401/403). Nurse role check skipped (no nurse account in test_credentials.md). Frontend (390x844 mobile web): (1) ERA Guidance in New-Case form — student Gaurav.pandey → aug-required-no → single-conventional-implant → FDI 11 → biotype 'thin, high-scalloped' shows era-guidance with 'High aesthetic risk — clinical guidance' and 5 tip rows (era-guidance-tip-0..4) covering CTG, soft-tissue augmentation, screw-retained provisional, palatal position, consent. Switching biotype to 'thick, low-scalloped' with all-else empty → era-guidance disappears (overall Low). Setting era-infection-at-site=Chronic (biotype back to Thick) → guidance re-renders as 'Medium aesthetic risk — points to watch' with 1 tip and era-overall pill = 'Medium risk'. (2) Case Details guidance — admin Abhijit.patil opened anterior 'ERA Test Patient' case (11, Medium): era-detail-overall + era-detail-guidance render with 'Medium aesthetic risk — points to watch' + horizontal defect tip; all 10 era-detail-row-* and era-detail-pill-* testids present. Posterior-only ERA Test Patient case (16, High): era-detail-overall AND era-detail-guidance are both HIDDEN — only 2 rows rendered (smile_line + gingival_biotype). (3) ERA Analytics UI — /analytics/advanced → adv-tab-aesthetic → aesthetic-analytics-pane renders with all 4 bucket cards (era-an-dist-low/medium/high visible; anterior_cases=6 for admin, 5 for student — own-scope), 3 outcome rows (era-an-outcome-low/medium/high), 10 era-an-factor-* cards, 1 era-an-ptype-* row (single-conventional), 1 era-an-month bucket. Same tab renders for student (own cases: 15 vs admin 18) without red screen. Far-past date filter was verified via backend API (date inputs on web are custom pickers, hard to drive via keyboard; behavior asserted at API level). (4) Regression: adv-tab-impressions still opens impressions-analytics-pane; posterior-only case shows the 2-row aesthetic section without overall card (both confirmed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter_jun2026_aesthetic_risk.py",
+    "/app/backend/tests/test_iter439_analytics_edges.py",
+    "/app/test_reports/pytest/iter439_aesthetic_risk.xml",
+    "/app/test_reports/pytest/iter439_analytics_edges.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "EraGuidance.tsx early-returns null when overall is undefined or Low (via eraGuidance() returning null) — matches spec: no box when pending or Low.",
+    "procedures/[id].tsx L2687 gates <EraGuidance testID='era-detail-guidance'> behind `anterior` flag — so posterior-only cases never show it. Confirmed live: posterior 16 case has neither era-detail-overall nor era-detail-guidance.",
+    "advanced.tsx AestheticRiskPane uses testIDs era-an-dist-<grade>, era-an-outcome-<grade>, era-an-factor-<slug(key)>, era-an-ptype-<slug(name)>, era-an-month-<month>. All observed live for the admin and student scopes.",
+    "Backend /api/analytics/aesthetic-risk correctly returns high_pct=null on empty ranges (no NaN) and factor options carry valid risk values — verified in iter439 edge tests.",
+    "Student scope: response includes scope.own_only=true; own_cases=15 vs admin_cases=18 in the seeded DB, but the distribution/factors/outcomes still render 10 factor cards and 3 outcome rows — good.",
+    "No deprecated Expo packages used in EraGuidance / AestheticRiskPane. No SafeAreaView issues introduced. No raw text outside <Text>."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (11/11 pytest; nurse test skipped by design)", "frontend": "100% for tested flows (form guidance High/Low/Medium transitions, case-details guidance anterior-Medium + posterior-hidden, analytics pane admin+student, impressions regression)"},
+  "seed_data_creation": "Existing 'ERA Test Patient' cases from earlier iterations reused. iter_jun2026_aesthetic_risk.py adds ~1 anterior 11 + 1 posterior 16 per test-run (each with unique registration_number).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "ERA Guidance + Analytics feature is fully working end-to-end. Notes: (a) form dropdown option testid pattern is 'era-<factor-with-hyphens>-option-<value-slug>' (e.g. era-gingival-biotype-option-thin-high-scalloped, era-infection-at-site-option-chronic). (b) The New-Case route is /new-procedure (not /new-case). (c) The web preview date-picker on /analytics/advanced is a custom RN component — driving it via keyboard from Playwright didn't fill values; far-past behavior was verified at the API layer. (d) Existing 'ERA Test Patient' anterior 11 Medium case IDs (as of run): 6ab7e5fd99a530a1c989424a, 6ab7e54099a530a1c989422c. Posterior-only 16 ID: 6ab7e5fe99a530a1c9894252."
+}

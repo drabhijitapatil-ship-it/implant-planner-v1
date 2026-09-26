@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import RiskPill from './RiskPill';
+import EraGuidance from './EraGuidance';
 import {
   ERA_FACTORS, ERA_SELECTABLE_FACTORS, EraFactor, EraValues, computeEra, eraValue, riskFor, RISK_COLORS,
 } from '../utils/aestheticRisk';
@@ -98,6 +99,7 @@ export default function AestheticRiskSection({ values, anterior, onChange }: Pro
             : <Text style={styles.pending}>Pending</Text>}
         </View>
       )}
+      {anterior && <EraGuidance summary={summary} />}
       {anterior && ERA_SELECTABLE_FACTORS.some(f => !eraValue(values, f.key)) && (
         <Text style={styles.incomplete} testID="era-incomplete" data-testid="era-incomplete">
           Incomplete — {ERA_SELECTABLE_FACTORS.filter(f => !eraValue(values, f.key)).length} factor(s) still to grade.

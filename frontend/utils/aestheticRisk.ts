@@ -103,3 +103,40 @@ export const RISK_COLORS: Record<RiskLevel, { bg: string; fg: string; border: st
   Medium: { bg: '#FFF3E0', fg: '#E65100', border: '#FFCC80' },
   High: { bg: '#FFEBEE', fg: '#B71C1C', border: '#EF9A9A' },
 };
+
+// ─── Clinical guidance (shown under a Medium / High overall risk) ───────────
+export const ERA_GENERAL_HIGH_TIPS = [
+  'Plan soft-tissue augmentation (connective-tissue graft) at placement or at second stage to thicken the buccal tissue.',
+  'Use a screw-retained customised provisional to shape the emergence profile and papillae before the final impression.',
+  'Place the implant slightly palatal and 3–4 mm apical to the planned gingival zenith; avoid buccal positioning.',
+  'Set expectations early — document the risk grade in the consent and consider a digital smile mock-up.',
+];
+
+/** Factor-specific tips keyed by factor → risk grade. */
+export const ERA_FACTOR_TIPS: Record<string, Partial<Record<RiskLevel, string>>> = {
+  smile_line: { High: 'High smile line exposes the gingival margin — a provisional-driven soft-tissue contouring phase is strongly advised.' },
+  smile_type: { High: 'Gummy smile — condition the tissue with a provisional and assess adjacent teeth for esthetic crown lengthening.', Medium: 'Mixed smile — verify the gingival zenith and papilla heights during provisionalisation.' },
+  gingival_biotype: { High: 'Thin, high-scalloped biotype — high recession risk; connective-tissue graft and palatal implant position recommended.', Medium: 'Medium biotype — consider a CTG if the buccal plate is < 2 mm thick.' },
+  adjacent_teeth_right: { High: 'Restored / RCT adjacent tooth (right) — confirm margin integrity and periapical status; reassess abutment prognosis.' },
+  adjacent_teeth_left: { High: 'Restored / RCT adjacent tooth (left) — confirm margin integrity and periapical status; reassess abutment prognosis.' },
+  infection_at_site: { High: 'Acute infection — defer placement, debride and resolve infection; plan early/delayed placement (Type 2 / 3).', Medium: 'Chronic infection — thorough debridement of the socket; consider early placement after soft-tissue healing.' },
+  ridge_condition: { High: 'Vertical (± horizontal) defect — staged vertical augmentation / GBR before placement; pink ceramics as fallback.', Medium: 'Horizontal defect — simultaneous contour augmentation (GBR) at placement.' },
+  bone_level_adjacent: { High: 'Bone-to-contact ≥ 7 mm — papilla fill unlikely; consider orthodontic extrusion, longer contact area or pink ceramics.', Medium: 'Bone-to-contact 5.5–6.5 mm — partial papilla fill expected; plan the contact point accordingly.' },
+  edentulous_span: { High: 'Two or more adjacent teeth in the esthetic zone — inter-implant papilla is unpredictable; consider implant + pontic / cantilever design.' },
+  patient_expectations: { High: 'High esthetic demands — extended consent discussion, diagnostic wax-up / mock-up and photographic documentation.' },
+};
+
+export function eraGuidance(summary: EraSummary): { title: string; tips: string[] } | null {
+  if (!summary.overall || summary.overall === 'Low') return null;
+  const tips: string[] = [];
+  for (const r of summary.rows) {
+    if (!r.risk || r.risk === 'Low') continue;
+    const t = ERA_FACTOR_TIPS[r.key]?.[r.risk];
+    if (t) tips.push(t);
+  }
+  if (summary.overall === 'High') tips.push(...ERA_GENERAL_HIGH_TIPS.filter(t => !tips.some(x => x.startsWith(t.slice(0, 20)))));
+  return {
+    title: summary.overall === 'High' ? 'High aesthetic risk — clinical guidance' : 'Medium aesthetic risk — points to watch',
+    tips: tips.slice(0, summary.overall === 'High' ? 8 : 4),
+  };
+}
