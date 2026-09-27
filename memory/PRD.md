@@ -7783,3 +7783,9 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 
 ## Iteration 442 (Jun 2026) — Implant Compare spec filters fixed
 - `app/admin/implant-compare.tsx`: values normalised (`num`/`numList` — numeric strings + float noise, singular `gingival_height_mm`), Platform pills drop bare-number mis-tagged values, at-a-glance pills are FACETED (each dimension computed from rows filtered by the other active dimensions → every visible pill yields ≥1 system), header shows "Showing X of N systems" while filtering, up to 12 pills/row. Verified by testing agent (40 pill toggles + stacking, iteration_442).
+
+## Iteration 443 (Jun 2026) — Aesthetic / Medical Risk pills on cards + case-detail banner
+- New shared components: `components/RiskLabelPill.tsx` (colour-coded labelled pill, e.g. "Aesthetic Risk Assessment · High Risk") and `components/CaseRiskPills.tsx` (computes the maxillary-anterior ERA overall grade — highest across all edentulous areas — via `computeEra`/`isAnteriorMaxillaCase`, plus a Medical Risk pill for medically-compromised patients where `medical_risk_level` ∈ {Moderate Risk → Medium, High Risk → High}). Renders nothing otherwise. `variant="card"` = compact pills for My Cases list; `variant="banner"` = prominent tinted banner (colour = worst risk) for the case-detail top.
+- Wired into `app/(tabs)/procedures.tsx` (list card, right after the divider) and `app/procedures/[id].tsx` (banner immediately below the status card / progress trail).
+- testIDs: `case-<id>-aesthetic-risk-pill` / `case-<id>-medical-risk-pill` (list), `case-detail-risk-banner` + `case-detail-aesthetic-risk-pill` / `case-detail-medical-risk-pill` (detail).
+- Verified in preview (mobile 390×844): list Medical Risk pill renders (Moderate = orange); detail banner renders with the labelled pill below the status trail. Aesthetic pill shares the same computeEra path already powering `era-detail-overall-pill`.

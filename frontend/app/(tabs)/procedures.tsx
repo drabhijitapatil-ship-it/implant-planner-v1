@@ -25,6 +25,7 @@ import NurseCasesScreen from '../../components/NurseCasesScreen';
 import ShareToForumModal from '../../components/ShareToForumModal';
 import RescheduleModal from '../../components/RescheduleModal';
 import TransferCaseModal from '../../components/TransferCaseModal';
+import CaseRiskPills from '../../components/CaseRiskPills';
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -256,6 +257,9 @@ function DefaultProceduresScreen() {
         </View>
 
         <View style={styles.divider} />
+
+        {/* iter-Jun-2026: at-a-glance Aesthetic Risk / Medical Risk pills */}
+        <CaseRiskPills procedure={item} variant="card" prefix={`case-${item.id}`} />
 
         {/* iter-Jun-2026 (v8): Zygoma / Pterygoid / Config pills — highlights
             advanced procedure types at-a-glance on the My Cases list. */}

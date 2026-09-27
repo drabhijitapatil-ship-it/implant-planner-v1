@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import RiskPill from '../../components/RiskPill';
+import CaseRiskPills from '../../components/CaseRiskPills';
 import EraGuidance from '../../components/EraGuidance';
 import { computeEra, isAnteriorMaxillaCase, ERA_FACTORS, RISK_COLORS } from '../../utils/aestheticRisk';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
@@ -993,6 +994,9 @@ export default function ProcedureDetailScreen() {
             );
           })()}
         </View>
+
+        {/* iter-Jun-2026: prominent Aesthetic Risk / Medical Risk banner at case top */}
+        <CaseRiskPills procedure={procedure} variant="banner" prefix="case-detail" />
 
         {/* ── Treatment Complete + Case Summary + Digital Sign-Off (rendered above timeline on completion) ── */}
         {procedure.status === 'completed' && (
