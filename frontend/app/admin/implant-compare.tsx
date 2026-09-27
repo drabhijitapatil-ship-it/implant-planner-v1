@@ -39,6 +39,7 @@ type Component = {
   diameter_mm?: number;
   diameters_mm?: number[];
   gingival_heights_mm?: number[];
+  gingival_height_mm?: number;
   heights_mm?: number[];
   abutment_height_mm?: number;
   angulation_deg?: number;
@@ -53,6 +54,27 @@ type SystemRow = {
 
 const fmt = (arr?: (number | string)[]) =>
   arr && arr.length ? arr.join(', ') : '—';
+
+// iter-442: catalog values arrive as numbers OR numeric strings ("3.5") and
+// sometimes with float noise (4.1000001). Normalise before bucketing/matching.
+const num = (v: unknown): number | null => {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+};
+const numList = (single: unknown, many: unknown): number[] => {
+  const out: number[] = [];
+  const a = num(single); if (a !== null) out.push(a);
+  if (Array.isArray(many)) for (const v of many) { const n = num(v); if (n !== null) out.push(n); }
+  return out;
+};
+// Platform labels — trim; drop bare numbers (mis-tagged diameters) so the
+// Platform row only offers real platform codes (RP, NP, WP, IH, UNP…).
+const platList = (c: Component): string[] => {
+  const out: string[] = [];
+  if (typeof c.platform === 'string' && c.platform.trim()) out.push(c.platform.trim());
+  if (Array.isArray(c.platforms)) for (const p of c.platforms) if (typeof p === 'string' && p.trim()) out.push(p.trim());
+  return out.filter(p => !/^[0-9.]+$/.test(p));
+};
 
 const titleCase = (s: string) =>
   String(s || '')
@@ -91,33 +113,22 @@ const computeAtAGlance = (rows: SystemRow[]): AtAGlanceBuckets => {
     const b = sys.brand;
     for (const c of sys.components) {
       // Diameters — accept SINGULAR (diameter_mm) and plural (diameters_mm[])
-      const dList: number[] = [];
-      if (typeof c.diameter_mm === 'number') dList.push(c.diameter_mm);
-      if (Array.isArray(c.diameters_mm)) dList.push(...c.diameters_mm);
-      for (const d of dList) {
+      for (const d of numList(c.diameter_mm, c.diameters_mm)) {
         if (!diam.has(d)) diam.set(d, new Set());
         diam.get(d)!.add(b);
       }
       // GH heights
-      if (Array.isArray(c.gingival_heights_mm)) {
-        for (const h of c.gingival_heights_mm) {
-          if (!gh.has(h)) gh.set(h, new Set());
-          gh.get(h)!.add(b);
-        }
+      for (const h of numList(c.gingival_height_mm, c.gingival_heights_mm)) {
+        if (!gh.has(h)) gh.set(h, new Set());
+        gh.get(h)!.add(b);
       }
       // Angulations
-      const aList: number[] = [];
-      if (typeof c.angulation_deg === 'number') aList.push(c.angulation_deg);
-      if (Array.isArray(c.angulations_deg)) aList.push(...c.angulations_deg);
-      for (const a of aList) {
+      for (const a of numList(c.angulation_deg, c.angulations_deg)) {
         if (!ang.has(a)) ang.set(a, new Set());
         ang.get(a)!.add(b);
       }
       // Platforms
-      const pList: string[] = [];
-      if (typeof c.platform === 'string' && c.platform) pList.push(c.platform);
-      if (Array.isArray(c.platforms)) pList.push(...c.platforms);
-      for (const p of pList) {
+      for (const p of platList(c)) {
         if (!plat.has(p)) plat.set(p, new Set());
         plat.get(p)!.add(b);
       }
@@ -127,13 +138,47 @@ const computeAtAGlance = (rows: SystemRow[]): AtAGlanceBuckets => {
     Array.from(m.entries())
       .map(([k, set]) => ({ key: fmtKey(k), count: set.size, sortKey: k, value: k as number | string }))
       .sort((a, b) => b.count - a.count || (a.sortKey > b.sortKey ? 1 : -1))
-      .slice(0, 8)
+      .slice(0, 12)
       .map(({ key, count, value }) => ({ key, count, value }));
   return {
     diameters:   toEntries(diam, (k) => `Ø ${k} mm`),
     ghHeights:   toEntries(gh,   (k) => `GH ${k} mm`),
     angulations: toEntries(ang,  (k) => `${k}°`),
     platforms:   toEntries(plat, (k) => String(k)),
+  };
+};
+
+type FilterMap = Partial<Record<'diameter' | 'gh' | 'angulation' | 'platform', number | string>>;
+
+const componentMatches = (c: Component, filter: FilterMap): boolean => {
+  if (filter.diameter !== undefined && !numList(c.diameter_mm, c.diameters_mm).includes(num(filter.diameter) as number)) return false;
+  if (filter.gh !== undefined && !numList(c.gingival_height_mm, c.gingival_heights_mm).includes(num(filter.gh) as number)) return false;
+  if (filter.angulation !== undefined && !numList(c.angulation_deg, c.angulations_deg).includes(num(filter.angulation) as number)) return false;
+  if (filter.platform !== undefined && !platList(c).includes(String(filter.platform))) return false;
+  return true;
+};
+
+const applyFilter = (rows: SystemRow[], filter: FilterMap): SystemRow[] => {
+  if (Object.keys(filter).length === 0) return rows;
+  const out: SystemRow[] = [];
+  for (const sys of rows) {
+    const keep = sys.components.filter(c => componentMatches(c, filter));
+    if (keep.length > 0) out.push({ ...sys, components: keep });
+  }
+  return out;
+};
+
+// iter-442: FACETED summary — each dimension's pills/counts are computed from
+// the rows that already satisfy the OTHER active dimensions, so every pill
+// shown is guaranteed to return ≥1 system when tapped (no dead-end "No
+// systems match" after stacking two specs).
+const computeFaceted = (rows: SystemRow[], filter: FilterMap): AtAGlanceBuckets => {
+  const without = (kind: keyof FilterMap) => { const f = { ...filter }; delete f[kind]; return f; };
+  return {
+    diameters:   computeAtAGlance(applyFilter(rows, without('diameter'))).diameters,
+    ghHeights:   computeAtAGlance(applyFilter(rows, without('gh'))).ghHeights,
+    angulations: computeAtAGlance(applyFilter(rows, without('angulation'))).angulations,
+    platforms:   computeAtAGlance(applyFilter(rows, without('platform'))).platforms,
   };
 };
 
@@ -163,11 +208,6 @@ export default function ImplantCompare() {
 
   useEffect(() => { load(picked); }, [picked, load]);
 
-  // iter-298: derive the at-a-glance summary from currently-loaded rows.
-  const summary = React.useMemo(() => computeAtAGlance(rows), [rows]);
-  const hasSummary = summary.diameters.length + summary.ghHeights.length +
-                     summary.angulations.length + summary.platforms.length > 0;
-
   // iter-299/300: pill-filter state — tap an at-a-glance pill to narrow
   // the comparison table to only systems whose components match the
   // selected value. iter-300 extends this to a *per-kind* map so multiple
@@ -176,7 +216,6 @@ export default function ImplantCompare() {
   // (one component can have only one diameter, etc.), and tapping the
   // active pill again clears that one dimension. Switching component-
   // type chip resets everything.
-  type FilterMap = Partial<Record<'diameter' | 'gh' | 'angulation' | 'platform', number | string>>;
   const [filter, setFilter] = useState<FilterMap>({});
   useEffect(() => { setFilter({}); }, [picked]);
   const togglePillFilter = useCallback((kind: 'diameter' | 'gh' | 'angulation' | 'platform', value: number | string) => {
@@ -191,40 +230,11 @@ export default function ImplantCompare() {
     });
   }, []);
   const activeFilterCount = Object.keys(filter).length;
-  const componentMatchesFilter = useCallback((c: Component) => {
-    if (activeFilterCount === 0) return true;
-    if (filter.diameter !== undefined) {
-      const dList: number[] = [];
-      if (typeof c.diameter_mm === 'number') dList.push(c.diameter_mm);
-      if (Array.isArray(c.diameters_mm)) dList.push(...c.diameters_mm);
-      if (!dList.includes(filter.diameter as number)) return false;
-    }
-    if (filter.gh !== undefined) {
-      if (!(Array.isArray(c.gingival_heights_mm) && c.gingival_heights_mm.includes(filter.gh as number))) return false;
-    }
-    if (filter.angulation !== undefined) {
-      const aList: number[] = [];
-      if (typeof c.angulation_deg === 'number') aList.push(c.angulation_deg);
-      if (Array.isArray(c.angulations_deg)) aList.push(...c.angulations_deg);
-      if (!aList.includes(filter.angulation as number)) return false;
-    }
-    if (filter.platform !== undefined) {
-      const pList: string[] = [];
-      if (typeof c.platform === 'string' && c.platform) pList.push(c.platform);
-      if (Array.isArray(c.platforms)) pList.push(...c.platforms);
-      if (!pList.includes(filter.platform as string)) return false;
-    }
-    return true;
-  }, [filter, activeFilterCount]);
-  const filteredRows: SystemRow[] = React.useMemo(() => {
-    if (activeFilterCount === 0) return rows;
-    const out: SystemRow[] = [];
-    for (const sys of rows) {
-      const keep = sys.components.filter(componentMatchesFilter);
-      if (keep.length > 0) out.push({ ...sys, components: keep });
-    }
-    return out;
-  }, [rows, activeFilterCount, componentMatchesFilter]);
+  const filteredRows: SystemRow[] = React.useMemo(() => applyFilter(rows, filter), [rows, filter]);
+  // iter-298/442: faceted at-a-glance summary derived from loaded rows + active filters.
+  const summary = React.useMemo(() => computeFaceted(rows, filter), [rows, filter]);
+  const hasSummary = summary.diameters.length + summary.ghHeights.length +
+                     summary.angulations.length + summary.platforms.length > 0;
 
   return (
     <SafeAreaView style={s.safe}>
@@ -264,7 +274,11 @@ export default function ImplantCompare() {
         <View style={s.summaryCard} testID="compare-at-a-glance">
           <View style={s.summaryHeader}>
             <Ionicons name="stats-chart-outline" size={16} color="#0277BD" />
-            <Text style={s.summaryTitle}>At-a-glance — most common across {rows.length} system{rows.length > 1 ? 's' : ''}</Text>
+            <Text style={s.summaryTitle} testID="compare-summary-title">
+              {activeFilterCount > 0
+                ? `Showing ${filteredRows.length} of ${rows.length} systems`
+                : `At-a-glance — most common across ${rows.length} system${rows.length > 1 ? 's' : ''}`}
+            </Text>
             {activeFilterCount > 0 ? (
               <TouchableOpacity
                 onPress={() => setFilter({})}
