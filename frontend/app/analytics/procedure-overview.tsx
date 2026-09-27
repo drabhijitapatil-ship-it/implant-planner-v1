@@ -181,6 +181,15 @@ export default function ProcedureOverviewScreen() {
           <Ionicons name="analytics-outline" size={16} color="#2E7D32" />
           <Text style={[s.exportBtnTxt, { color: '#2E7D32' }]}>Advanced</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => router.push('/analytics/guide?tab=overview')}
+          style={[s.exportBtn, { marginLeft: 6, paddingHorizontal: 8 }]}
+          testID="analytics-guide-link"
+          /* @ts-ignore */ data-testid="analytics-guide-link"
+          accessibilityLabel="How to read this view"
+        >
+          <Ionicons name="help-circle-outline" size={18} color="#1E88E5" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>

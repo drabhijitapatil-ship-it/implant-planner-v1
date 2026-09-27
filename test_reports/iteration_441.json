@@ -1,0 +1,24 @@
+{
+  "summary": "Iteration 441 frontend-only verification of the new in-app Analytics Guide and the Aesthetic Risk hint change. All 8 requested checks pass. Admin (Abhijit.patil): (1) Advanced Analytics → Aesthetic tab pane no longer contains 'ITI-style' and now contains 'Phase 1 ERA — anterior-maxilla cases (FDI 11–13 / 21–23).'. (2) adv-analytics-guide opens /analytics/guide with guide-title, 16 guide-card-* including guide-card-cmi; guide-back returns to /analytics/advanced. (3) adv-tab-km → adv-how-to-read → URL contains ?tab=km and guide-body-km is expanded; same for adv-tab-export → ?tab=export with guide-body-export expanded. (4) guide-expand-all expands all 16 cards and toggles label to 'Collapse all'; guide-dict-toggle reveals guide-dict with 18 rows; guide-quick-ref has 11 rows; km body contains 'Greenwood', complications body contains '80/20', cmi body contains 'Zygomatic 5.0'. (5) Procedure Analytics analytics-guide-link opens guide with ?tab=overview and guide-body-overview expanded. (6) PDF export on web triggers a popup whose HTML contains 'Implanr — Analytics & Advanced Analytics Guide' and 'Research Export data dictionary'. (7) Native branch code-inspected: Print.printToFileAsync + Sharing.shareAsync used correctly with pdf mime & fallback Alert. Student (Gaurav.pandey): /analytics/guide renders 15 cards, guide-card-cmi absent; Profile → link-analytics-guide navigates to the guide. Regression: adv-how-to-read pill renders above km and impressions panes. Only pre-existing framework console warnings observed (shadow*/pointerEvents/tintColor/useNativeDriver/expo-notifications on web) — no red-screen or new errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_441.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "guide.tsx exportPdf web branch correctly builds a Blob and opens window.open(url, '_blank') and revokes the object URL after 15s — good. On native it uses Print.printToFileAsync + Sharing.shareAsync with a graceful Alert fallback when Sharing is unavailable.",
+    "analyticsGuide.ts data dictionary has exactly 18 entries (case_id … failure_date) and RESEARCH_QUESTIONS has 11 rows — matches the spec.",
+    "ANALYTICS_GUIDE has 16 entries; only 'cmi' is facultyOnly, which correctly reduces to 15 for students."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login uses /auth/login with data-testid login-email-input / login-password-input / login-submit-btn. Guide route is /analytics/guide?tab=<key>. Faculty-only card key: cmi. Data dictionary size expected 18; research-questions expected 11; guide cards 16 (faculty) / 15 (student).",
+  "rca_of_issue": "N/A — feature works as specified."
+}

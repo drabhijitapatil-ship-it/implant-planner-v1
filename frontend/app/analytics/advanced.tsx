@@ -84,6 +84,9 @@ export default function AdvancedAnalyticsHub() {
           <Text style={s.headerTitle} data-testid="adv-analytics-title">Advanced Analytics</Text>
           <Text style={s.headerSub}>Phase Analytics-2 · Phase Analytics-3</Text>
         </View>
+        <TouchableOpacity onPress={() => router.push('/analytics/guide')} style={s.headerIcon} testID="adv-analytics-guide" /* @ts-ignore */ data-testid="adv-analytics-guide" accessibilityLabel="Open analytics guide">
+          <Ionicons name="help-circle-outline" size={22} color="#1565C0" />
+        </TouchableOpacity>
       </View>
 
       {/* Section tabs (uniform capsules) */}
@@ -124,6 +127,11 @@ export default function AdvancedAnalyticsHub() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        <TouchableOpacity onPress={() => router.push(`/analytics/guide?tab=${section}`)} style={s.howToRow} testID="adv-how-to-read" /* @ts-ignore */ data-testid="adv-how-to-read">
+          <Ionicons name="information-circle-outline" size={16} color="#1565C0" />
+          <Text style={s.howToTxt}>How to read this view</Text>
+          <Ionicons name="chevron-forward" size={14} color="#1565C0" />
+        </TouchableOpacity>
         {section === 'km' && <KaplanMeierPane fromDate={fromDate} toDate={toDate} />}
         {section === 'scatter' && <ScatterPane fromDate={fromDate} toDate={toDate} />}
         {section === 'heatmap' && <HeatmapPane fromDate={fromDate} toDate={toDate} />}
@@ -1414,7 +1422,7 @@ function AestheticRiskPane({ fromDate, toDate }: { fromDate: string; toDate: str
 
   return (
     <View style={s.pane} testID="aesthetic-analytics-pane">
-      <SectionCard title="Overall aesthetic risk" hint="Phase 1 ERA — anterior-maxilla cases (FDI 11–13 / 21–23) graded ITI-style.">
+      <SectionCard title="Overall aesthetic risk" hint="Phase 1 ERA — anterior-maxilla cases (FDI 11–13 / 21–23).">
         <View style={s.bucketsRow}>
           <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{anterior}</Text><Text style={s.bucketLbl}>Anterior cases</Text></View>
           {GRADES.map(g => (
@@ -1532,6 +1540,8 @@ const s = StyleSheet.create({
   headerIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F0F4F8', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   headerTitle: { fontSize: 17, fontWeight: '800', color: '#1A2332' },
   headerSub: { fontSize: 11, color: '#78909C', marginTop: 2 },
+  howToRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-end', marginHorizontal: 14, marginTop: 10, paddingHorizontal: 10, paddingVertical: 8, minHeight: 36, borderRadius: 999, backgroundColor: '#E3F2FD' },
+  howToTxt: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
 
   tabsScroll: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E1E7EF', paddingVertical: 8, maxHeight: 46, flexShrink: 0, zIndex: 8 },
   tab: {

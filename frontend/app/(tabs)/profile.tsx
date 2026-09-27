@@ -235,6 +235,16 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.legalRow}
+            onPress={() => router.push('/analytics/guide')}
+            data-testid="link-analytics-guide"
+            testID="link-analytics-guide"
+          >
+            <Ionicons name="stats-chart-outline" size={22} color="#1565C0" />
+            <Text style={styles.legalRowText}>Analytics guide</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.legalRow}
             onPress={() => router.push('/whatsnew?mode=history')}
             data-testid="link-whats-new"
             testID="link-whats-new"
