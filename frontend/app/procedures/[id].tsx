@@ -20,6 +20,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import RiskPill from '../../components/RiskPill';
 import CaseRiskPills from '../../components/CaseRiskPills';
+import PrescriptionEditor from '../../components/PrescriptionEditor';
 import EraGuidance from '../../components/EraGuidance';
 import { computeEra, isAnteriorMaxillaCase, ERA_FACTORS, RISK_COLORS } from '../../utils/aestheticRisk';
 import api, { getAuthFileUrl, getToken } from '../../utils/api';
@@ -2727,6 +2728,12 @@ export default function ProcedureDetailScreen() {
             </View>
           );
         })()}
+
+        {/* Prescription (Rx) — faculty review/correct & sign during Phase 2;
+            creator/nurse can download the signed PDF once approved. */}
+        {(!!(procedure.prescription?.drugs?.length) || procedure.status === 'pending_phase2') && (
+          <PrescriptionEditor procedure={procedure} onChanged={loadProcedure} />
+        )}
 
         {/* Medical Assessment */}
         {procedure.medical_assessment && Object.keys(procedure.medical_assessment).length > 0 && (

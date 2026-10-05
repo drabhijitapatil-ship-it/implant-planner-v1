@@ -26,6 +26,7 @@ import {
 import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
 import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
 import PhaseStep2TabbedView from '../../../components/PhaseStep2TabbedView';
+import PrescriptionEditor from '../../../components/PrescriptionEditor';
 import GroupedDescDropdown from '../../../components/GroupedDescDropdown';
 import { PROVISIONAL_GROUPED_OPTIONS } from '../../../constants/singleConventional';
 import {
@@ -105,6 +106,8 @@ export default function Phase2SubmissionScreen() {
   const [procedureType, setProcedureType] = useState('');
   const [createdById, setCreatedById] = useState<string | null>(null);
   const [createdByRole, setCreatedByRole] = useState<string | null>(null);
+  const [procedure, setProcedure] = useState<any>(null);
+  const [rxState, setRxState] = useState<{ hasDrugs: boolean; creatorSigned: boolean }>({ hasDrugs: false, creatorSigned: false });
   const [doneCompleted, setDoneCompleted] = useState(false);
   // iter-138: Phase-1 "Type of Attachment" (if any) so Phase 2 can auto-suggest
   // the manufacturer-recommended cuff-height variants instead of free text.
@@ -243,6 +246,7 @@ export default function Phase2SubmissionScreen() {
       }
       setCreatedById(procRes.data.created_by_id || null);
       setCreatedByRole(procRes.data.created_by_role || null);
+      setProcedure(procRes.data);
       // Load the Phase-1 attachment choice so the cuff-height field below can
       // render a catalogue-constrained dropdown instead of free text.
       setAttachmentType(procRes.data.attachment_type || '');
@@ -547,6 +551,15 @@ export default function Phase2SubmissionScreen() {
         zygPtrImplantPositions.length > 0
           ? 'Please upload the OPG for Zygoma / Pterygoid implants before submitting.'
           : 'Please upload the OPG before submitting.',
+      );
+      return;
+    }
+
+    // Prescription (optional) — if the creator added drugs it must be signed.
+    if (rxState.hasDrugs && !rxState.creatorSigned) {
+      Alert.alert(
+        'Sign the prescription',
+        'You added medications to the prescription. Please sign it (Sign as Treating Clinician) before submitting Phase 2, or remove the medications.',
       );
       return;
     }
@@ -2030,6 +2043,13 @@ export default function Phase2SubmissionScreen() {
               </View>
             ))}
           </View>
+
+          {/* ── Prescription (Rx) — optional, submitted & approved with Phase 2 ── */}
+          {procedure && (
+            <View style={{ paddingHorizontal: 16 }}>
+              <PrescriptionEditor procedure={procedure} onChanged={loadImplantPlan} onStateChange={setRxState} />
+            </View>
+          )}
 
           {/* ── Notes ── */}
           <View style={s.section} onLayout={onStepLayout(4)}>

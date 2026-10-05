@@ -1,0 +1,37 @@
+{
+  "summary": "iter-443 — Prescription (Rx) auto-approval + submit-phase2 signature gate. Backend: 7/7 pytest green (test_iter443_prescription_autoapprove.py). Validated the previously-unverified critical paths: (a) submit-phase2 400 when drafted Rx has drugs but no creator signature ('Please sign the prescription before submitting Phase 2...'); (b) submit-phase2 by student with signed Rx flips Rx.status 'draft'->'pending' and stamps submitted_at while case moves to pending_phase2; (c) dual-approve path (supervisor approve, then in-charge approve) brings case to phase2_approved AND auto-flips pending Rx to approved + stamps approved_by + locks (subsequent PUT returns 400); (d) in-charge SUBMITS Phase 2 on an IC-self-created case with a creator-signed Rx -> case lands straight in phase2_approved with Rx auto-approved + IC in approved_by, in a single call; (e) GET /prescription/pdf returns a valid application/pdf (>2 KB, '%PDF-' magic) and 400 when the case has no drugs; (f) non-stakeholder student PUT on another case's Rx is rejected (403/404). Frontend smoke on /procedures/submit-phase2/{id} (mobile 390x844, student login): prescription-section renders; rx-use-template-btn in the empty state applies the standard 4-drug template (Augmentin 625 / Ibuprofen 400 / Paracetamol 500 / Chlorhexidine 0.2% mouthwash); rx-save-btn and rx-open-sign-btn present; case detail (/procedures/{id}) shows prescription-section + rx-download-btn. Pre-existing (not Rx-related): generic console warnings 'shadow* deprecated', 'props.pointerEvents deprecated', and a 'Unexpected text node: . A text node cannot be a child of a <View>' warning appearing on dashboard before Rx is loaded.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Global (not Rx-specific)", "issue": "Console error 'Unexpected text node: . A text node cannot be a child of a <View>' appears on dashboard and case screens — pre-existing stray whitespace outside a <Text> component. Not introduced by Rx feature. Reference: observed on /dashboard and /procedures/{id}."}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_443.json",
+    "/app/backend/tests/test_iter443_prescription_autoapprove.py",
+    "/app/test_reports/pytest/iter443_results.xml"
+  ],
+  "action_items": [
+    "No functional action required for the Rx feature — the previously-unverified auto-approval + signature-gate paths are all working end-to-end.",
+    "(Optional, non-blocking) Hunt the stray text node that triggers the global 'Unexpected text node' warning (not Rx code)."
+  ],
+  "critical_code_review_comments": [
+    "server.py submit_phase2 (lines 16885-16898): correctly blocks when drafted Rx has drugs but no creator signature; branches between rx_mark_approved (IC-self-approve path) and rx_mark_pending (student path) based on update_data['status'].",
+    "server.py approve handler at lines 16319-16329 (in-charge self-created) and 16360-16368 (both reviewers): invokes _rx.rx_mark_approved on the pending Rx when the Phase 2 transition completes — verified by T3/T4.",
+    "server.py save_prescription (16597-16603): 400 when existing Rx status=='approved', 403 when neither creator window nor faculty window matches — covered by lock test and non-stakeholder test.",
+    "prescription.py rx_mark_approved: idempotent per-id (approved_by dedup by id). PDF builder renders creator+supervisor signatures and the digitally-approved footer with SHA-256 truncation.",
+    "PrescriptionEditor.tsx: rx-use-template-btn is intentionally scoped to the empty-state (drugs.length===0). After template application the standard 4-drug set is populated correctly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter443_prescription_autoapprove.py (new)"
+  ],
+  "success_rate": { "backend": "100% (7/7 pytest)", "frontend": "100% on smoke (prescription-section + template + save/sign + download rendered)" },
+  "seed_data_creation": "No new fixtures. Reused CONV_PROC_ID=6a6b7fbf6633443cf356df15 (Gaurav/Paresh/Abhijit conventional) and IC_SELF_PROC_ID=69cfb0cea19e1d1819e0f734 (Abhijit self-created). Each test resets state (status->phase1_approved, phase2_data->{}, Rx $unset) via direct Mongo access, mirroring the iter-420 pattern.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Rx auto-approval integration is green. Reproduce with: pytest /app/backend/tests/test_iter443_prescription_autoapprove.py -v (needs EXPO_PUBLIC_BACKEND_URL + MONGO_URL + DB_NAME in env; already available). Frontend selectors: prescription-section, rx-use-template-btn (empty-state only), rx-save-btn, rx-open-sign-btn, rx-signature-pad, rx-confirm-sign-btn, rx-status-pill, rx-warnings, rx-download-btn, rx-drug-N / rx-drug-name-N / rx-remove-drug-N. On react-native-web, RN Alert.alert does NOT render as a DOM dialog, so assert the submit-phase2 signature gate via the 400 HTTP response (as done here) rather than DOM assertions.",
+  "rca_of_issue": "Not applicable — new-feature regression, not a bug fix. The auto-approval contract (Rx status draft->pending on submit-phase2, pending->approved on both reviewers or on IC-submit/IC-self-approve) is implemented correctly and locks the Rx after approval."
+}

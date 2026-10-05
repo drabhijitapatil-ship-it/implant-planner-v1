@@ -30,6 +30,7 @@ from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
 import aesthetic_risk as _era
+import prescription as _rx
 from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -16322,6 +16323,10 @@ async def approve_procedure(
                 update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
                 update_fields["status"] = "phase2_approved"
                 update_fields["phase2_completed_at"] = datetime.utcnow()
+                if _rx.has_drugs(procedure.get("prescription")):
+                    update_fields["prescription"] = _rx.rx_mark_approved(
+                        procedure.get("prescription"),
+                        {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")})
                 
                 await db.procedures.update_one(
                     {"_id": ObjectId(procedure_id)},
@@ -16357,6 +16362,10 @@ async def approve_procedure(
                 update_fields["status"] = "phase2_approved"
                 update_fields["phase2_completed_at"] = datetime.utcnow()
                 update_fields["fully_completed_at"] = datetime.utcnow()
+                if _rx.has_drugs(procedure.get("prescription")):
+                    update_fields["prescription"] = _rx.rx_mark_approved(
+                        procedure.get("prescription"),
+                        {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")})
                 
                 # Notify student of completion
                 await db.notifications.insert_one({
@@ -16534,6 +16543,211 @@ async def request_phase1_approval(
 
 
 # Phase 2 Submission Route
+# ─── Prescription (Rx) — optional, created with Phase 2, approved with it ───
+class PrescriptionEditBody(BaseModel):
+    diagnosis: str = Field("", max_length=600)
+    allergies: str = Field("", max_length=600)
+    advice: str = Field("", max_length=2500)
+    drugs: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PrescriptionSignBody(BaseModel):
+    strokes: List[List[List[float]]]
+    pad_width: float = Field(..., gt=0, le=2000)
+    pad_height: float = Field(..., gt=0, le=1000)
+
+
+def _rx_roles(procedure: dict, user: dict):
+    """(is_creator, is_faculty) for the current user on this case."""
+    uid = user.get("_id")
+    role = user.get("role")
+    is_creator = procedure.get("created_by_id") == uid or procedure.get("student_id") == uid
+    is_faculty = (
+        role in ("implant_incharge", "administrator")
+        or (role == "supervisor" and procedure.get("supervisor_id") == uid)
+    )
+    return is_creator, is_faculty
+
+
+def _rx_can_view(procedure: dict, user: dict) -> bool:
+    is_creator, is_faculty = _rx_roles(procedure, user)
+    return is_creator or is_faculty or user.get("role") in ("nurse",) and procedure.get("status") in (
+        "phase2_approved", "stage2_surgical_approved", "completed")
+
+
+async def _get_proc_or_404(procedure_id: str) -> dict:
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    return proc
+
+
+@api_router.put("/procedures/{procedure_id}/prescription")
+async def save_prescription(procedure_id: str, body: PrescriptionEditBody,
+                            current_user: dict = Depends(get_current_user)):
+    """Create / edit the prescription drug list + text. Creator edits before
+    Phase 2 submission; faculty edit during Phase 2 review. Every change is
+    audit-logged. Locked once approved."""
+    procedure = await _get_proc_or_404(procedure_id)
+    is_creator, is_faculty = _rx_roles(procedure, current_user)
+    existing = procedure.get("prescription") or {}
+    if existing.get("status") == "approved":
+        raise HTTPException(status_code=400, detail="Prescription is approved and locked. Ask faculty to reopen it first.")
+    case_status = procedure.get("status")
+    creator_window = is_creator and case_status in ("phase1_approved",)
+    faculty_window = is_faculty and existing.get("status") != "approved"
+    if not (creator_window or faculty_window):
+        raise HTTPException(status_code=403, detail="You cannot edit this prescription at this stage.")
+
+    clean = _rx.sanitize_prescription_edit(body.model_dump())
+    now = _rx.now_iso()
+    rx = dict(existing)
+    if not rx:
+        rx["status"] = "draft"
+        rx["created_by_id"] = current_user.get("_id")
+        rx["created_by_name"] = current_user.get("name", "")
+        rx["created_by_role"] = current_user.get("role", "")
+        rx["created_at"] = now
+        rx["signatures"] = {}
+    rx.update(clean)
+    rx["updated_at"] = now
+    audit = list(rx.get("audit_log") or [])
+    audit.append({
+        "action": "edit", "by_id": current_user.get("_id"),
+        "by_name": current_user.get("name", ""), "by_role": current_user.get("role", ""),
+        "at": now, "detail": f"{len(clean['drugs'])} drug(s)",
+    })
+    rx["audit_log"] = audit[-100:]
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": now}})
+    return rx
+
+
+@api_router.post("/procedures/{procedure_id}/prescription/sign")
+async def sign_prescription(procedure_id: str, body: PrescriptionSignBody,
+                            current_user: dict = Depends(get_current_user)):
+    """Capture the creator's or supervisor's e-signature on the prescription.
+    Reuses the server-side PNG rasteriser + SHA-256 tamper evidence."""
+    procedure = await _get_proc_or_404(procedure_id)
+    is_creator, is_faculty = _rx_roles(procedure, current_user)
+    rx = procedure.get("prescription") or {}
+    if not _rx.has_drugs(rx):
+        raise HTTPException(status_code=400, detail="Add at least one medication before signing.")
+    if rx.get("status") == "approved":
+        raise HTTPException(status_code=400, detail="Prescription is approved and locked.")
+    if is_faculty and not is_creator:
+        slot = "supervisor"
+    elif is_creator:
+        slot = "creator"
+    else:
+        raise HTTPException(status_code=403, detail="You are not allowed to sign this prescription.")
+
+    total_pts = sum(len(s) for s in body.strokes)
+    if not body.strokes or total_pts < 8:
+        raise HTTPException(status_code=400, detail="Signature required")
+    if total_pts > 20000:
+        raise HTTPException(status_code=400, detail="Signature data too large")
+
+    png = _render_signature_png(body.strokes, body.pad_width, body.pad_height)
+    if len(png) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Signature image exceeds 2MB")
+    sha256 = hashlib.sha256(png).hexdigest()
+    unique_name = f"rx_sign_{slot}_{uuid.uuid4().hex}.png"
+    with open(UPLOADS_DIR / unique_name, "wb") as f:
+        f.write(png)
+
+    now = _rx.now_iso()
+    sig = {
+        "filename": unique_name, "signed_at": now,
+        "signed_by_id": current_user.get("_id"),
+        "signed_by_name": current_user.get("name", ""),
+        "signed_by_role": current_user.get("role", ""),
+        "sha256": sha256,
+    }
+    sigs = dict(rx.get("signatures") or {})
+    sigs[slot] = sig
+    rx = dict(rx)
+    rx["signatures"] = sigs
+    rx["updated_at"] = now
+    audit = list(rx.get("audit_log") or [])
+    audit.append({"action": f"sign:{slot}", "by_id": current_user.get("_id"),
+                  "by_name": current_user.get("name", ""), "by_role": current_user.get("role", ""), "at": now})
+    rx["audit_log"] = audit[-100:]
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": now}})
+    return rx
+
+
+@api_router.post("/procedures/{procedure_id}/prescription/approve")
+async def approve_prescription(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Faculty manual approve (used after a reopen). Requires a supervisor
+    signature. The normal path auto-approves with Phase 2."""
+    procedure = await _get_proc_or_404(procedure_id)
+    _, is_faculty = _rx_roles(procedure, current_user)
+    if not is_faculty:
+        raise HTTPException(status_code=403, detail="Only faculty can approve the prescription.")
+    rx = procedure.get("prescription") or {}
+    if not _rx.has_drugs(rx):
+        raise HTTPException(status_code=400, detail="Nothing to approve — no medications.")
+    if rx.get("status") == "approved":
+        return rx
+    if not (rx.get("signatures") or {}).get("supervisor"):
+        raise HTTPException(status_code=400, detail="Supervisor signature required before approval.")
+    approver = {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")}
+    rx = _rx.rx_mark_approved(rx, approver)
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": _rx.now_iso()}})
+    return rx
+
+
+@api_router.post("/procedures/{procedure_id}/prescription/reopen")
+async def reopen_prescription(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Faculty reopens an approved prescription for corrections."""
+    procedure = await _get_proc_or_404(procedure_id)
+    _, is_faculty = _rx_roles(procedure, current_user)
+    if not is_faculty:
+        raise HTTPException(status_code=403, detail="Only faculty can reopen the prescription.")
+    rx = procedure.get("prescription") or {}
+    if rx.get("status") != "approved":
+        return {"ok": True, "already_open": True, "prescription": rx}
+    now = _rx.now_iso()
+    rx = dict(rx)
+    reopen_log = list(rx.get("reopen_log") or [])
+    reopen_log.append({"from_status": "approved", "by_name": current_user.get("name", ""),
+                       "by_role": current_user.get("role", ""), "at": now})
+    rx["reopen_log"] = reopen_log
+    rx["status"] = "draft"
+    rx.pop("approved_at", None)
+    rx.pop("approved_by", None)
+    rx["updated_at"] = now
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": now}})
+    return {"ok": True, "prescription": rx}
+
+
+@api_router.get("/procedures/{procedure_id}/prescription/pdf")
+async def prescription_pdf(procedure_id: str, request: Request,
+                           current_user: dict = Depends(get_current_user)):
+    """Download the signed prescription PDF."""
+    procedure = await _get_proc_or_404(procedure_id)
+    is_creator, is_faculty = _rx_roles(procedure, current_user)
+    if not (is_creator or is_faculty or current_user.get("role") == "nurse"):
+        raise HTTPException(status_code=403, detail="Not allowed to view this prescription.")
+    rx = procedure.get("prescription") or {}
+    if not _rx.has_drugs(rx):
+        raise HTTPException(status_code=400, detail="No prescription to export for this case.")
+    await log_access(action="pdf_export", resource_type="prescription", resource_id=procedure_id,
+                     user=current_user, request=request,
+                     extra={"patient_name": procedure.get("patient_name")})
+    buf = _rx.build_prescription_pdf(procedure, UPLOADS_DIR)
+    filename = f"Prescription_{(procedure.get('patient_name') or 'Patient').replace(' ', '_')}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f'inline; filename="{filename}"'})
+
+
 @api_router.post("/procedures/{procedure_id}/submit-phase2")
 async def submit_phase2(
     procedure_id: str,
@@ -16667,7 +16881,22 @@ async def submit_phase2(
         update_data["implant_incharge_phase2_approved"] = True
         update_data["implant_incharge_phase2_approved_at"] = datetime.utcnow()
         update_data["phase2_completed_at"] = datetime.utcnow()
-    
+
+    # Prescription (Rx) rides along with Phase 2. If the creator drafted one it
+    # MUST be signed before submission; it then moves to 'pending' (or straight
+    # to 'approved' when an In-Charge submission auto-approves Phase 2).
+    _rx_doc = procedure.get("prescription")
+    if _rx.has_drugs(_rx_doc):
+        if not (_rx_doc.get("signatures") or {}).get("creator"):
+            raise HTTPException(status_code=400,
+                detail="Please sign the prescription before submitting Phase 2, or remove its medications.")
+        if update_data["status"] == "phase2_approved":
+            update_data["prescription"] = _rx.rx_mark_approved(
+                _rx.rx_mark_pending(_rx_doc),
+                {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")})
+        else:
+            update_data["prescription"] = _rx.rx_mark_pending(_rx_doc)
+
     if phase2_data.student_notes:
         update_data["phase2_student_notes"] = phase2_data.student_notes
     if phase2_data.remark:
