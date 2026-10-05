@@ -53,7 +53,15 @@ import ZygomaPterygoidPhase1Form, {
   ZygomaPterygoidPhase1Data,
 } from "../../components/ZygomaPterygoidPhase1Form";
 import GroupedDescDropdown from "../../components/GroupedDescDropdown";
-
+import AssistantPicker from "../../components/AssistantPicker";
+import AestheticRiskSection from "../../components/AestheticRiskSection";
+import {
+  isAnteriorMaxillaCase,
+  ERA_PATIENT_FACTORS,
+  ERA_SITE_SELECTABLE,
+  anteriorAreas,
+  eraValue,
+} from "../../utils/aestheticRisk";
 import {
   PROCEDURE_TYPES,
   LOADING_TYPES,
@@ -428,8 +436,8 @@ function CalendarPicker({
                 <View
                   style={[
                     calStyles.cellInner,
-                    day && isSelected(day) && calStyles.cellSelected,
-                    day &&
+                    !!day && isSelected(day) && calStyles.cellSelected,
+                    !!day &&
                       isToday(day) &&
                       !isSelected(day) &&
                       calStyles.cellToday,
@@ -438,9 +446,9 @@ function CalendarPicker({
                   <Text
                     style={[
                       calStyles.cellText,
-                      day && isDisabled(day) && calStyles.cellDisabled,
-                      day && isSelected(day) && calStyles.cellSelectedText,
-                      day &&
+                      !!day && isDisabled(day) && calStyles.cellDisabled,
+                      !!day && isSelected(day) && calStyles.cellSelectedText,
+                      !!day &&
                         isToday(day) &&
                         !isSelected(day) &&
                         calStyles.cellTodayText,
@@ -532,25 +540,57 @@ export function ErrorBoundary({
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#FFF" }} edges={["top"]}>
       <View
-        style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
         testID="new-procedure-error-boundary"
       >
         <Ionicons name="warning" size={40} color="#E53935" />
         <Text
-          style={{ fontSize: 16, fontWeight: "700", color: "#37474F", marginTop: 12, textAlign: "center" }}
+          style={{
+            fontSize: 16,
+            fontWeight: "700",
+            color: "#37474F",
+            marginTop: 12,
+            textAlign: "center",
+          }}
         >
           This screen hit an error
         </Text>
-        <Text style={{ fontSize: 13, color: "#546E7A", marginTop: 8, textAlign: "center" }}>
+        <Text
+          style={{
+            fontSize: 13,
+            color: "#546E7A",
+            marginTop: 8,
+            textAlign: "center",
+          }}
+        >
           If you had already continued to Implant Selection, the case is saved
           as a draft — open it from the dashboard.
         </Text>
-        <Text selectable style={{ fontSize: 12, color: "#78909C", marginTop: 10, textAlign: "center" }}>
+        <Text
+          selectable
+          style={{
+            fontSize: 12,
+            color: "#78909C",
+            marginTop: 10,
+            textAlign: "center",
+          }}
+        >
           {String(error?.message || error)}
         </Text>
         <TouchableOpacity
           onPress={() => retry()}
-          style={{ marginTop: 20, backgroundColor: "#1565C0", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+          style={{
+            marginTop: 20,
+            backgroundColor: "#1565C0",
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            borderRadius: 8,
+          }}
           testID="new-procedure-retry-btn"
         >
           <Text style={{ color: "#FFF", fontWeight: "700" }}>Try Again</Text>
@@ -560,7 +600,9 @@ export function ErrorBoundary({
           style={{ marginTop: 10, paddingHorizontal: 24, paddingVertical: 10 }}
           testID="new-procedure-error-dashboard-btn"
         >
-          <Text style={{ color: "#546E7A", fontWeight: "600" }}>Go to Dashboard</Text>
+          <Text style={{ color: "#546E7A", fontWeight: "600" }}>
+            Go to Dashboard
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -711,6 +753,9 @@ export default function NewProcedureScreen() {
     amount_paid: "",
     procedure_date: "",
     procedure_time: "",
+    // iter-Jun-2026: optional Postgraduate-student assistant (read-only reviewer)
+    assistant_id: "",
+    assistant_name: "",
     implant_procedure_type: "",
     // iter-307: New "Number of Implants" sub-question — only used for
     // Immediate / PET / GBR / Guided Surgery / Sinus Lift procedure
@@ -806,7 +851,8 @@ export default function NewProcedureScreen() {
     // Aesthetic Risk Assessment
     smile_line: "",
     gingival_biotype: "",
-    // Full-Arch atrophy assessment (anterior/posterior bone height + width per arch, mm)
+    // iter-Jun-2026: ERA factors for anterior-maxilla cases (FDI 11–13 / 21–23)
+    aesthetic_risk: {} as Record<string, string>,
     atrophy_max_ant_h: "",
     atrophy_max_post_h: "",
     atrophy_max_ant_w: "",
@@ -846,18 +892,26 @@ export default function NewProcedureScreen() {
       ...staticStyles,
       headerBar: [
         staticStyles.headerBar,
-        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
+        isTablet && {
+          maxWidth: 800,
+          alignSelf: "center" as const,
+          width: "100%" as const,
+        },
       ],
       existingProgressBar: [
         staticStyles.existingProgressBar,
-        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
+        isTablet && {
+          maxWidth: 800,
+          alignSelf: "center" as const,
+          width: "100%" as const,
+        },
       ],
       section: [
         staticStyles.section,
         isTablet && {
           maxWidth: 800,
           alignSelf: "center" as const,
-          width: "100%",
+          width: "100%" as const,
         },
       ],
       continueBtn: [
@@ -865,16 +919,24 @@ export default function NewProcedureScreen() {
         isTablet && {
           maxWidth: 800,
           alignSelf: "center" as const,
-          width: "100%",
+          width: "100%" as const,
         },
       ],
       stepHeader: [
         staticStyles.stepHeader,
-        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
+        isTablet && {
+          maxWidth: 800,
+          alignSelf: "center" as const,
+          width: "100%" as const,
+        },
       ],
       submitContainer: [
         staticStyles.submitContainer,
-        isTablet && { maxWidth: 800, alignSelf: "center" as const, width: "100%" },
+        isTablet && {
+          maxWidth: 800,
+          alignSelf: "center" as const,
+          width: "100%" as const,
+        },
       ],
     }),
     [isTablet],
@@ -1092,6 +1154,8 @@ export default function NewProcedureScreen() {
         amount_paid: parseFloat(String(formData.amount_paid)) || 0,
         procedure_date: formData.procedure_date,
         procedure_time: formData.procedure_time,
+        assistant_id: formData.assistant_id || "",
+        assistant_name: formData.assistant_name || "",
         remark: (formData as any).remark || "",
       });
       const newId = res.data?.id;
@@ -1213,6 +1277,8 @@ export default function NewProcedureScreen() {
                   proc.amount_paid != null ? String(proc.amount_paid) : "",
                 procedure_date: proc.procedure_date || "",
                 procedure_time: proc.procedure_time || "",
+                assistant_id: proc.assistant_id || "",
+                assistant_name: proc.assistant_name || "",
                 implant_procedure_type: proc.implant_procedure_type || "",
                 num_implants: proc.num_implants || "",
                 sinus_lift_type: proc.sinus_lift_type || "",
@@ -1288,6 +1354,10 @@ export default function NewProcedureScreen() {
                 // Aesthetic Risk Assessment
                 smile_line: proc.smile_line || "",
                 gingival_biotype: proc.gingival_biotype || "",
+                aesthetic_risk:
+                  proc.aesthetic_risk && typeof proc.aesthetic_risk === "object"
+                    ? proc.aesthetic_risk
+                    : {},
                 // Medical Assessment
                 medical_assessment:
                   proc.medical_assessment || prev.medical_assessment,
@@ -1454,6 +1524,8 @@ export default function NewProcedureScreen() {
               amount_paid: "",
               procedure_date: "",
               procedure_time: "",
+              assistant_id: "",
+              assistant_name: "",
             }));
             setStep("details");
           } catch {
@@ -1495,6 +1567,8 @@ export default function NewProcedureScreen() {
           amount_paid: "",
           procedure_date: "",
           procedure_time: "",
+          assistant_id: "",
+          assistant_name: "",
           implant_procedure_type: "",
           overdenture_type: "",
           num_implants: "",
@@ -1559,6 +1633,7 @@ export default function NewProcedureScreen() {
           tmj: "",
           smile_line: "",
           gingival_biotype: "",
+          aesthetic_risk: {} as Record<string, string>,
           clinical_exam_per_site: {} as Record<
             string,
             {
@@ -3532,6 +3607,28 @@ export default function NewProcedureScreen() {
       if (!formData.ridge_contour) missClinical.push("Ridge contour");
     }
 
+    // iter-Jun-2026: Esthetic Risk Assessment is mandatory once any anterior
+    // maxillary tooth (FDI 11–13 / 21–23) is marked on the chart.
+    if (
+      isNonFullArch &&
+      !isOverdentureNonFullArch &&
+      !isExistingImplantCase &&
+      isAnteriorMaxillaCase(missingTeeth)
+    ) {
+      for (const f of ERA_PATIENT_FACTORS) {
+        if (!eraValue(formData, f.key))
+          missClinical.push(`Aesthetic Risk — ${f.label}`);
+      }
+      const areas = anteriorAreas(missingTeeth);
+      for (const area of areas) {
+        const tag = areas.length > 1 ? ` (${area.label})` : "";
+        for (const f of ERA_SITE_SELECTABLE) {
+          if (!eraValue(formData, f.key, area.leader))
+            missClinical.push(`Aesthetic Risk — ${f.label}${tag}`);
+        }
+      }
+    }
+
     if (isExistingImplantCase) {
       const ma = formData.medical_assessment || {};
       if (!ma.diabetes) missMedicalOrChecklist.push("Diabetes");
@@ -4158,6 +4255,8 @@ export default function NewProcedureScreen() {
                 amount_paid: String(formData.amount_paid || ""),
                 procedure_date: formData.procedure_date || "",
                 procedure_time: formData.procedure_time || "",
+                assistant_id: formData.assistant_id || "",
+                assistant_name: formData.assistant_name || "",
                 remark: (formData as any).remark || "",
               }}
               validatePatient={() => {
@@ -4432,6 +4531,14 @@ export default function NewProcedureScreen() {
                     </View>
                   );
                 })()}
+              <AssistantPicker
+                valueId={formData.assistant_id}
+                valueName={formData.assistant_name}
+                onChange={(id, name) => {
+                  updateForm("assistant_id", id);
+                  updateForm("assistant_name", name);
+                }}
+              />
             </View>
             <View style={{ paddingHorizontal: 16, paddingBottom: 28 }}>
               <TouchableOpacity
@@ -5109,6 +5216,14 @@ export default function NewProcedureScreen() {
                     </View>
                   );
                 })()}
+              <AssistantPicker
+                valueId={formData.assistant_id}
+                valueName={formData.assistant_name}
+                onChange={(id, name) => {
+                  updateForm("assistant_id", id);
+                  updateForm("assistant_name", name);
+                }}
+              />
             </View>
 
             {/* ─── Procedure Type ─── */}
@@ -5692,7 +5807,9 @@ export default function NewProcedureScreen() {
                           if (v !== "Other")
                             updateForm("fa_prosthetic_plan_other", "");
                         }}
-                        groups={getGroupBPlanOptions(formData.implant_procedure_type)}
+                        groups={getGroupBPlanOptions(
+                          formData.implant_procedure_type,
+                        )}
                         testID="fa-prosthetic-plan-dropdown"
                       />
                       {formData.fa_prosthetic_plan === "Other" && (
@@ -7059,23 +7176,35 @@ export default function NewProcedureScreen() {
 
                 {/* Aesthetic Risk Assessment – Non-Full-Arch */}
                 {isNonFullArch && (
-                  <>
-                    <Text style={styles.subSectionTitle}>
-                      Aesthetic Risk Assessment
-                    </Text>
-                    <Dropdown
-                      label="Smile Line"
-                      value={formData.smile_line}
-                      options={SMILE_LINE_OPTIONS}
-                      onChange={(v) => updateForm("smile_line", v)}
-                    />
-                    <Dropdown
-                      label="Gingival Biotype"
-                      value={formData.gingival_biotype}
-                      options={GINGIVAL_BIOTYPE_OPTIONS}
-                      onChange={(v) => updateForm("gingival_biotype", v)}
-                    />
-                  </>
+                  <AestheticRiskSection
+                    values={formData}
+                    anterior={
+                      !isOverdentureNonFullArch &&
+                      isAnteriorMaxillaCase(formData.missing_teeth)
+                    }
+                    onChange={(key, v, topLevel, leader) => {
+                      if (topLevel) {
+                        updateForm(key, v);
+                        return;
+                      }
+                      setFormData((prev) => {
+                        const era = {
+                          ...(prev.aesthetic_risk || {}),
+                        } as Record<string, any>;
+                        if (leader) {
+                          const sites = { ...(era.sites || {}) };
+                          sites[leader] = {
+                            ...(sites[leader] || {}),
+                            [key]: v,
+                          };
+                          era.sites = sites;
+                        } else {
+                          era[key] = v;
+                        }
+                        return { ...prev, aesthetic_risk: era };
+                      });
+                    }}
+                  />
                 )}
               </View>
             )}

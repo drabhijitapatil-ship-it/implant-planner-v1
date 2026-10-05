@@ -4,6 +4,13 @@ import { Alert, Platform } from "react-native";
 import { format } from "date-fns";
 import { getImplantSite, getImplantSpec } from "./implantPlan";
 import api from "./api";
+import { impressionRows } from "./impressionOptions";
+import {
+  computeEra,
+  isAnteriorMaxillaCase,
+  RISK_COLORS,
+} from "./aestheticRisk";
+import { fmtBytes } from "./scanUpload";
 
 // ── Organization letterhead (name + logo) for generated documents ──
 export type OrgBranding = { name?: string | null; logo?: string | null };
@@ -224,7 +231,7 @@ export const buildProcedurePdfHtml = (
             <div class="section-title">Procedure Details</div>
             <table>
               <tr><td class="info-label">Procedure Type:</td><td class="info-value">${procedure.implant_procedure_type}</td></tr>
-              ${procedure.overdenture_type ? `<tr><td class="info-label">Type of Overdenture:</td><td class="info-value">${procedure.overdenture_type}</td></tr>` : ''}
+              ${procedure.overdenture_type ? `<tr><td class="info-label">Type of Overdenture:</td><td class="info-value">${procedure.overdenture_type}</td></tr>` : ""}
               ${procedure.procedure_surgery_type ? `<tr><td class="info-label">Surgical Approach:</td><td class="info-value">${procedure.procedure_surgery_type}</td></tr>` : ""}
               ${procedure.guided_surgery_type ? `<tr><td class="info-label">Type of Guided Surgery:</td><td class="info-value">${procedure.guided_surgery_type}</td></tr>` : ""}
               ${procedure.static_guide_type ? `<tr><td class="info-label">Type of Static Guide:</td><td class="info-value">${procedure.static_guide_type}</td></tr>` : ""}
@@ -233,17 +240,17 @@ export const buildProcedurePdfHtml = (
               ${procedure.loading_type?.length ? `<tr><td class="info-label">Loading Type:</td><td class="info-value">${procedure.loading_type.join(", ")}</td></tr>` : ""}
               ${procedure.prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.prosthetic_plan}</td></tr>` : ""}
               ${procedure.prosthetic_plan_other ? `<tr><td class="info-label">Prosthetic Plan (Other):</td><td class="info-value">${procedure.prosthetic_plan_other}</td></tr>` : ""}
-              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.type_of_provisional) ? `<tr><td class="info-label">Type of Provisional:</td><td class="info-value">${procedure.type_of_provisional === 'Other' && procedure.type_of_provisional_other ? `Other — ${procedure.type_of_provisional_other}` : procedure.type_of_provisional}</td></tr>` : ''}
-              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_abutment_type) ? `<tr><td class="info-label">Abutment Type:</td><td class="info-value">${procedure.sc_abutment_type === 'Other' && procedure.sc_abutment_type_other ? `Other — ${procedure.sc_abutment_type_other}` : procedure.sc_abutment_type}</td></tr>` : ''}
-              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_retention_type) ? `<tr><td class="info-label">Type of Retention:</td><td class="info-value">${procedure.sc_retention_type === 'Other' && procedure.sc_retention_type_other ? `Other — ${procedure.sc_retention_type_other}` : procedure.sc_retention_type}</td></tr>` : ''}
-              ${(procedure.implant_procedure_type === 'Single Conventional Implant' && procedure.sc_crown_material) ? `<tr><td class="info-label">Crown Material:</td><td class="info-value">${procedure.sc_crown_material === 'Other' && procedure.sc_crown_material_other ? `Other — ${procedure.sc_crown_material_other}` : procedure.sc_crown_material}</td></tr>` : ''}
-              ${(procedure.implant_procedure_type !== 'Single Conventional Implant' && procedure.type_of_provisional) ? `<tr><td class="info-label">Type of Provisional:</td><td class="info-value">${procedure.type_of_provisional === 'Other' && procedure.type_of_provisional_other ? `Other — ${procedure.type_of_provisional_other}` : procedure.type_of_provisional}</td></tr>` : ''}
-              ${procedure.ma_prosthesis_type ? `<tr><td class="info-label">Prosthesis Type:</td><td class="info-value">${procedure.ma_prosthesis_type === 'Other' && procedure.ma_prosthesis_type_other ? `Other — ${procedure.ma_prosthesis_type_other}` : procedure.ma_prosthesis_type}</td></tr>` : ''}
-              ${procedure.ma_abutment_type ? `<tr><td class="info-label">Abutment Type:</td><td class="info-value">${procedure.ma_abutment_type === 'Other' && procedure.ma_abutment_type_other ? `Other — ${procedure.ma_abutment_type_other}` : procedure.ma_abutment_type}</td></tr>` : ''}
-              ${procedure.ma_retention_type ? `<tr><td class="info-label">Type of Retention:</td><td class="info-value">${procedure.ma_retention_type === 'Other' && procedure.ma_retention_type_other ? `Other — ${procedure.ma_retention_type_other}` : procedure.ma_retention_type}</td></tr>` : ''}
-              ${procedure.ma_crown_material ? `<tr><td class="info-label">Crown/Bridge Material:</td><td class="info-value">${procedure.ma_crown_material === 'Other' && procedure.ma_crown_material_other ? `Other — ${procedure.ma_crown_material_other}` : procedure.ma_crown_material}</td></tr>` : ''}
-              ${procedure.fa_prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.fa_prosthetic_plan === 'Other' && procedure.fa_prosthetic_plan_other ? `Other — ${procedure.fa_prosthetic_plan_other}` : procedure.fa_prosthetic_plan}</td></tr>` : ''}
-              ${procedure.zp_prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.zp_prosthetic_plan === 'Other' && procedure.zp_prosthetic_plan_other ? `Other — ${procedure.zp_prosthetic_plan_other}` : procedure.zp_prosthetic_plan}</td></tr>` : ''}
+              ${procedure.implant_procedure_type === "Single Conventional Implant" && procedure.type_of_provisional ? `<tr><td class="info-label">Type of Provisional:</td><td class="info-value">${procedure.type_of_provisional === "Other" && procedure.type_of_provisional_other ? `Other — ${procedure.type_of_provisional_other}` : procedure.type_of_provisional}</td></tr>` : ""}
+              ${procedure.implant_procedure_type === "Single Conventional Implant" && procedure.sc_abutment_type ? `<tr><td class="info-label">Abutment Type:</td><td class="info-value">${procedure.sc_abutment_type === "Other" && procedure.sc_abutment_type_other ? `Other — ${procedure.sc_abutment_type_other}` : procedure.sc_abutment_type}</td></tr>` : ""}
+              ${procedure.implant_procedure_type === "Single Conventional Implant" && procedure.sc_retention_type ? `<tr><td class="info-label">Type of Retention:</td><td class="info-value">${procedure.sc_retention_type === "Other" && procedure.sc_retention_type_other ? `Other — ${procedure.sc_retention_type_other}` : procedure.sc_retention_type}</td></tr>` : ""}
+              ${procedure.implant_procedure_type === "Single Conventional Implant" && procedure.sc_crown_material ? `<tr><td class="info-label">Crown Material:</td><td class="info-value">${procedure.sc_crown_material === "Other" && procedure.sc_crown_material_other ? `Other — ${procedure.sc_crown_material_other}` : procedure.sc_crown_material}</td></tr>` : ""}
+              ${procedure.implant_procedure_type !== "Single Conventional Implant" && procedure.type_of_provisional ? `<tr><td class="info-label">Type of Provisional:</td><td class="info-value">${procedure.type_of_provisional === "Other" && procedure.type_of_provisional_other ? `Other — ${procedure.type_of_provisional_other}` : procedure.type_of_provisional}</td></tr>` : ""}
+              ${procedure.ma_prosthesis_type ? `<tr><td class="info-label">Prosthesis Type:</td><td class="info-value">${procedure.ma_prosthesis_type === "Other" && procedure.ma_prosthesis_type_other ? `Other — ${procedure.ma_prosthesis_type_other}` : procedure.ma_prosthesis_type}</td></tr>` : ""}
+              ${procedure.ma_abutment_type ? `<tr><td class="info-label">Abutment Type:</td><td class="info-value">${procedure.ma_abutment_type === "Other" && procedure.ma_abutment_type_other ? `Other — ${procedure.ma_abutment_type_other}` : procedure.ma_abutment_type}</td></tr>` : ""}
+              ${procedure.ma_retention_type ? `<tr><td class="info-label">Type of Retention:</td><td class="info-value">${procedure.ma_retention_type === "Other" && procedure.ma_retention_type_other ? `Other — ${procedure.ma_retention_type_other}` : procedure.ma_retention_type}</td></tr>` : ""}
+              ${procedure.ma_crown_material ? `<tr><td class="info-label">Crown/Bridge Material:</td><td class="info-value">${procedure.ma_crown_material === "Other" && procedure.ma_crown_material_other ? `Other — ${procedure.ma_crown_material_other}` : procedure.ma_crown_material}</td></tr>` : ""}
+              ${procedure.fa_prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.fa_prosthetic_plan === "Other" && procedure.fa_prosthetic_plan_other ? `Other — ${procedure.fa_prosthetic_plan_other}` : procedure.fa_prosthetic_plan}</td></tr>` : ""}
+              ${procedure.zp_prosthetic_plan ? `<tr><td class="info-label">Prosthetic Plan:</td><td class="info-value">${procedure.zp_prosthetic_plan === "Other" && procedure.zp_prosthetic_plan_other ? `Other — ${procedure.zp_prosthetic_plan_other}` : procedure.zp_prosthetic_plan}</td></tr>` : ""}
             </table>
           </div>`
               : ""
@@ -293,18 +300,52 @@ export const buildProcedurePdfHtml = (
               : ""
           }
 
-          ${
-            procedure.smile_line || procedure.gingival_biotype
-              ? `
+${(() => {
+  const era = computeEra(procedure);
+  if (era.assessed === 0) return "";
+  const anterior = isAnteriorMaxillaCase(procedure.missing_teeth);
+  const multi = era.sites.length > 1;
+  const pill = (lvl: string | null) =>
+    lvl
+      ? `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:700;color:${RISK_COLORS[lvl as "Low"].fg};background:${RISK_COLORS[lvl as "Low"].bg};border:1px solid ${RISK_COLORS[lvl as "Low"].border}">${lvl} risk</span>`
+      : "";
+  const row = (r: any) =>
+    `<tr><td class="info-label">${r.label}:</td><td class="info-value">${r.value} &nbsp;${pill(r.risk)}</td></tr>`;
+  const overallRow = (title: string, o: any) =>
+    o.overall
+      ? `<tr><td class="info-label"><strong>${title}:</strong></td><td class="info-value"><strong>${o.overall}</strong> &nbsp;${pill(o.overall)} <span style="color:#666;font-size:10px">(${o.assessed}/${o.total} factors · ${o.counts.High} high · ${o.counts.Medium} medium · ${o.counts.Low} low)</span></td></tr>`
+      : "";
+  const patientRows = era.patientRows.filter(
+    (r) =>
+      r.value &&
+      (anterior || r.key === "smile_line" || r.key === "gingival_biotype"),
+  );
+  return `
           <div class="section">
-            <div class="section-title">Aesthetic Risk Assessment</div>
+            <div class="section-title">Aesthetic Risk Assessment${anterior && era.overall ? ` — Overall: ${era.overall} risk` : ""}</div>
             <table>
-              ${procedure.smile_line ? `<tr><td class="info-label">Smile Line:</td><td class="info-value">${procedure.smile_line}</td></tr>` : ""}
-              ${procedure.gingival_biotype ? `<tr><td class="info-label">Gingival Biotype:</td><td class="info-value">${procedure.gingival_biotype}</td></tr>` : ""}
+              ${patientRows.map(row).join("")}
             </table>
-          </div>`
-              : ""
-          }
+            ${
+              anterior
+                ? era.sites
+                    .map(
+                      (s, i) => `
+            <table style="margin-top:6px">
+              ${multi ? `<tr><td colspan="2" style="font-weight:700;color:#880E4F;padding-top:6px">Area ${i + 1} — ${s.label}</td></tr>` : ""}
+              ${s.rows
+                .filter((r) => r.value)
+                .map(row)
+                .join("")}
+              ${overallRow(multi ? `Aesthetic Risk — ${s.label}` : "Overall Aesthetic Risk", s)}
+            </table>`,
+                    )
+                    .join("")
+                : ""
+            }
+            ${anterior && multi ? `<table style="margin-top:6px">${overallRow("Overall Aesthetic Risk (case — highest area)", era)}</table>` : ""}
+          </div>`;
+})()}
 
           ${
             procedure.medical_assessment &&
@@ -625,19 +666,24 @@ export const buildProcedurePdfHtml = (
             <div class="section-title">Step 1 — Prosthetic Plan & Impressions</div>
             <table>
               ${procedure.phase4_step1_data.final_prosthetic_plan ? `<tr><td class="info-label">Final Prosthetic Plan:</td><td class="info-value" style="font-weight:bold;">${procedure.phase4_step1_data.final_prosthetic_plan}</td></tr>` : ""}
-              ${procedure.phase4_step1_data.sc_final_abutment_type ? `<tr><td class="info-label">Final Abutment Type:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_abutment_type === 'Other' && procedure.phase4_step1_data.sc_final_abutment_type_other ? `Other — ${procedure.phase4_step1_data.sc_final_abutment_type_other}` : procedure.phase4_step1_data.sc_final_abutment_type}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.sc_final_retention_type ? `<tr><td class="info-label">Final Type of Retention:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_retention_type === 'Other' && procedure.phase4_step1_data.sc_final_retention_type_other ? `Other — ${procedure.phase4_step1_data.sc_final_retention_type_other}` : procedure.phase4_step1_data.sc_final_retention_type}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.sc_final_crown_material ? `<tr><td class="info-label">Final Crown Material:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_crown_material === 'Other' && procedure.phase4_step1_data.sc_final_crown_material_other ? `Other — ${procedure.phase4_step1_data.sc_final_crown_material_other}` : procedure.phase4_step1_data.sc_final_crown_material}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.ma_final_prosthesis_type ? `<tr><td class="info-label">Final Prosthesis Type:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_prosthesis_type === 'Other' ? (procedure.phase4_step1_data.ma_final_prosthesis_type_other || 'Other') : procedure.phase4_step1_data.ma_final_prosthesis_type}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.ma_final_abutment_type ? `<tr><td class="info-label">Final Abutment Type:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_abutment_type === 'Other' ? (procedure.phase4_step1_data.ma_final_abutment_type_other || 'Other') : procedure.phase4_step1_data.ma_final_abutment_type}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.ma_final_retention_type ? `<tr><td class="info-label">Final Type of Retention:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_retention_type === 'Other' ? (procedure.phase4_step1_data.ma_final_retention_type_other || 'Other') : procedure.phase4_step1_data.ma_final_retention_type}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.ma_final_crown_material ? `<tr><td class="info-label">Final Crown/Bridge Material:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_crown_material === 'Other' ? (procedure.phase4_step1_data.ma_final_crown_material_other || 'Other') : procedure.phase4_step1_data.ma_final_crown_material}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.fa_final_prosthetic_plan ? `<tr><td class="info-label">Final Prosthetic Plan:</td><td class="info-value">${procedure.phase4_step1_data.fa_final_prosthetic_plan === 'Other' ? (procedure.phase4_step1_data.fa_final_prosthetic_plan_other || 'Other') : procedure.phase4_step1_data.fa_final_prosthetic_plan}</td></tr>` : ''}
-              ${procedure.phase4_step1_data.zp_final_prosthetic_plan ? `<tr><td class="info-label">Final Prosthetic Plan:</td><td class="info-value">${procedure.phase4_step1_data.zp_final_prosthetic_plan === 'Other' ? (procedure.phase4_step1_data.zp_final_prosthetic_plan_other || 'Other') : procedure.phase4_step1_data.zp_final_prosthetic_plan}</td></tr>` : ''}
+              ${procedure.phase4_step1_data.sc_final_abutment_type ? `<tr><td class="info-label">Final Abutment Type:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_abutment_type === "Other" && procedure.phase4_step1_data.sc_final_abutment_type_other ? `Other — ${procedure.phase4_step1_data.sc_final_abutment_type_other}` : procedure.phase4_step1_data.sc_final_abutment_type}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.sc_final_retention_type ? `<tr><td class="info-label">Final Type of Retention:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_retention_type === "Other" && procedure.phase4_step1_data.sc_final_retention_type_other ? `Other — ${procedure.phase4_step1_data.sc_final_retention_type_other}` : procedure.phase4_step1_data.sc_final_retention_type}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.sc_final_crown_material ? `<tr><td class="info-label">Final Crown Material:</td><td class="info-value">${procedure.phase4_step1_data.sc_final_crown_material === "Other" && procedure.phase4_step1_data.sc_final_crown_material_other ? `Other — ${procedure.phase4_step1_data.sc_final_crown_material_other}` : procedure.phase4_step1_data.sc_final_crown_material}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.ma_final_prosthesis_type ? `<tr><td class="info-label">Final Prosthesis Type:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_prosthesis_type === "Other" ? procedure.phase4_step1_data.ma_final_prosthesis_type_other || "Other" : procedure.phase4_step1_data.ma_final_prosthesis_type}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.ma_final_abutment_type ? `<tr><td class="info-label">Final Abutment Type:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_abutment_type === "Other" ? procedure.phase4_step1_data.ma_final_abutment_type_other || "Other" : procedure.phase4_step1_data.ma_final_abutment_type}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.ma_final_retention_type ? `<tr><td class="info-label">Final Type of Retention:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_retention_type === "Other" ? procedure.phase4_step1_data.ma_final_retention_type_other || "Other" : procedure.phase4_step1_data.ma_final_retention_type}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.ma_final_crown_material ? `<tr><td class="info-label">Final Crown/Bridge Material:</td><td class="info-value">${procedure.phase4_step1_data.ma_final_crown_material === "Other" ? procedure.phase4_step1_data.ma_final_crown_material_other || "Other" : procedure.phase4_step1_data.ma_final_crown_material}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.fa_final_prosthetic_plan ? `<tr><td class="info-label">Final Prosthetic Plan:</td><td class="info-value">${procedure.phase4_step1_data.fa_final_prosthetic_plan === "Other" ? procedure.phase4_step1_data.fa_final_prosthetic_plan_other || "Other" : procedure.phase4_step1_data.fa_final_prosthetic_plan}</td></tr>` : ""}
+              ${procedure.phase4_step1_data.zp_final_prosthetic_plan ? `<tr><td class="info-label">Final Prosthetic Plan:</td><td class="info-value">${procedure.phase4_step1_data.zp_final_prosthetic_plan === "Other" ? procedure.phase4_step1_data.zp_final_prosthetic_plan_other || "Other" : procedure.phase4_step1_data.zp_final_prosthetic_plan}</td></tr>` : ""}
               ${procedure.phase4_step1_data.prosthetic_material ? `<tr><td class="info-label">Prosthetic Material:</td><td class="info-value">${procedure.phase4_step1_data.prosthetic_material}</td></tr>` : ""}
               ${procedure.phase4_step1_data.custom_abutment ? `<tr><td class="info-label">Custom Abutment:</td><td class="info-value">${procedure.phase4_step1_data.custom_abutment}</td></tr>` : ""}
               ${procedure.phase4_step1_data.overdenture_attachment ? `<tr><td class="info-label">Overdenture Attachment:</td><td class="info-value">${procedure.phase4_step1_data.overdenture_attachment}</td></tr>` : ""}
-              ${procedure.phase4_step1_data.impression_type ? `<tr><td class="info-label">Impression Type:</td><td class="info-value">${procedure.phase4_step1_data.impression_type === "intraoral_scans" ? "Intraoral Scans" : "Conventional Impressions"}</td></tr>` : ""}
+              ${impressionRows(procedure.phase4_step1_data)
+                .map(
+                  (r) =>
+                    `<tr><td class="info-label">${_esc(r.label)}:</td><td class="info-value">${_esc(r.value)}</td></tr>`,
+                )
+                .join("")}
               ${procedure.phase4_step1_data.payment_complete !== undefined ? `<tr><td class="info-label">Payment Complete:</td><td class="info-value">${procedure.phase4_step1_data.payment_complete ? "Yes" : "No"}</td></tr>` : ""}
               ${procedure.phase4_step1_data.components_available !== undefined ? `<tr><td class="info-label">Components Available:</td><td class="info-value">${procedure.phase4_step1_data.components_available ? "Yes" : "No"}</td></tr>` : ""}
             </table>
@@ -849,13 +895,6 @@ export const printProcedurePDF = async (procedure: any) => {
 // the case-report HTML→PDF flow so it works on web (open) and
 // native (Print + Sharing) without any backend round-trip.
 // ─────────────────────────────────────────────────────────────────
-const _labelize = (
-  val: string | undefined | null,
-  map: Record<string, string>,
-): string => {
-  if (!val) return "";
-  return map[val] || val.replace(/_/g, " ");
-};
 
 export const buildLabSlipHtml = (
   procedure: any,
@@ -946,35 +985,27 @@ export const buildLabSlipHtml = (
     })
     .join("");
 
-  const trayLabel = _labelize(p4.conventional_tray_type, {
-    open_tray: "Open Tray",
-    closed_tray: "Closed Tray",
-  });
-  const matLabel = _labelize(p4.impression_material, {
-    polyether: "Polyether",
-    heavy_light_body: "Heavy and Light body",
-    putty_light_body: "Putty and Light body",
-  });
-  const impressionSummary =
-    p4.impression_type === "intraoral_scans"
-      ? "Intra-Oral Digital Scans"
-      : `Conventional${trayLabel ? ` — ${trayLabel}` : ""}${matLabel ? ` (${matLabel})` : ""}`;
+  // iter-Jun-2026: structured impression block (shared labels with the case
+  // PDF and review card). Multi-value "Type of Scan Body" rendered as bullets.
+  const _impRows = impressionRows(p4);
+  const impressionSummary = _impRows.length ? _esc(_impRows[0].value) : "—";
 
-  // iter-Jun-2026 (v13, Chunk G, Ask 3): Intra-oral scan sub-fields — rendered
-  // as three bulleted lists (Type of Scan Body, Scan Type, Scan Level).
   const _bulletList = (label: string, values: any) => {
-    const arr: string[] = Array.isArray(values) ? values.map((v: any) => String(v || '').trim()).filter(Boolean) : [];
-    if (arr.length === 0) return '';
-    const items = arr.map(v => `<li>${_esc(v)}</li>`).join('');
+    const arr: string[] = Array.isArray(values)
+      ? values.map((v: any) => String(v || "").trim()).filter(Boolean)
+      : [];
+    if (arr.length === 0) return "";
+    const items = arr.map((v) => `<li>${_esc(v)}</li>`).join("");
     return `<div class="bullet-block"><div class="bullet-label">${_esc(label)}</div><ul class="bullet-list">${items}</ul></div>`;
   };
-  const scanSubfieldsHtml = p4.impression_type === 'intraoral_scans'
-    ? (
-        _bulletList('Type of Scan Body', p4.scan_body_types) +
-        _bulletList('Scan Type', p4.scan_types) +
-        _bulletList('Scan Level', p4.scan_levels)
-      )
-    : '';
+  const scanSubfieldsHtml = _impRows
+    .slice(1)
+    .map((r) =>
+      r.values && r.values.length > 1
+        ? _bulletList(r.label, r.values)
+        : `<div class="bullet-block"><span class="bullet-label">${_esc(r.label)}:</span> ${_esc(r.value)}</div>`,
+    )
+    .join("");
 
   // iter-202: Multi-Unit Abutment block — historically sourced from Phase 2
   // surgical capture (`procedure.phase2_data.multi_unit_abutment_*`). The lab
@@ -1181,19 +1212,19 @@ export const buildLabSlipHtml = (
         <h2>Final Prosthesis Plan</h2>
         <table class="grid">
           <tr><td class="lbl">Final Prosthetic Plan</td><td><span class="badge">${p4.final_prosthetic_plan || "—"}</span></td></tr>
-          ${p4.sc_final_abutment_type ? `<tr><td class="lbl">Abutment Type</td><td>${p4.sc_final_abutment_type === 'Other' && p4.sc_final_abutment_type_other ? `Other — ${p4.sc_final_abutment_type_other}` : p4.sc_final_abutment_type}</td></tr>` : ''}
-          ${p4.sc_final_retention_type ? `<tr><td class="lbl">Type of Retention</td><td>${p4.sc_final_retention_type === 'Other' && p4.sc_final_retention_type_other ? `Other — ${p4.sc_final_retention_type_other}` : p4.sc_final_retention_type}</td></tr>` : ''}
-          ${p4.sc_final_crown_material ? `<tr><td class="lbl">Crown Material</td><td>${p4.sc_final_crown_material === 'Other' && p4.sc_final_crown_material_other ? `Other — ${p4.sc_final_crown_material_other}` : p4.sc_final_crown_material}</td></tr>` : ''}
-          ${p4.ma_final_prosthesis_type ? `<tr><td class="lbl">Prosthesis Type</td><td>${p4.ma_final_prosthesis_type === 'Other' ? (p4.ma_final_prosthesis_type_other || 'Other') : p4.ma_final_prosthesis_type}</td></tr>` : ''}
-          ${p4.ma_final_abutment_type ? `<tr><td class="lbl">Abutment Type</td><td>${p4.ma_final_abutment_type === 'Other' ? (p4.ma_final_abutment_type_other || 'Other') : p4.ma_final_abutment_type}</td></tr>` : ''}
-          ${p4.ma_final_retention_type ? `<tr><td class="lbl">Type of Retention</td><td>${p4.ma_final_retention_type === 'Other' ? (p4.ma_final_retention_type_other || 'Other') : p4.ma_final_retention_type}</td></tr>` : ''}
-          ${p4.ma_final_crown_material ? `<tr><td class="lbl">Crown/Bridge Material</td><td>${p4.ma_final_crown_material === 'Other' ? (p4.ma_final_crown_material_other || 'Other') : p4.ma_final_crown_material}</td></tr>` : ''}
-          ${p4.fa_final_prosthetic_plan ? `<tr><td class="lbl">Prosthetic Plan</td><td>${p4.fa_final_prosthetic_plan === 'Other' ? (p4.fa_final_prosthetic_plan_other || 'Other') : p4.fa_final_prosthetic_plan}</td></tr>` : ''}
-          ${p4.zp_final_prosthetic_plan ? `<tr><td class="lbl">Prosthetic Plan</td><td>${p4.zp_final_prosthetic_plan === 'Other' ? (p4.zp_final_prosthetic_plan_other || 'Other') : p4.zp_final_prosthetic_plan}</td></tr>` : ''}
+          ${p4.sc_final_abutment_type ? `<tr><td class="lbl">Abutment Type</td><td>${p4.sc_final_abutment_type === "Other" && p4.sc_final_abutment_type_other ? `Other — ${p4.sc_final_abutment_type_other}` : p4.sc_final_abutment_type}</td></tr>` : ""}
+          ${p4.sc_final_retention_type ? `<tr><td class="lbl">Type of Retention</td><td>${p4.sc_final_retention_type === "Other" && p4.sc_final_retention_type_other ? `Other — ${p4.sc_final_retention_type_other}` : p4.sc_final_retention_type}</td></tr>` : ""}
+          ${p4.sc_final_crown_material ? `<tr><td class="lbl">Crown Material</td><td>${p4.sc_final_crown_material === "Other" && p4.sc_final_crown_material_other ? `Other — ${p4.sc_final_crown_material_other}` : p4.sc_final_crown_material}</td></tr>` : ""}
+          ${p4.ma_final_prosthesis_type ? `<tr><td class="lbl">Prosthesis Type</td><td>${p4.ma_final_prosthesis_type === "Other" ? p4.ma_final_prosthesis_type_other || "Other" : p4.ma_final_prosthesis_type}</td></tr>` : ""}
+          ${p4.ma_final_abutment_type ? `<tr><td class="lbl">Abutment Type</td><td>${p4.ma_final_abutment_type === "Other" ? p4.ma_final_abutment_type_other || "Other" : p4.ma_final_abutment_type}</td></tr>` : ""}
+          ${p4.ma_final_retention_type ? `<tr><td class="lbl">Type of Retention</td><td>${p4.ma_final_retention_type === "Other" ? p4.ma_final_retention_type_other || "Other" : p4.ma_final_retention_type}</td></tr>` : ""}
+          ${p4.ma_final_crown_material ? `<tr><td class="lbl">Crown/Bridge Material</td><td>${p4.ma_final_crown_material === "Other" ? p4.ma_final_crown_material_other || "Other" : p4.ma_final_crown_material}</td></tr>` : ""}
+          ${p4.fa_final_prosthetic_plan ? `<tr><td class="lbl">Prosthetic Plan</td><td>${p4.fa_final_prosthetic_plan === "Other" ? p4.fa_final_prosthetic_plan_other || "Other" : p4.fa_final_prosthetic_plan}</td></tr>` : ""}
+          ${p4.zp_final_prosthetic_plan ? `<tr><td class="lbl">Prosthetic Plan</td><td>${p4.zp_final_prosthetic_plan === "Other" ? p4.zp_final_prosthetic_plan_other || "Other" : p4.zp_final_prosthetic_plan}</td></tr>` : ""}
           <tr><td class="lbl">Prosthetic Material</td><td>${p4.prosthetic_material || "—"}</td></tr>
           ${p4.custom_abutment ? `<tr><td class="lbl">Custom Abutment</td><td>${p4.custom_abutment}</td></tr>` : ""}
           ${p4.overdenture_attachment ? `<tr><td class="lbl">Overdenture Attachment</td><td>${p4.overdenture_attachment}</td></tr>` : ""}
-          <tr><td class="lbl">Impression</td><td>${impressionSummary}${scanSubfieldsHtml ? `<div style="margin-top: 6px;">${scanSubfieldsHtml}</div>` : ''}</td></tr>
+          <tr><td class="lbl">Impression</td><td>${impressionSummary}${scanSubfieldsHtml ? `<div style="margin-top: 6px;">${scanSubfieldsHtml}</div>` : ""}</td></tr>
           ${procedure.shade ? `<tr><td class="lbl">Shade</td><td>${procedure.shade}</td></tr>` : ""}
         </table>
       </div>
@@ -1224,7 +1255,31 @@ export const buildLabSlipHtml = (
       `
           : ""
       }
-
+${
+  procedure.lab_share_block
+    ? `
+        <div class="ls-section" style="border: 2px solid #4527A0; border-radius: 8px; padding: 12px; page-break-inside: avoid;">
+          <h2 style="color: #4527A0;">Digital Scan Files</h2>
+          <div style="display: flex; gap: 16px; align-items: flex-start;">
+            <div style="flex: 1;">
+              ${
+                (procedure.lab_share_block.files || []).length
+                  ? `
+                <div style="font-weight: bold; margin-bottom: 4px;">Attached files (${procedure.lab_share_block.files.length})</div>
+                <ul class="bullet-list">${procedure.lab_share_block.files.map((f: any) => `<li>${_esc(f.name)} <span style="color:#777">(${_esc(f.size_label)})</span></li>`).join("")}</ul>
+              `
+                  : '<div style="color:#777">No files attached — see portal link / QR.</div>'
+              }
+              ${procedure.lab_share_block.portal_link ? `<div style="margin-top: 6px;"><b>Scanner portal:</b> <a href="${_esc(procedure.lab_share_block.portal_link)}">${_esc(procedure.lab_share_block.portal_link)}</a></div>` : ""}
+              <div style="margin-top: 8px; font-size: 11px; word-break: break-all;"><b>Secure download link</b> (valid until ${_esc(String(procedure.lab_share_block.expires_at || "").slice(0, 10))}):<br/>${_esc(procedure.lab_share_block.url)}</div>
+              <div style="margin-top: 4px; font-size: 10px; color: #777;">Scan the QR or open the link to download the slip and all scan files as a ZIP. No login required.</div>
+            </div>
+            ${procedure.lab_share_block.qr_png_base64 ? `<img src="data:image/png;base64,${procedure.lab_share_block.qr_png_base64}" alt="QR" style="width: 120px; height: 120px;" />` : ""}
+          </div>
+        </div>
+      `
+    : ""
+}
       <div class="signature-row">
         <div class="sig-box">${procedure.student_name || procedure.created_by_name || "—"}<br /><span style="color: #888;">Prescribing Dentist</span></div>
         <div class="sig-box">${procedure.implant_incharge_name || procedure.supervisor_name || "—"}<br /><span style="color: #888;">Approving In-Charge</span></div>
@@ -1238,9 +1293,55 @@ export const buildLabSlipHtml = (
   `;
 };
 
+/**
+ * iter-Jun-2026: for intraoral-scan cases, create/refresh the 30-day secure
+ * lab link (+QR) and gather the attached scan files so the slip can print a
+ * "Digital Scan Files" block. Returns null for conventional cases / errors.
+ */
+export const prepareLabShareBlock = async (
+  procedure: any,
+): Promise<any | null> => {
+  const pid = procedure?.id || procedure?._id;
+  if (
+    !pid ||
+    procedure?.phase4_step1_data?.impression_type !== "intraoral_scans"
+  )
+    return null;
+  try {
+    const [share, summary] = await Promise.all([
+      api.post(`/procedures/${pid}/lab-share`),
+      api.get(`/procedures/${pid}/scan-files`),
+    ]);
+    const files = (summary.data?.files || []).map((f: any) => ({
+      name: f.name,
+      size_label: fmtBytes(f.size),
+    }));
+    return {
+      ...share.data,
+      files,
+      portal_link: summary.data?.scan_portal_link || "",
+    };
+  } catch (e) {
+    console.warn("lab share block unavailable", e);
+    return null;
+  }
+};
+
 export const generateLabSlipPDF = async (procedure: any) => {
   try {
-    const html = buildLabSlipHtml(procedure, await fetchOrgBranding());
+    const labShare =
+      procedure.lab_share_block === undefined
+        ? await prepareLabShareBlock(procedure)
+        : procedure.lab_share_block;
+    const html = buildLabSlipHtml({ ...procedure, lab_share_block: labShare });
+    if (labShare) {
+      // keep a copy of the slip so the lab download page can offer it too
+      api
+        .put(`/procedures/${procedure.id || procedure._id}/lab-share/slip`, {
+          slip_html: html,
+        })
+        .catch(() => {});
+    }
     if (Platform.OS === "web") {
       const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
@@ -1673,8 +1774,6 @@ export const printTerminationSummaryPDF = async (procedure: any) => {
   }
 };
 
-
-
 // ─────────────────────────────────────────────────────────────────────────────
 // iter-358: Phase 3 → Phase 4 Hand-off Report
 //
@@ -1684,7 +1783,10 @@ export const printTerminationSummaryPDF = async (procedure: any) => {
 // prints a printable prosthodontist hand-off sheet.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const _resolveP3ForImplant = (procedure: any, idx: number): {
+const _resolveP3ForImplant = (
+  procedure: any,
+  idx: number,
+): {
   p2_component: string;
   p2_cuff: string;
   mode: string;
@@ -1694,19 +1796,33 @@ const _resolveP3ForImplant = (procedure: any, idx: number): {
 } => {
   const p2 = procedure?.phase2_data || {};
   const p3 = procedure?.phase3_data || {};
-  const p2Components: string[] = Array.isArray(p2.prosthetic_components) ? p2.prosthetic_components : [];
-  const p2Cuffs: string[] = Array.isArray(p2.healing_abutment_cuff_height) ? p2.healing_abutment_cuff_height : [];
-  const p3Cfg: any[] = Array.isArray(p3.phase3_healing_abutment_config) ? p3.phase3_healing_abutment_config : [];
-  const p3Cuffs = Array.isArray(p3.healing_abutment_height) ? p3.healing_abutment_height : null;
+  const p2Components: string[] = Array.isArray(p2.prosthetic_components)
+    ? p2.prosthetic_components
+    : [];
+  const p2Cuffs: string[] = Array.isArray(p2.healing_abutment_cuff_height)
+    ? p2.healing_abutment_cuff_height
+    : [];
+  const p3Cfg: any[] = Array.isArray(p3.phase3_healing_abutment_config)
+    ? p3.phase3_healing_abutment_config
+    : [];
+  const p3Cuffs = Array.isArray(p3.healing_abutment_height)
+    ? p3.healing_abutment_height
+    : null;
   const isqRaw = p3.isq_value;
-  const isqArr: string[] = Array.isArray(isqRaw) ? isqRaw : (isqRaw ? [String(isqRaw)] : []);
+  const isqArr: string[] = Array.isArray(isqRaw)
+    ? isqRaw
+    : isqRaw
+      ? [String(isqRaw)]
+      : [];
   const cfg = p3Cfg[idx] || {};
-  const p2Component = cfg.phase2_component || p2Components[idx] || p2.prosthetic_component || '—';
-  const p2Cuff = cfg.phase2_cuff_height_mm || p2Cuffs[idx] || '';
-  const mode = cfg.mode || '';
-  const cuffHeight = cfg.cuff_height_mm || (p3Cuffs ? String(p3Cuffs[idx] || '') : '');
-  const customised = cfg.customised_details || '';
-  const isq = isqArr[idx] || (isqArr.length === 1 ? isqArr[0] : '');
+  const p2Component =
+    cfg.phase2_component || p2Components[idx] || p2.prosthetic_component || "—";
+  const p2Cuff = cfg.phase2_cuff_height_mm || p2Cuffs[idx] || "";
+  const mode = cfg.mode || "";
+  const cuffHeight =
+    cfg.cuff_height_mm || (p3Cuffs ? String(p3Cuffs[idx] || "") : "");
+  const customised = cfg.customised_details || "";
+  const isq = isqArr[idx] || (isqArr.length === 1 ? isqArr[0] : "");
   return {
     p2_component: String(p2Component),
     p2_cuff: String(p2Cuff),
@@ -1723,63 +1839,74 @@ const _resolveP3ForImplant = (procedure: any, idx: number): {
  */
 export const buildPhase3HandoffHtml = (procedure: any): string => {
   const p = procedure || {};
-  const patientName = _esc(p.patient_name || '—');
-  const age = _esc(p.patient_age ?? '—');
-  const sex = _esc(p.patient_gender || '—');
-  const regNo = _esc(p.registration_number || p.registration_no || '—');
-  const procType = _esc(p.implant_procedure_type || '—');
+  const patientName = _esc(p.patient_name || "—");
+  const age = _esc(p.patient_age ?? "—");
+  const sex = _esc(p.patient_gender || "—");
+  const regNo = _esc(p.registration_number || p.registration_no || "—");
+  const procType = _esc(p.implant_procedure_type || "—");
   const procDate = _fmtDateTime(p.procedure_date || null);
-  const supervisorName = _esc(p.supervisor_name || '—');
-  const inchargeName = _esc(p.implant_incharge_name || '—');
-  const studentName = _esc(p.student_name || p.created_by_name || '—');
+  const supervisorName = _esc(p.supervisor_name || "—");
+  const inchargeName = _esc(p.implant_incharge_name || "—");
+  const studentName = _esc(p.student_name || p.created_by_name || "—");
 
   const p3 = p.phase3_data || {};
-  const implants: any[] = Array.isArray(p.implants) && p.implants.length > 0
-    ? p.implants
-    : (Array.isArray(p.implant_plans) ? p.implant_plans : []);
+  const implants: any[] =
+    Array.isArray(p.implants) && p.implants.length > 0
+      ? p.implants
+      : Array.isArray(p.implant_plans)
+        ? p.implant_plans
+        : [];
 
   // Phase 3 IOPA files — used as the "healing status photograph" thumbnails.
   const iopaFiles: any[] = Array.isArray(p3.iopa_files) ? p3.iopa_files : [];
   const iopaByLabel: Record<string, string> = {};
-  iopaFiles.forEach(f => {
-    if (f?.tooth_label) iopaByLabel[String(f.tooth_label)] = f.filename || '';
+  iopaFiles.forEach((f) => {
+    if (f?.tooth_label) iopaByLabel[String(f.tooth_label)] = f.filename || "";
   });
 
   const doneAt = _fmtDateTime(p3.done_date || p3.submitted_at || null);
 
-  const rowsHtml = implants.map((imp, i) => {
-    const cfg = _resolveP3ForImplant(p, i);
-    const tooth = imp.tooth_number || imp.tooth || imp.position || '—';
-    const system = [imp.brand, imp.system].filter(Boolean).join(' / ') || '—';
-    const size = [
-      imp.diameter ? `Ø${imp.diameter} mm` : '',
-      imp.length ? `L${imp.length} mm` : '',
-    ].filter(Boolean).join(' · ') || '—';
-    const p2ComponentBadge = cfg.p2_component ? `
+  const rowsHtml = implants
+    .map((imp, i) => {
+      const cfg = _resolveP3ForImplant(p, i);
+      const tooth = imp.tooth_number || imp.tooth || imp.position || "—";
+      const system = [imp.brand, imp.system].filter(Boolean).join(" / ") || "—";
+      const size =
+        [
+          imp.diameter ? `Ø${imp.diameter} mm` : "",
+          imp.length ? `L${imp.length} mm` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ") || "—";
+      const p2ComponentBadge = cfg.p2_component
+        ? `
       <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:9.5px;font-weight:700;letter-spacing:0.3px;background:#E0F2F1;color:#00695C;border:1px solid #4DB6AC;">
-        ${_esc(cfg.p2_component)}${cfg.p2_cuff ? ` · ${_esc(cfg.p2_cuff)} mm` : ''}
-      </span>` : '';
-    const p3Body = cfg.mode === 'customised'
-      ? `<div style="font-size:11px;color:#4A148C;background:#F3E5F5;border-left:3px solid #6A1B9A;padding:6px 8px;border-radius:0 6px 6px 0;white-space:pre-wrap;">
+        ${_esc(cfg.p2_component)}${cfg.p2_cuff ? ` · ${_esc(cfg.p2_cuff)} mm` : ""}
+      </span>`
+        : "";
+      const p3Body =
+        cfg.mode === "customised"
+          ? `<div style="font-size:11px;color:#4A148C;background:#F3E5F5;border-left:3px solid #6A1B9A;padding:6px 8px;border-radius:0 6px 6px 0;white-space:pre-wrap;">
            <strong>Customised healing abutment:</strong> ${_esc(cfg.customised_details) || '<span style="color:#B0BEC5;">(no details)</span>'}
          </div>`
-      : cfg.mode === 'standard' && cfg.cuff_height_mm
-        ? `<div style="font-size:12px;color:#1A2332;"><strong>Standard cuff height:</strong> <span style="color:#00695C;font-weight:700;">${_esc(cfg.cuff_height_mm)} mm</span></div>`
-        : cfg.cuff_height_mm
-          ? `<div style="font-size:12px;color:#1A2332;">Cuff height: <strong>${_esc(cfg.cuff_height_mm)} mm</strong></div>`
-          : '<div style="font-size:11px;color:#B0BEC5;font-style:italic;">Not configured in Phase 3</div>';
+          : cfg.mode === "standard" && cfg.cuff_height_mm
+            ? `<div style="font-size:12px;color:#1A2332;"><strong>Standard cuff height:</strong> <span style="color:#00695C;font-weight:700;">${_esc(cfg.cuff_height_mm)} mm</span></div>`
+            : cfg.cuff_height_mm
+              ? `<div style="font-size:12px;color:#1A2332;">Cuff height: <strong>${_esc(cfg.cuff_height_mm)} mm</strong></div>`
+              : '<div style="font-size:11px;color:#B0BEC5;font-style:italic;">Not configured in Phase 3</div>';
 
-    // Thumbnail: try IOPA matched by tooth_label first
-    const iopaMatch = tooth && tooth !== '—' ? iopaByLabel[String(tooth)] : '';
-    const thumb = iopaMatch
-      ? `<div style="border:1px solid #CFD8DC;border-radius:6px;overflow:hidden;width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:#F5F5F5;">
+      // Thumbnail: try IOPA matched by tooth_label first
+      const iopaMatch =
+        tooth && tooth !== "—" ? iopaByLabel[String(tooth)] : "";
+      const thumb = iopaMatch
+        ? `<div style="border:1px solid #CFD8DC;border-radius:6px;overflow:hidden;width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:#F5F5F5;">
            <span style="font-size:9px;color:#546E7A;font-weight:700;letter-spacing:0.3px;">IOPA · #${_esc(tooth)}</span>
          </div>`
-      : `<div style="width:56px;height:56px;border:1px dashed #CFD8DC;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#B0BEC5;font-size:9px;font-style:italic;">
+        : `<div style="width:56px;height:56px;border:1px dashed #CFD8DC;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#B0BEC5;font-size:9px;font-style:italic;">
            No IOPA
          </div>`;
 
-    return `
+      return `
       <tr>
         <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;">
           <div style="font-weight:800;color:#1A2332;font-size:13px;">Implant ${i + 1}</div>
@@ -1794,7 +1921,7 @@ export const buildPhase3HandoffHtml = (procedure: any): string => {
           ${p3Body}
         </td>
         <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;text-align:center;">
-          <div style="font-weight:800;color:${cfg.isq ? '#0D47A1' : '#B0BEC5'};font-size:15px;">${_esc(cfg.isq || '—')}</div>
+          <div style="font-weight:800;color:${cfg.isq ? "#0D47A1" : "#B0BEC5"};font-size:15px;">${_esc(cfg.isq || "—")}</div>
           <div style="font-size:9px;color:#78909C;letter-spacing:0.5px;">ISQ</div>
         </td>
         <td style="vertical-align:top;padding:10px 8px;border-bottom:1px solid #ECEFF1;text-align:center;">
@@ -1802,7 +1929,8 @@ export const buildPhase3HandoffHtml = (procedure: any): string => {
         </td>
       </tr>
     `;
-  }).join('');
+    })
+    .join("");
 
   return `
 <!DOCTYPE html>
@@ -1896,27 +2024,33 @@ export const buildPhase3HandoffHtml = (procedure: any): string => {
 export const generatePhase3HandoffPDF = async (procedure: any) => {
   try {
     const html = buildPhase3HandoffHtml(procedure);
-    if (Platform.OS === 'web') {
-      const blob = new Blob([html], { type: 'text/html' });
+    if (Platform.OS === "web") {
+      const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 15000);
       return url;
     }
     const { uri } = await Print.printToFileAsync({ html });
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: `Prosthetic_Handoff_${(procedure.patient_name || 'Patient').replace(/\s+/g, '_')}.pdf`,
-        UTI: 'com.adobe.pdf',
+        mimeType: "application/pdf",
+        dialogTitle: `Prosthetic_Handoff_${(procedure.patient_name || "Patient").replace(/\s+/g, "_")}.pdf`,
+        UTI: "com.adobe.pdf",
       });
     } else {
-      Alert.alert('Saved', 'PDF generated. Sharing is unavailable on this device.');
+      Alert.alert(
+        "Saved",
+        "PDF generated. Sharing is unavailable on this device.",
+      );
     }
     return uri;
   } catch (e) {
-    console.error('Phase 3 hand-off PDF error:', e);
-    Alert.alert('Error', 'Failed to generate the Prosthetic Component Summary. Please try again.');
+    console.error("Phase 3 hand-off PDF error:", e);
+    Alert.alert(
+      "Error",
+      "Failed to generate the Prosthetic Component Summary. Please try again.",
+    );
     throw e;
   }
 };
@@ -1925,11 +2059,12 @@ export const generatePhase3HandoffPDF = async (procedure: any) => {
 export const printPhase3HandoffPDF = async (procedure: any) => {
   try {
     const html = buildPhase3HandoffHtml(procedure);
-    if (Platform.OS === 'web') {
-      const blob = new Blob([html], { type: 'text/html' });
+    if (Platform.OS === "web") {
+      const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
-      const iframe = document.createElement('iframe');
-      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText =
+        "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
       iframe.src = url;
       document.body.appendChild(iframe);
       iframe.onload = () => {
@@ -1937,19 +2072,22 @@ export const printPhase3HandoffPDF = async (procedure: any) => {
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
         } catch {
-          window.open(url, '_blank');
+          window.open(url, "_blank");
         }
       };
       setTimeout(() => {
-        try { document.body.removeChild(iframe); } catch { /* ignore */ }
+        try {
+          document.body.removeChild(iframe);
+        } catch {
+          /* ignore */
+        }
         URL.revokeObjectURL(url);
       }, 60000);
       return;
     }
     await Print.printAsync({ html });
   } catch (e) {
-    console.error('Phase 3 hand-off print error:', e);
-    Alert.alert('Error', 'Failed to open the print dialog.');
+    console.error("Phase 3 hand-off print error:", e);
+    Alert.alert("Error", "Failed to open the print dialog.");
   }
 };
-

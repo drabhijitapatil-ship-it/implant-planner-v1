@@ -5,6 +5,11 @@ from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, HTM
 from dotenv import load_dotenv
 import io
 import csv
+from impression_options import (
+    INTRAORAL_SCANNERS, IMPRESSION_MATERIALS, LEGACY_MATERIAL_LABELS, IMPRESSION_MATERIAL_GROUPS,
+    IMPRESSION_TECHNIQUES, SCAN_BODY_MATERIALS, SCAN_BODY_TYPES, SCAN_LEVELS,
+    impression_rows, material_label, scanner_label,
+)
 import json
 import hashlib
 from starlette.middleware.cors import CORSMiddleware
@@ -24,6 +29,7 @@ import jwt
 from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
+import aesthetic_risk as _era
 from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -716,6 +722,8 @@ class ProcedureCreateExistingImplants(BaseModel):
     amount_paid: float
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
+    assistant_id: Optional[str] = Field("", max_length=50)
+    assistant_name: Optional[str] = Field("", max_length=100)
     existing_implants: List[ExistingImplant] = Field(..., min_length=1)
     prosthesis_history: ProsthesisHistory = Field(default_factory=ProsthesisHistory)
     # iter-213: original procedure that placed these implants (e.g. "All on 4")
@@ -761,6 +769,8 @@ class ProcedureCreate(BaseModel):
     amount_paid: float
     procedure_date: str = Field(..., max_length=30)
     procedure_time: str = Field(..., max_length=20)
+    assistant_id: Optional[str] = Field("", max_length=50)
+    assistant_name: Optional[str] = Field("", max_length=100)
     implant_procedure_type: str = Field(..., max_length=100)
     # iter-307: Number-of-Implants sub-question — only used by the 4
     # procedure types (Immediate / PET / GBR / Guided Surgery) where it
@@ -813,7 +823,11 @@ class ProcedureCreate(BaseModel):
     tmj: Optional[str] = Field("", max_length=30)
     # Aesthetic Risk Assessment
     smile_line: Optional[str] = Field("", max_length=30)
-    gingival_biotype: Optional[str] = Field("", max_length=20)
+    gingival_biotype: Optional[str] = Field("", max_length=40)
+    # iter-Jun-2026: Esthetic Risk Assessment factors for anterior-maxilla cases
+    # (smile_type, adjacent_teeth_right/left, infection_at_site, ridge_condition,
+    # bone_level_adjacent, patient_expectations). Sanitised via aesthetic_risk.py.
+    aesthetic_risk: Optional[Dict[str, Any]] = None
     # Medical Assessment
     medical_assessment: Optional[Dict[str, str]] = None
     medical_risk_level: Optional[str] = Field("", max_length=30)
@@ -952,6 +966,8 @@ class ProcedureUpdate(BaseModel):
     amount_paid: Optional[float] = None
     procedure_date: Optional[str] = Field(None, max_length=30)
     procedure_time: Optional[str] = Field(None, max_length=20)
+    assistant_id: Optional[str] = Field(None, max_length=50)
+    assistant_name: Optional[str] = Field(None, max_length=100)
     implant_procedure_type: Optional[str] = Field(None, max_length=100)
     num_implants: Optional[str] = Field(None, max_length=50)
     # iter-328: Sinus Lift sub-fields on the draft model.
@@ -1146,13 +1162,20 @@ class Stage2ProstheticSubmit(BaseModel):
     # iter-191: tray sub-choice required when impression_type == 'conventional'.
     # Validated in submit_stage2_prosthetic; stored alongside impression_type.
     conventional_tray_type: Optional[str] = Field(None, max_length=20)  # open_tray / closed_tray
-    # iter-192: impression material — required when impression_type == 'conventional'.
-    # One of: polyether / heavy_light_body / putty_light_body.
-    impression_material: Optional[str] = Field(None, max_length=30)
-    # iter-Jun-2026 (v13, Chunk G, Ask 3): when impression_type ==
-    # 'intraoral_scans' the operator can further specify the scan modality.
-    # Each field is a multi-select list; validated only at UI level. Values
-    # are echoed to the Lab Slip PDF as a bulleted list.
+    # iter-Jun-2026: impression material — one of impression_options.IMPRESSION_MATERIALS,
+    # "Other" (+ impression_material_other), or a legacy iter-192 id.
+    impression_material: Optional[str] = Field(None, max_length=120)
+    impression_material_other: Optional[str] = Field(None, max_length=200)
+    # iter-Jun-2026: Intraoral scan structured sub-fields (all mandatory when
+    # impression_type == 'intraoral_scans').
+    ios_scanner_company: Optional[str] = Field(None, max_length=120)   # master-list company or "Other"
+    ios_scanner_company_other: Optional[str] = Field(None, max_length=200)
+    ios_scanner_model: Optional[str] = Field(None, max_length=120)     # master-list model or "Other"
+    ios_scanner_model_other: Optional[str] = Field(None, max_length=200)
+    ios_scan_body_material: Optional[str] = Field(None, max_length=30)  # PEEK / Metal / Hybrid
+    ios_scan_body_types: Optional[List[str]] = None                      # multi-select
+    ios_scan_level: Optional[str] = Field(None, max_length=40)           # Abutment / Implant / Multiunit level
+    # Legacy (pre-Jun-2026) multi-select lists — kept so old cases still render.
     scan_body_types: Optional[List[str]] = None      # PEEK / Metal / Hybrid
     scan_types: Optional[List[str]] = None           # Vertical Scan Body / Horizontal Scan Bodies (Flags) / Photogrammetry
     scan_levels: Optional[List[str]] = None          # Abutment/Multiunit Level / Implant Level
@@ -1390,6 +1413,110 @@ async def send_expo_push_notifications(user_ids: List[str], title: str, body: st
             )
     except Exception as e:
         logging.error(f"Failed to send push notification: {e}")
+
+
+
+
+# ───────────────────────────────────────────────────────────────────
+# iter-Jun-2026: Case Assistant (Postgraduate-student read-only observer)
+# ───────────────────────────────────────────────────────────────────
+# A case may carry ONE optional assistant (`assistant_id` / `assistant_name`).
+# The assistant must be a `student` user who is not the case owner. They get
+# read-only access to Phase 1-4 data, are notified once Phase 1 is fully
+# approved (idempotent via `assistant_notified_at`), and every add / change /
+# remove is appended to `assistant_change_log` + the HIPAA access log.
+ASSISTANT_PRE_APPROVAL_STATUSES = {"draft", "pending_phase1", "rejected_phase1", "augmentation_in_progress"}
+
+
+def _scheduler_name(proc: dict) -> str:
+    return proc.get("student_name") or proc.get("created_by_name") or "a colleague"
+
+
+def _assistant_schedule_line(proc: dict) -> str:
+    bits = []
+    if proc.get("patient_name"):
+        bits.append(f"Patient: {proc['patient_name']}")
+    if proc.get("procedure_date"):
+        bits.append(f"scheduled on {proc['procedure_date']}" + (f" at {proc['procedure_time']}" if proc.get("procedure_time") else ""))
+    if proc.get("implant_procedure_type"):
+        bits.append(str(proc["implant_procedure_type"]))
+    return (" · ".join(bits)) if bits else ""
+
+
+async def _resolve_assistant(assistant_id: Optional[str], exclude_ids: List[Optional[str]]) -> Tuple[str, str]:
+    """Validate a requested assistant. Returns (id, name); ("", "") when none.
+    Raises 400/404 when the user is not a Postgraduate student or is one of
+    `exclude_ids` (case owner / scheduling user)."""
+    aid = (assistant_id or "").strip()
+    if not aid:
+        return "", ""
+    if aid in {str(x) for x in exclude_ids if x}:
+        raise HTTPException(status_code=400, detail="You cannot add yourself (or the case owner) as the assistant.")
+    if not ObjectId.is_valid(aid):
+        raise HTTPException(status_code=404, detail="Selected assistant not found.")
+    u = await db.users.find_one({"_id": ObjectId(aid)}, {"name": 1, "role": 1, "username": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="Selected assistant not found.")
+    if u.get("role") != "student":
+        raise HTTPException(status_code=400, detail="Only Postgraduate Students can be added as an assistant.")
+    return aid, (u.get("name") or u.get("username") or "")
+
+
+async def _maybe_notify_assistant_added(procedure_id: str) -> None:
+    """Fire the one-time 'You have been added as an assistant' notification
+    once Phase 1 is fully approved. Safe to call repeatedly."""
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        return
+    if not proc or not proc.get("assistant_id") or proc.get("assistant_notified_at"):
+        return
+    if proc.get("status") in ASSISTANT_PRE_APPROVAL_STATUSES:
+        return
+    if not (proc.get("supervisor_phase1_approved") and proc.get("implant_incharge_phase1_approved")):
+        return
+    aid = proc["assistant_id"]
+    by = _scheduler_name(proc)
+    detail = _assistant_schedule_line(proc)
+    msg = f"You have been added as an assistant by {by}." + (f" {detail}." if detail else "")
+    now = datetime.utcnow()
+    await db.notifications.insert_one({
+        "user_id": aid,
+        "procedure_id": procedure_id,
+        "message": msg,
+        "type": "assistant_added",
+        "read": False,
+        "created_at": now,
+    })
+    await send_expo_push_notifications(
+        [aid], "Added as case assistant", msg, {"procedure_id": procedure_id, "type": "assistant_added"},
+    )
+    await db.procedures.update_one({"_id": proc["_id"]}, {"$set": {"assistant_notified_at": now}})
+    await db.procedures.update_one(
+        {"_id": proc["_id"]},
+        {"$push": {"assistant_change_log": {
+            "action": "notified", "assistant_id": aid, "assistant_name": proc.get("assistant_name", ""),
+            "at": now.isoformat(),
+        }}},
+    )
+
+
+async def _notify_assistant_removed(procedure_id: str, proc: dict, removed_id: str, by_name: str) -> None:
+    if not removed_id:
+        return
+    msg = f"You have been removed as the assistant for patient {proc.get('patient_name', '')} by {by_name}."
+    await db.notifications.insert_one({
+        "user_id": removed_id,
+        "procedure_id": procedure_id,
+        "message": msg,
+        "type": "assistant_removed",
+        "read": False,
+        "created_at": datetime.utcnow(),
+    })
+    await send_expo_push_notifications(
+        [removed_id], "Removed as case assistant", msg, {"procedure_id": procedure_id, "type": "assistant_removed"},
+    )
+
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -1922,6 +2049,41 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 # Versions must sort correctly with `_parse_version` — use dotted numerics only
 # (e.g. "1.3", "1.3.1", "2.0"). Do NOT reuse or reorder shipped versions.
 WHATSNEW_ENTRIES: List[Dict[str, Any]] = [
+    {
+        "version": "1.5",
+        "date": "2026-10-05",
+        "title": "Digital lab slips, smarter impressions & risk at a glance",
+        "items": [
+            "Phase 4 Step 1 now records the intraoral scanner (company + model), scan body material, scan body type and scan level. Conventional impressions have a full material list with an \"Other\" option.",
+            "Attach scan files (STL / PLY / OBJ / ZIP / DCM / PDF) to a case. Generate Lab Slip creates a secure 30-day lab link with a QR code so the lab can download everything without logging in.",
+            "Anterior maxilla cases get an Esthetic Risk Assessment in Phase 1. Aesthetic and medical risk pills now show on My Cases and at the top of each case.",
+            "Phase 2: scan the GS1 barcode on each implant box to record lot, serial and expiry for full traceability.",
+            "New Analytics guide under Profile → Help explains every chart and metric.",
+            "Faster sign-in on app launch and better camera fallbacks on devices without a working camera.",
+        ],
+    },
+    {
+        "version": "1.5",
+        "date": "2026-10-05",
+        "title": "Add a Postgraduate assistant to your cases",
+        "roles": ["student"],
+        "items": [
+            "When scheduling a case you can pick a fellow Postgraduate student as your assistant. They get read-only access once Phase 1 is approved.",
+            "Cases you are assisting on show in an \"Assisting today\" strip on the dashboard.",
+            "Your Assistant Logbook (Profile → Training Records) counts every case you have assisted on, by status, type and year.",
+        ],
+    },
+    {
+        "version": "1.5",
+        "date": "2026-10-05",
+        "title": "Lab directory & scanner list for In-Charges",
+        "roles": ["implant_incharge", "administrator"],
+        "items": [
+            "Maintain a Lab directory under Profile → Compliance so students and supervisors can email a lab slip link straight to the right lab.",
+            "Review and approve intraoral scanner suggestions submitted through the \"Other\" option, so the scanner list stays clean.",
+            "You can add, change or remove a case's assistant at any time, and every change is recorded in the audit log.",
+        ],
+    },
     {
         "version": "1.4",
         "date": "2026-04-24",
@@ -5965,7 +6127,9 @@ async def create_procedure_with_existing_implants(
 
     procedure_dict = payload.model_dump()
     existing_impl_count = len(payload.existing_implants)
-
+    procedure_dict["assistant_id"], procedure_dict["assistant_name"] = await _resolve_assistant(
+        payload.assistant_id, [current_user["_id"]]
+    )
     # iter-213: status routing based on phase_to_start. 'phase4_step1'
     # (default) preserves the iter-211 behaviour. 'phase3' routes the case
     # to the Phase 3 inbox (ISQ + healing-abutment swap pending) with only
@@ -6302,7 +6466,10 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
                 raise HTTPException(status_code=400, detail=f"Invalid loading type: {lt}")
     
     procedure_dict = procedure.model_dump()
-    
+        # iter-Jun-2026: validate the optional assistant (must be a PG student, not self).
+    procedure_dict["assistant_id"], procedure_dict["assistant_name"] = await _resolve_assistant(
+        procedure.assistant_id, [current_user["_id"]]
+    )
     if is_student:
         # Student creates: standard draft flow
         procedure_dict.update({
@@ -6359,7 +6526,8 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     # per-procedure-type count rules and derive `teeth_present` for back-compat.
     _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
     _apply_missing_teeth_derive(procedure_dict)
-
+    procedure_dict["aesthetic_risk"] = _era.sanitize_aesthetic_risk(procedure.aesthetic_risk, procedure_dict.get("missing_teeth"))
+    _era.stamp_overall(procedure_dict)
     # Pre-Op Augmentation Checklist (iter-136) — deterministic, AI-free items
     # derived from per-site clinical findings. Stored alongside the procedure
     # so supervisors see it on /procedures/[id] and can tick items during
@@ -6546,6 +6714,7 @@ async def get_procedures(
     date: Optional[str] = None,
     student_id: Optional[str] = None,
     supervisor_id: Optional[str] = None,
+    scope: Optional[str] = None,
     department_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
@@ -6553,6 +6722,22 @@ async def get_procedures(
 
     # Exclude archived procedures by default
     query["archived"] = {"$ne": True}
+
+    # iter-Jun-2026: `scope=assisted` → cases where the caller is the named
+    # assistant (read-only observer). Kept strictly separate from the
+    # default "own cases" scope so assisted cases never mix into My Cases.
+    if scope == "assisted":
+        query["assistant_id"] = current_user["_id"]
+        query["status"] = {"$ne": "draft"}
+        cursor = db.procedures.find(query).sort("procedure_date", -1)
+        out = []
+        async for p in cursor:
+            p["_id"] = str(p["_id"])
+            p["id"] = p["_id"]
+            p["viewer_is_assistant"] = True
+            p.pop("followups", None)
+            out.append(p)
+        return out
 
     # Filter based on role
     if current_user["role"] == "student":
@@ -8245,10 +8430,10 @@ async def nudge_student(
         await log_access(
             action="nudge_student",
             outcome="success",
-            user_id=current_user["_id"],
+            user=current_user,
             resource_type="user",
             resource_id=student_id,
-            ip=(request.client.host if request and request.client else None),
+            request=request,
         )
     except Exception:
         pass
@@ -8313,6 +8498,21 @@ async def get_nudge_history(
         "cooldown_minutes": NUDGE_COOLDOWN_MINUTES,
         "cooldown_seconds_remaining": cooldown_seconds_remaining,
     }
+
+@api_router.get("/procedures/assistant-candidates")
+async def list_assistant_candidates(current_user: dict = Depends(get_current_user)):
+    """Postgraduate students eligible to be added as an assistant. The caller
+    is excluded (a user cannot assist their own case)."""
+    if current_user["role"] == "nurse":
+        raise HTTPException(status_code=403, detail="Not permitted")
+    users = await db.users.find({"role": "student"}, {"name": 1, "username": 1, "email": 1}).sort("name", 1).to_list(500)
+    out = []
+    for u in users:
+        uid = str(u["_id"])
+        if uid == current_user["_id"]:
+            continue
+        out.append({"id": uid, "name": u.get("name") or u.get("username") or u.get("email", "")})
+    return out
 
 
 @api_router.post("/supervisors/{supervisor_id}/nudge")
@@ -8393,6 +8593,7 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
             "status": {"$in": ["open", "closed"]},
         })
 
+    viewer_is_assistant = False
     redact_pii = False
     if current_user["role"] == "student" and procedure["student_id"] != current_user["_id"]:
         # iter-385: a Transfer Case handoff moves `student_id` to the new
@@ -8402,12 +8603,18 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
         is_prev_owner = current_user["_id"] in (procedure.get("previous_students") or [])
         tr = procedure.get("transfer_request") or {}
         is_pending_recipient = tr.get("to_student_id") == current_user["_id"] and tr.get("status") == "pending_recipient"
-        if not (is_prev_owner or is_pending_recipient):
+        # iter-Jun-2026: named assistant → read-only Phase 1-4 view (no drafts).
+        is_assistant = (
+            procedure.get("assistant_id") == current_user["_id"]
+            and procedure.get("status") != "draft"
+        )
+        if not (is_prev_owner or is_pending_recipient or is_assistant):
             thread = await _forum_share_thread()
             if not thread:
                 await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, outcome="denied")
                 raise HTTPException(status_code=403, detail="Access denied")
             redact_pii = bool(thread.get("anonymous"))
+        viewer_is_assistant = is_assistant and not (is_prev_owner or is_pending_recipient)
     elif current_user["role"] == "supervisor" and procedure["supervisor_id"] != current_user["_id"]:
         thread = await _forum_share_thread()
         if not thread:
@@ -8429,7 +8636,16 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
 
     procedure["_id"] = str(procedure["_id"])
     procedure["id"] = procedure["_id"]
+    # iter-352: R0 → R{n} data substitution. Once an implant is replaced,
+    # the ACTIVE revision (chain[-1] or `replacement`) becomes the ground
+    # truth for Phase 2 readback + Phase 3/4 form pre-fill + PDFs. R0's raw
+    # data is preserved under `implants_original` for the history views
+    # (CaseImplantPlanning uses the survival_review chain[] itself).
     procedure["implants"] = _resolve_active_implants_inline(procedure)
+    # iter-353: also substitute the matching Phase 2 case-level fields
+    # (prosthetic_component, healing_abutment_cuff_height[i], prosthesis_type,
+    # iopa_files[i], radiographs.iopas[i]) so the Phase 2 readback + Phase 3
+    # form pre-fill immediately reflect R{n} data.
     _resolve_phase2_data_inline(procedure)
     # Normalise instruments_autoclaved payload so "unmarked" always looks like None/null,
     # keeping the response contract identical to POST mark-instruments-autoclaved and
@@ -8442,6 +8658,13 @@ async def get_procedure(procedure_id: str, request: Request, current_user: dict 
     })
     if active_ref:
         procedure["active_referral"] = await _serialize_referral(active_ref)
+
+    if viewer_is_assistant:
+        # iter-Jun-2026: assistants see Phase 1-4 only — strip Phase 5 data.
+        procedure["viewer_is_assistant"] = True
+        procedure.pop("followups", None)
+        await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name"), "redacted": redact_pii, "via": "assistant"})
+        return procedure
 
     await log_access(action="procedure_view", resource_type="procedure", resource_id=procedure_id, user=current_user, request=request, extra={"patient_name": procedure.get("patient_name"), "redacted": redact_pii})
     return procedure
@@ -8476,6 +8699,14 @@ async def update_procedure(
     # implant_incharge can edit all
     
     update_data = {k: v for k, v in procedure_update.model_dump().items() if v is not None}
+    # iter-Jun-2026: assistant edits go through the same validation as create.
+    if "assistant_id" in update_data:
+        owner_ids = [procedure.get("student_id"), procedure.get("created_by_id")]
+        update_data["assistant_id"], update_data["assistant_name"] = await _resolve_assistant(
+            update_data.get("assistant_id"), owner_ids
+        )
+        if update_data["assistant_id"] != (procedure.get("assistant_id") or ""):
+            update_data["assistant_notified_at"] = None
 
     # If the FDI `missing_teeth` was edited, re-validate against the procedure type
     # (use the payload's new type if provided, else the stored one) and re-derive
@@ -8507,6 +8738,90 @@ async def update_procedure(
     updated_procedure["_id"] = str(updated_procedure["_id"])
     updated_procedure["id"] = updated_procedure["_id"]
     return updated_procedure
+
+
+# ── iter-Jun-2026: Case Assistant — change / remove ────────────────────────
+class AssistantUpdate(BaseModel):
+    # Empty string (or null) removes the assistant.
+    assistant_id: Optional[str] = Field("", max_length=50)
+
+
+@api_router.patch("/procedures/{procedure_id}/assistant")
+async def update_case_assistant(
+    procedure_id: str,
+    body: AssistantUpdate,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Add, change or remove the case assistant. Allowed for the case owner
+    (student / creator), the case supervisor, Implant In-Charge and
+    Administrator. When Phase 1 is already approved the new assistant is
+    notified immediately and the removed assistant is told they lost access."""
+    role, uid = current_user["role"], current_user["_id"]
+    if role == "nurse":
+        raise HTTPException(status_code=403, detail="Nurses have read-only access")
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+
+    is_owner = proc.get("student_id") == uid or proc.get("created_by_id") == uid
+    is_case_supervisor = role == "supervisor" and proc.get("supervisor_id") == uid
+    if not (is_owner or is_case_supervisor or role in ("implant_incharge", "administrator")):
+        raise HTTPException(status_code=403, detail="Only the case owner, supervisor or Implant In-Charge can change the assistant")
+    if proc.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Completed cases cannot have their assistant changed")
+
+    owner_ids = [proc.get("student_id"), proc.get("created_by_id")]
+    if role == "student":
+        owner_ids.append(uid)
+    new_id, new_name = await _resolve_assistant(body.assistant_id, owner_ids)
+    old_id = proc.get("assistant_id") or ""
+    old_name = proc.get("assistant_name") or ""
+    if new_id == old_id:
+        return {"ok": True, "unchanged": True, "assistant_id": old_id, "assistant_name": old_name}
+
+    now = datetime.utcnow()
+    by_name = current_user.get("name") or current_user.get("username") or ""
+    action = "removed" if not new_id else ("added" if not old_id else "changed")
+    log_entry = {
+        "action": action,
+        "from_id": old_id, "from_name": old_name,
+        "to_id": new_id, "to_name": new_name,
+        "by_id": uid, "by_name": by_name, "by_role": role,
+        "at": now.isoformat(),
+    }
+    await db.procedures.update_one(
+        {"_id": proc["_id"]},
+        {
+            "$set": {
+                "assistant_id": new_id,
+                "assistant_name": new_name,
+                "assistant_notified_at": None,
+                "updated_at": now,
+            },
+            "$push": {"assistant_change_log": log_entry},
+        },
+    )
+    await log_access(
+        action=f"assistant_{action}", resource_type="procedure", resource_id=procedure_id,
+        user=current_user, request=request,
+        extra={"from": old_name, "to": new_name, "patient_name": proc.get("patient_name")},
+    )
+
+    # Notifications — only meaningful once Phase 1 is approved (before that the
+    # add notification fires on approval, and nobody was ever told about it).
+    phase1_done = proc.get("status") not in ASSISTANT_PRE_APPROVAL_STATUSES
+    if phase1_done:
+        if old_id:
+            await _notify_assistant_removed(procedure_id, proc, old_id, by_name)
+        if new_id:
+            await _maybe_notify_assistant_added(procedure_id)
+
+    return {"ok": True, "action": action, "assistant_id": new_id, "assistant_name": new_name, "change": log_entry}
+
 
 
 @api_router.patch("/procedures/{procedure_id}/edit-fields")
@@ -8595,6 +8910,13 @@ async def edit_procedure_fields(procedure_id: str, request: Request, current_use
     fields["updated_at"] = now_iso
     fields["last_edited_by"] = editor_name
     fields["last_edited_at"] = now_iso
+    # iter-Jun-2026: keep the stamped overall aesthetic risk in sync when any ERA
+    # factor (smile_line / gingival_biotype / aesthetic_risk.*) is inline-edited.
+    if any(k in fields for k in ("smile_line", "gingival_biotype", "aesthetic_risk", "missing_teeth")):
+        _merged = {**proc, **fields}
+        _era.stamp_overall(_merged)
+        fields["aesthetic_risk"] = _merged.get("aesthetic_risk")
+
 
     if isinstance(fields.get("phase2_data"), dict):
         p2 = fields["phase2_data"]
@@ -8730,7 +9052,19 @@ async def _is_case_stakeholder(proc: dict, user: dict) -> bool:
         return False
     if user.get("role") in ("administrator", "implant_incharge", "super_admin"):
         return True
-    if uid in (proc.get("student_id"), proc.get("supervisor_id"), proc.get("implant_incharge_id"), proc.get("created_by_id"), proc.get("original_student_id"), proc.get("original_supervisor_id")):
+    # iter-Jun-2026: the named assistant is a read-only stakeholder too (no drafts).
+    is_assistant = (
+        uid == proc.get("assistant_id")
+        and proc.get("status") != "draft"
+    )
+    if is_assistant or uid in (
+        proc.get("student_id"),
+        proc.get("supervisor_id"),
+        proc.get("implant_incharge_id"),
+        proc.get("created_by_id"),
+        proc.get("original_student_id"),
+        proc.get("original_supervisor_id"),
+    ):
         return True
     case_id = str(proc.get("_id") or proc.get("id") or "")
     if case_id:
@@ -8825,6 +9159,8 @@ async def regenerate_augmentation_checklist(procedure_id: str, current_user: dic
     await _assert_procedure_org_access(proc, current_user)
     if not await _is_case_stakeholder(proc, current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
+    if current_user["role"] == "student" and proc.get("student_id") != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Assistants have read-only access")
     new_items = generate_augmentation_checklist(proc)
     # Preserve completed-state on items whose title still matches.
     old_state = {it.get("title"): it for it in (proc.get("augmentation_checklist") or []) if isinstance(it, dict)}
@@ -9236,6 +9572,7 @@ async def reschedule_procedure(
             proc.get("implant_incharge_id"),
             proc.get("nurse_id"),
             creator_id,
+            proc.get("assistant_id"),
         ]
         if rid and rid != actor_id
     ]
@@ -11844,7 +12181,7 @@ async def get_procedure_badge(
 
 
 try:
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent  # pyrefly: ignore
     import uuid
 except ImportError:
     # Fall back to openai/anthropic SDKs directly (emergentintegrations not on PyPI).
@@ -12238,10 +12575,7 @@ def _build_case_context(proc: dict) -> str:
         if site_lines:
             parts.append("Per-Site Intraoral Findings:")
             parts.extend(site_lines)
-    if proc.get('smile_line'):
-        parts.append(f"Smile Line: {proc.get('smile_line')}")
-    if proc.get('gingival_biotype'):
-        parts.append(f"Gingival Biotype: {proc.get('gingival_biotype')}")
+    parts.extend(_era.era_text_lines(proc))
     teeth = proc.get('teeth_present') or []
     if teeth:
         parts.append(f"Teeth Present: {', '.join(sorted(teeth, key=lambda x: int(x) if x.isdigit() else 0))}")
@@ -12374,13 +12708,9 @@ def _build_case_context(proc: dict) -> str:
         if p4.get('prosthetic_material'):
             parts.append(f"Prosthetic Material: {p4.get('prosthetic_material')}")
         if p4.get('impression_type'):
-            imp = p4.get('impression_type')
-            tray = p4.get('conventional_tray_type')
-            label = imp + (f" ({tray.replace('_', ' ')})" if imp == 'conventional' and tray else '')
-            parts.append(f"Impression Type: {label}")
-            mat = p4.get('impression_material')
-            if imp == 'conventional' and mat:
-                parts.append(f"Impression Material: {mat.replace('_', ' ')}")
+            # iter-Jun-2026: shared structured rows (technique/material or scanner/scan-body/level)
+            for lbl, val in impression_rows(p4):
+                parts.append(f"{lbl}: {val}")
         if p4.get('custom_abutment'):
             parts.append(f"Custom Abutment: {p4.get('custom_abutment')}")
         if p4.get('overdenture_attachment'):
@@ -13316,6 +13646,147 @@ async def list_implant_catalog(current_user: dict = Depends(get_current_user)):
 _TRACE_FIELDS = {"gtin", "lot", "serial", "expiry", "mfg_date", "raw", "model_brand",
                  "model_system", "model_label", "label_photo", "label_photo_name", "source", "scanned_at"}
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# iter-Jun-2026: Intraoral Scanner master list (Phase 4 Step 1 → "Intraoral
+# Scanner Used"). Seeded from impression_options.INTRAORAL_SCANNERS; "Other"
+# entries typed by users are stored as `pending` and promoted to `verified`
+# by Implant In-Charge / Administrator from the admin screen.
+# ═══════════════════════════════════════════════════════════════════════════
+@app.on_event("startup")
+async def seed_intraoral_scanners_on_startup():
+    """Idempotent upsert of the scanner master list (never touches user-added rows)."""
+    try:
+        await db.intraoral_scanners.create_index([("company_key", 1), ("model_key", 1)], unique=True)
+        n = 0
+        for ci, (company, models) in enumerate(INTRAORAL_SCANNERS):
+            for mi, model in enumerate(models):
+                await db.intraoral_scanners.update_one(
+                    {"company_key": company.lower(), "model_key": model.lower()},
+                    {"$set": {"company": company, "model": model, "status": "verified",
+                              "source": "seed", "company_order": ci, "model_order": mi},
+                     "$setOnInsert": {"created_at": datetime.utcnow()}},
+                    upsert=True,
+                )
+                n += 1
+        logging.info("intraoral-scanners: seeded/updated %d entries", n)
+    except Exception as exc:  # pragma: no cover
+        logging.warning("intraoral scanner seed skipped: %s", exc)
+
+
+@api_router.get("/intraoral-scanners")
+async def list_intraoral_scanners(current_user: dict = Depends(get_current_user)):
+    """Verified scanners grouped by company, in master-list order (user-approved
+    companies appended alphabetically)."""
+    docs = await db.intraoral_scanners.find({"status": "verified"}).sort(
+        [("company_order", 1), ("company", 1), ("model_order", 1), ("model", 1)]
+    ).to_list(2000)
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for d in docs:
+        g = grouped.setdefault(d["company"], {"company": d["company"], "models": []})
+        if d["model"] not in g["models"]:
+            g["models"].append(d["model"])
+    return list(grouped.values())
+
+
+@api_router.get("/impression-options")
+async def get_impression_options(current_user: dict = Depends(get_current_user)):
+    """Static option lists for Phase 4 Step 1 impression capture."""
+    return {
+        "techniques": [{"id": k, "label": v} for k, v in IMPRESSION_TECHNIQUES.items()],
+        "material_groups": [{"family": f, "options": o} for f, o in IMPRESSION_MATERIAL_GROUPS],
+        "scan_body_materials": SCAN_BODY_MATERIALS,
+        "scan_body_types": SCAN_BODY_TYPES,
+        "scan_levels": SCAN_LEVELS,
+    }
+
+
+async def _suggest_scanner_if_other(data, procedure_id: str, current_user: dict) -> None:
+    """When the operator typed an 'Other' company/model, store a pending row
+    (deduped case-insensitively). If an identical verified row already exists,
+    silently normalise the payload to it."""
+    company = (data.ios_scanner_company or "").strip()
+    model = (data.ios_scanner_model or "").strip()
+    if company == "Other":
+        company = (data.ios_scanner_company_other or "").strip()
+    if model == "Other":
+        model = (data.ios_scanner_model_other or "").strip()
+    if not company or not model:
+        return
+    if data.ios_scanner_company != "Other" and data.ios_scanner_model != "Other":
+        return
+    existing = await db.intraoral_scanners.find_one({"company_key": company.lower(), "model_key": model.lower()})
+    if existing:
+        if existing.get("status") == "verified":
+            data.ios_scanner_company, data.ios_scanner_model = existing["company"], existing["model"]
+            data.ios_scanner_company_other = data.ios_scanner_model_other = None
+        else:
+            await db.intraoral_scanners.update_one({"_id": existing["_id"]}, {"$inc": {"uses": 1}})
+        return
+    await db.intraoral_scanners.insert_one({
+        "company": company, "model": model,
+        "company_key": company.lower(), "model_key": model.lower(),
+        "status": "pending", "source": "user", "uses": 1,
+        "company_order": 9999, "model_order": 9999,
+        "suggested_by": current_user["_id"], "suggested_by_name": current_user.get("name"),
+        "procedure_id": procedure_id, "created_at": datetime.utcnow(),
+    })
+
+
+@api_router.get("/intraoral-scanners/pending")
+async def list_pending_scanners(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    docs = await db.intraoral_scanners.find({"status": {"$in": ["pending", "rejected"]}}).sort("created_at", -1).to_list(500)
+    for d in docs:
+        d["id"] = str(d.pop("_id"))
+    return docs
+
+
+class ScannerReview(BaseModel):
+    company: Optional[str] = Field(None, max_length=120)   # optional corrected spelling
+    model: Optional[str] = Field(None, max_length=120)
+
+
+@api_router.post("/intraoral-scanners/{scanner_id}/approve")
+async def approve_scanner(scanner_id: str, body: ScannerReview, request: Request, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    d = await db.intraoral_scanners.find_one({"_id": ObjectId(scanner_id)})
+    if not d:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    company = (body.company or d["company"]).strip()
+    model = (body.model or d["model"]).strip()
+    dup = await db.intraoral_scanners.find_one({
+        "company_key": company.lower(), "model_key": model.lower(), "_id": {"$ne": d["_id"]}, "status": "verified",
+    })
+    if dup:
+        await db.intraoral_scanners.delete_one({"_id": d["_id"]})
+        return {"ok": True, "merged_into": str(dup["_id"])}
+    # keep company order aligned with an existing verified company if present
+    same_company = await db.intraoral_scanners.find_one({"company_key": company.lower(), "status": "verified"})
+    await db.intraoral_scanners.update_one({"_id": d["_id"]}, {"$set": {
+        "company": company, "model": model, "company_key": company.lower(), "model_key": model.lower(),
+        "status": "verified", "company_order": (same_company or {}).get("company_order", 9999),
+        "reviewed_by": current_user["_id"], "reviewed_by_name": current_user.get("name"), "reviewed_at": datetime.utcnow(),
+    }})
+    await log_access(action="scanner_approved", resource_type="intraoral_scanner", resource_id=scanner_id,
+                     user=current_user, request=request, extra={"company": company, "model": model})
+    return {"ok": True}
+
+
+@api_router.post("/intraoral-scanners/{scanner_id}/reject")
+async def reject_scanner(scanner_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ("implant_incharge", "administrator"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    r = await db.intraoral_scanners.update_one(
+        {"_id": ObjectId(scanner_id), "status": {"$ne": "verified"}},
+        {"$set": {"status": "rejected", "reviewed_by": current_user["_id"], "reviewed_by_name": current_user.get("name"), "reviewed_at": datetime.utcnow()}},
+    )
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    await log_access(action="scanner_rejected", resource_type="intraoral_scanner", resource_id=scanner_id, user=current_user, request=request)
+    return {"ok": True}
 
 class GtinMapIn(BaseModel):
     gtin: str = Field(..., min_length=8, max_length=14, pattern=r"^\d+$")
@@ -15200,6 +15671,9 @@ async def generate_case_report(
     pdf.set_x(20)
     pdf.cell(80, 7, safe(f"Implant Incharge: {procedure.get('implant_incharge_name', 'N/A')}"))
     pdf.cell(80, 7, safe(f"Procedure: {procedure.get('implant_procedure_type', 'N/A')}"), ln=True)
+    if procedure.get("assistant_name"):
+        pdf.set_x(20)
+        pdf.cell(80, 7, safe(f"Assistant: {procedure.get('assistant_name')}"), ln=True)
     pdf.set_x(20)
     loading = ", ".join(procedure.get("loading_type", [])) or "N/A"
     pdf.cell(80, 7, safe(f"Loading: {loading}"))
@@ -15436,11 +15910,23 @@ async def generate_case_report(
         pdf.ln(3)
 
     # ── Aesthetic Risk Assessment ────────────────────────────
-    has_aesthetic = any(procedure.get(k) for k in ["smile_line", "gingival_biotype"])
-    if has_aesthetic:
+    _era_summary = _era.compute_era(procedure)
+    if _era_summary["assessed"] > 0:
         add_section_title("Aesthetic Risk Assessment", 233, 30, 99)
-        add_field("Smile Line", procedure.get("smile_line"))
-        add_field("Gingival Biotype", procedure.get("gingival_biotype"))
+        for _r in _era_summary["patient_rows"]:
+            if _r["value"]:
+                add_field(_r["label"], f"{_r['value']}  [{_r['risk']} risk]")
+        _multi = len(_era_summary["sites"]) > 1
+        for _i, _s in enumerate(_era_summary["sites"]):
+            if _multi:
+                add_field(f"Area {_i + 1}", _s["label"])
+            for _r in _s["rows"]:
+                if _r["value"]:
+                    add_field(_r["label"], f"{_r['value']}  [{_r['risk']} risk]")
+            if _multi and _s["overall"]:
+                add_field(f"Aesthetic Risk — {_s['label']}", f"{_s['overall']} ({_s['assessed']}/{_s['total']} factors)")
+        if _era_summary["overall"]:
+            add_field("Overall Aesthetic Risk", f"{_era_summary['overall']} ({_era_summary['assessed']}/{_era_summary['total']} factors assessed)")
         pdf.ln(3)
 
     # ── Medical Assessment ───────────────────────────────────
@@ -16023,38 +16509,18 @@ async def generate_case_report(
         if p4s1.get("overdenture_attachment"):
             add_field("Overdenture Attachment", p4s1["overdenture_attachment"])
         if p4s1.get("impression_type"):
-            imp_type = "Intraoral Scans" if p4s1["impression_type"] == "intraoral_scans" else "Conventional Impressions"
-            tray = p4s1.get("conventional_tray_type")
-            if p4s1["impression_type"] == "conventional" and tray:
-                tray_label = "Open Tray" if tray == "open_tray" else "Closed Tray"
-                imp_type = f"{imp_type} ({tray_label})"
-            add_field("Impression Type", imp_type)
-            # iter-192: impression material (conventional only)
-            mat = p4s1.get("impression_material")
-            if p4s1["impression_type"] == "conventional" and mat:
-                mat_label = {
-                    "polyether": "Polyether",
-                    "heavy_light_body": "Heavy and Light body",
-                    "putty_light_body": "Putty and Light body",
-                }.get(mat, mat)
-                add_field("Impression Material", mat_label)
-            # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — rendered
-            # as bulleted lists per user's preference.
-            if p4s1["impression_type"] == "intraoral_scans":
-                def _bullet_list(label: str, values):
-                    if not values:
-                        return
+             # iter-Jun-2026: structured impression block shared with the case PDF.
+            # Multi-value "Type of Scan Body" is rendered as bullets for the lab.
+            for lbl, val in impression_rows(p4s1):
+                if lbl == "Type of Scan Body" and (p4s1.get("ios_scan_body_types") or p4s1.get("scan_types")):
                     pdf.set_font("Arial", "B", 10)
-                    pdf.cell(0, 6, safe(f"{label}:"), ln=True)
+                    pdf.cell(0, 6, safe(f"{lbl}:"), ln=True)
                     pdf.set_font("Arial", "", 10)
-                    for v in values:
-                        v_str = str(v or "").strip()
-                        if v_str:
-                            pdf.cell(6, 5, "", ln=False)  # indent
-                            pdf.cell(0, 5, safe(f"- {v_str}"), ln=True)
-                _bullet_list("Type of Scan Body", p4s1.get("scan_body_types"))
-                _bullet_list("Scan Type", p4s1.get("scan_types"))
-                _bullet_list("Scan Level", p4s1.get("scan_levels"))
+                    for v in (p4s1.get("ios_scan_body_types") or p4s1.get("scan_types") or []):
+                        pdf.cell(6, 5, "", ln=False)
+                        pdf.cell(0, 5, safe(f"- {v}"), ln=True)
+                else:
+                    add_field(lbl, val)
         if p4s1.get("payment_complete") is not None:
             add_field("Payment Complete", "Yes" if p4s1["payment_complete"] else "No")
         if p4s1.get("components_available") is not None:
@@ -17013,6 +17479,7 @@ async def approve_procedure(
                 {"_id": ObjectId(procedure_id)},
                 {"$set": update_fields}
             )
+            await _maybe_notify_assistant_added(procedure_id)
         else:
             # Reject Phase 1
             rej_type = action.rejection_type or "permanent"
@@ -17238,6 +17705,8 @@ async def request_phase1_approval(
         {"_id": ObjectId(procedure_id)},
         {"$set": update_fields},
     )
+
+    await _maybe_notify_assistant_added(procedure_id)
 
     if is_student:
         student_name = procedure.get("student_name", "A student")
@@ -17725,14 +18194,31 @@ async def submit_stage2_prosthetic(
         if data.conventional_tray_type not in ("open_tray", "closed_tray"):
             raise HTTPException(
                 status_code=400,
-                detail="Please choose Open tray or Closed tray for the conventional impression.",
+                detail="Please choose the impression technique (Open Tray / Direct or Closed Tray / Indirect).",
             )
-        # iter-192: impression material is also mandatory for conventional impressions.
-        if data.impression_material not in ("polyether", "heavy_light_body", "putty_light_body"):
-            raise HTTPException(
-                status_code=400,
-                detail="Please choose an impression material (Polyether, Heavy and Light body, or Putty and Light body).",
-            )
+        # iter-Jun-2026: structured material list + Other (free text).
+        if data.impression_material == "Other":
+            if not (data.impression_material_other or "").strip():
+                raise HTTPException(status_code=400, detail="Please describe the impression material under 'Other'.")
+        elif data.impression_material not in IMPRESSION_MATERIALS and data.impression_material not in LEGACY_MATERIAL_LABELS:
+            raise HTTPException(status_code=400, detail="Please choose an impression material.")
+    elif data.impression_type == "intraoral_scans":
+        # iter-Jun-2026: all four intraoral-scan sub-sections are mandatory.
+        if not (data.ios_scanner_company or "").strip():
+            raise HTTPException(status_code=400, detail="Please select the intraoral scanner company.")
+        if data.ios_scanner_company == "Other" and not (data.ios_scanner_company_other or "").strip():
+            raise HTTPException(status_code=400, detail="Please enter the scanner company under 'Other'.")
+        if not (data.ios_scanner_model or "").strip():
+            raise HTTPException(status_code=400, detail="Please select the intraoral scanner model.")
+        if data.ios_scanner_model == "Other" and not (data.ios_scanner_model_other or "").strip():
+            raise HTTPException(status_code=400, detail="Please enter the scanner model under 'Other'.")
+        if data.ios_scan_body_material not in SCAN_BODY_MATERIALS:
+            raise HTTPException(status_code=400, detail="Please select the scan body material (PEEK, Metal or Hybrid).")
+        sbt = [t for t in (data.ios_scan_body_types or []) if t in SCAN_BODY_TYPES]
+        if not sbt:
+            raise HTTPException(status_code=400, detail="Please select at least one type of scan body.")
+        if data.ios_scan_level not in SCAN_LEVELS:
+            raise HTTPException(status_code=400, detail="Please select the scan level (Abutment, Implant or Multiunit level).")
 
     # iter-194: shade selection is mandatory for both submit and save_only paths.
     sv = [s for s in (data.shade_values or []) if s and s.strip()]
@@ -17745,6 +18231,10 @@ async def submit_stage2_prosthetic(
             raise HTTPException(status_code=400, detail="Please record at least one implant shade.")
 
     # Save Phase 4 Step 1 data
+    _is_ios = data.impression_type == "intraoral_scans"
+    if _is_ios:
+        # iter-Jun-2026: learn "Other" scanners as pending suggestions for In-Charge review.
+        await _suggest_scanner_if_other(data, procedure_id, current_user)
     phase4_step1_data = {
         "final_prosthetic_plan": data.final_prosthetic_plan,
         "prosthetic_material": data.prosthetic_material,
@@ -17763,20 +18253,38 @@ async def submit_stage2_prosthetic(
         "impression_material": (
             data.impression_material if data.impression_type == "conventional" else None
         ),
-        # iter-Jun-2026 (v13, Chunk G, Ask 3): scan sub-fields — persisted
-        # only when impression_type == 'intraoral_scans'. Nulled out on
-        # switch back to conventional so we don't leak stale data.
+        "impression_material_other": (
+            (data.impression_material_other or "").strip() or None
+            if data.impression_type == "conventional" and data.impression_material == "Other" else None
+        ),
+        # iter-Jun-2026: structured intraoral-scan fields (nulled when conventional).
+        "ios_scanner_company": (data.ios_scanner_company or "").strip() or None if _is_ios else None,
+        "ios_scanner_company_other": (
+            (data.ios_scanner_company_other or "").strip() or None
+            if _is_ios and data.ios_scanner_company == "Other" else None
+        ),
+        "ios_scanner_model": (data.ios_scanner_model or "").strip() or None if _is_ios else None,
+        "ios_scanner_model_other": (
+            (data.ios_scanner_model_other or "").strip() or None
+            if _is_ios and data.ios_scanner_model == "Other" else None
+        ),
+        "ios_scan_body_material": data.ios_scan_body_material if _is_ios else None,
+        "ios_scan_body_types": (
+            [t for t in (data.ios_scan_body_types or []) if t in SCAN_BODY_TYPES] if _is_ios else None
+        ),
+        "ios_scan_level": data.ios_scan_level if _is_ios else None,
+        # Legacy lists — only echoed back if the client still sends them.
         "scan_body_types": (
             [s.strip() for s in (data.scan_body_types or [])]
-            if data.impression_type == "intraoral_scans" else None
+            if _is_ios and data.scan_body_types else None
         ),
         "scan_types": (
             [s.strip() for s in (data.scan_types or [])]
-            if data.impression_type == "intraoral_scans" else None
+            if _is_ios and data.scan_types else None
         ),
         "scan_levels": (
             [s.strip() for s in (data.scan_levels or [])]
-            if data.impression_type == "intraoral_scans" else None
+            if _is_ios and data.scan_levels else None
         ),
         # iter-194: shade is always persisted (mandatory), with the layout flag
         # so renderers can label slots correctly (Anterior/Posterior vs per implant).
@@ -18479,6 +18987,8 @@ class AugmentationCaseCreate(BaseModel):
     remark: Optional[str] = Field("", max_length=1000)
     # iter-397: multi-implant episodes — link to the patient's prior case.
     linked_parent_case_id: Optional[str] = Field("", max_length=64)
+    assistant_id: Optional[str] = Field("", max_length=50)
+    assistant_name: Optional[str] = Field("", max_length=100)
 
 class AugmentationStep1Submit(BaseModel):
     reasons: List[str] = []
@@ -18601,6 +19111,7 @@ async def create_augmentation_case(payload: AugmentationCaseCreate, current_user
     now = datetime.utcnow()
     now_iso = datetime.now(timezone.utc).isoformat()
     doc = payload.dict()
+    doc["assistant_id"], doc["assistant_name"] = await _resolve_assistant(payload.assistant_id, [current_user["_id"]])
     doc.update({
         "status": "augmentation_in_progress",
         "current_phase": 1,
@@ -18834,6 +19345,8 @@ async def complete_phase1_after_augmentation(
     _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
     procedure_dict = procedure.model_dump()
     _apply_missing_teeth_derive(procedure_dict)
+    procedure_dict["aesthetic_risk"] = _era.sanitize_aesthetic_risk(procedure.aesthetic_risk, procedure_dict.get("missing_teeth"))
+    _era.stamp_overall(procedure_dict)
     role = proc.get("created_by_role") or "student"
     procedure_dict.update({
         "status": "draft",
@@ -19151,6 +19664,213 @@ async def get_augmentation_analytics(
         extra={"from_date": from_date, "to_date": to_date},
     )
     return result
+
+
+# ── iter-Jun-2026: Impressions & intraoral-scanner analytics ────────────────
+@api_router.get("/analytics/impressions")
+async def get_impression_analytics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """IOS vs conventional split, IOS usage by scanner (company / model),
+    impression-material trends, technique, scan-body and scan-level mix,
+    plus a monthly trend. Role-scoped like the other analytics panes."""
+    role = current_user.get("role")
+    if role not in ("administrator", "implant_incharge", "supervisor", "student"):
+        raise HTTPException(status_code=403, detail="Insufficient role")
+    match: Dict[str, Any] = {"archived": {"$ne": True}, "phase4_step1_data.impression_type": {"$in": ["conventional", "intraoral_scans"]}}
+    uid = str(current_user.get("_id") or "")
+    uname = current_user.get("name") or current_user.get("username")
+    if role == "student":
+        match["$or"] = [{"student_id": uid}, {"student_name": uname}]
+    elif role == "supervisor":
+        match["$or"] = [{"supervisor_id": uid}, {"supervisor_name": uname}]
+    date_clause: Dict[str, Any] = {}
+    if from_date:
+        date_clause["$gte"] = from_date
+    if to_date:
+        date_clause["$lte"] = to_date
+    if date_clause:
+        match["procedure_date"] = date_clause
+    procs = await db.procedures.find(match, {
+        "phase4_step1_data": 1, "stage2_prosthetic_submitted_at": 1, "procedure_date": 1,
+        "implant_procedure_type": 1, "student_name": 1,
+    }).to_list(20000)
+
+    def bump(d: Dict[str, int], k: Optional[str]):
+        if k:
+            d[k] = d.get(k, 0) + 1
+
+    def top(d: Dict[str, int]):
+        return [{"name": k, "count": v} for k, v in sorted(d.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+    total = ios = conv = 0
+    by_company: Dict[str, int] = {}
+    by_scanner: Dict[str, int] = {}
+    by_material: Dict[str, int] = {}
+    by_family: Dict[str, int] = {}
+    by_technique: Dict[str, int] = {}
+    by_sb_material: Dict[str, int] = {}
+    by_sb_type: Dict[str, int] = {}
+    by_level: Dict[str, int] = {}
+    by_ptype: Dict[str, Dict[str, int]] = {}
+    monthly: Dict[str, Dict[str, int]] = {}
+    for p in procs:
+        p4 = p.get("phase4_step1_data") or {}
+        imp = p4.get("impression_type")
+        total += 1
+        sub = p.get("stage2_prosthetic_submitted_at")
+        month_src = sub.strftime("%Y-%m") if isinstance(sub, datetime) else (p.get("procedure_date") or "")[:7]
+        m = monthly.setdefault(month_src or "unknown", {"intraoral": 0, "conventional": 0})
+        pt = by_ptype.setdefault(p.get("implant_procedure_type") or "Other", {"intraoral": 0, "conventional": 0})
+        if imp == "intraoral_scans":
+            ios += 1
+            m["intraoral"] += 1
+            pt["intraoral"] += 1
+            comp = p4.get("ios_scanner_company")
+            if comp == "Other":
+                comp = p4.get("ios_scanner_company_other") or "Other"
+            bump(by_company, comp)
+            bump(by_scanner, scanner_label(p4) or None)
+            bump(by_sb_material, p4.get("ios_scan_body_material") or ", ".join(p4.get("scan_body_types") or []) or None)
+            for t in (p4.get("ios_scan_body_types") or p4.get("scan_types") or []):
+                bump(by_sb_type, t)
+            bump(by_level, p4.get("ios_scan_level") or ", ".join(p4.get("scan_levels") or []) or None)
+        else:
+            conv += 1
+            m["conventional"] += 1
+            pt["conventional"] += 1
+            bump(by_technique, IMPRESSION_TECHNIQUES.get(p4.get("conventional_tray_type") or "", p4.get("conventional_tray_type")))
+            mat = material_label(p4)
+            bump(by_material, mat or None)
+            if mat:
+                fam = "Polyether" if "polyether" in mat.lower() else (
+                    "Condensation Silicone" if "condensation" in mat.lower() else (
+                        "PVS / Addition Silicone" if ("pvs" in mat.lower() or "addition" in mat.lower() or mat in ("Heavy and Light body", "Putty and Light body")) else "Other"))
+                bump(by_family, fam)
+
+    result = {
+        "summary": {
+            "total": total, "intraoral": ios, "conventional": conv,
+            "intraoral_pct": round(ios * 100 / total, 1) if total else None,
+            "distinct_scanners": len(by_scanner),
+        },
+        "scanners_by_company": top(by_company),
+        "scanners": top(by_scanner),
+        "materials": top(by_material),
+        "material_families": top(by_family),
+        "techniques": top(by_technique),
+        "scan_body_materials": top(by_sb_material),
+        "scan_body_types": top(by_sb_type),
+        "scan_levels": top(by_level),
+        "by_procedure_type": [{"name": k, **v} for k, v in sorted(by_ptype.items())],
+        "monthly": [{"month": k, **v} for k, v in sorted(monthly.items()) if k != "unknown"],
+    }
+    await log_access(
+        action="analytics_view", outcome="success", resource_type="impression_analytics",
+        resource_id="global", user=current_user, request=request,
+        extra={"from_date": from_date, "to_date": to_date},
+    )
+    return result
+
+
+@api_router.get("/analytics/aesthetic-risk")
+async def get_aesthetic_risk_analytics(
+    request: Request,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Esthetic Risk Assessment analytics — overall-risk distribution, per-factor
+    option mix, and outcomes (implant failure / replacement, early termination)
+    grouped by risk grade for each factor and for the overall grade."""
+    role = current_user.get("role")
+    _role_gate(role)
+    procs = await _load_advanced_analytics_docs(from_date, to_date, scope_user=current_user)
+
+    def _bucket():
+        return {"cases": 0, "implants": 0, "failed": 0, "ended": 0}
+
+    overall_dist = {"Low": 0, "Medium": 0, "High": 0}
+    overall_out = {k: _bucket() for k in ("Low", "Medium", "High")}
+    factors: Dict[str, Dict[str, Any]] = {
+        f["key"]: {"key": f["key"], "label": f["label"], "options": {}, "by_grade": {k: _bucket() for k in ("Low", "Medium", "High")}}
+        for f in _era.ERA_FACTORS
+    }
+    by_ptype: Dict[str, Dict[str, int]] = {}
+    monthly: Dict[str, Dict[str, int]] = {}
+    total_assessed = anterior_cases = complete_cases = anterior_areas_n = 0
+    area_dist = {"Low": 0, "Medium": 0, "High": 0}
+    for p in procs:
+        summ = _era.compute_era(p)
+        if summ["assessed"] == 0:
+            continue
+        total_assessed += 1
+        anterior = _era.is_anterior_maxilla_case(p.get("missing_teeth"))
+        recs = _implant_records(p)
+        n_impl = len(recs)
+        n_failed = sum(1 for r in recs if r["status"] in ("Failed", "Replaced"))
+        ended = 1 if p.get("status") in _ANALYTICS_TERMINATED_STATUSES else 0
+        for r in summ["rows"]:
+            if not r["risk"]:
+                continue
+            f = factors[r["key"]]
+            opt = f["options"].setdefault(r["value"], {"name": r["value"], "risk": r["risk"], "count": 0})
+            opt["count"] += 1
+            b = f["by_grade"][r["risk"]]
+            b["cases"] += 1; b["implants"] += n_impl; b["failed"] += n_failed; b["ended"] += ended
+        if not anterior:
+            continue
+        anterior_cases += 1
+        if summ["assessed"] >= summ["total"]:
+            complete_cases += 1
+        ov = summ["overall"]
+        overall_dist[ov] += 1
+        b = overall_out[ov]
+        b["cases"] += 1; b["implants"] += n_impl; b["failed"] += n_failed; b["ended"] += ended
+        pt = by_ptype.setdefault(_po_pick_procedure_type(p) or "Other", {"Low": 0, "Medium": 0, "High": 0})
+        pt[ov] += 1
+        month = (p.get("procedure_date") or "")[:7]
+        if month:
+            monthly.setdefault(month, {"Low": 0, "Medium": 0, "High": 0})[ov] += 1
+
+    def _finish(b: Dict[str, int]) -> Dict[str, Any]:
+        out = dict(b)
+        out["failure_rate"] = round(100.0 * b["failed"] / b["implants"], 1) if b["implants"] else None
+        out["survival_rate"] = round(100.0 - out["failure_rate"], 1) if out["failure_rate"] is not None else None
+        return out
+
+    factor_rows = []
+    for f in factors.values():
+        opts = sorted(f["options"].values(), key=lambda o: (-o["count"], o["name"]))
+        factor_rows.append({
+            "key": f["key"], "label": f["label"],
+            "options": opts,
+            "high_pct": round(100.0 * sum(o["count"] for o in opts if o["risk"] == "High") / max(1, sum(o["count"] for o in opts)), 1) if opts else None,
+            "by_grade": {k: _finish(v) for k, v in f["by_grade"].items()},
+        })
+    factor_rows.sort(key=lambda r: -(r["high_pct"] or 0))
+
+    await log_access(action="analytics_view", outcome="success",
+                     resource_type="aesthetic_risk_analytics", resource_id="global",
+                     user=current_user, request=request,
+                     extra={"from_date": from_date, "to_date": to_date})
+    return {
+        "scope": {"role": role, "own_only": role == "student"},
+        "summary": {
+            "total_assessed": total_assessed,
+            "anterior_cases": anterior_cases,
+            "complete_cases": complete_cases,
+            "distribution": overall_dist,
+            "high_pct": round(100.0 * overall_dist["High"] / anterior_cases, 1) if anterior_cases else None,
+        },
+        "overall_outcomes": {k: _finish(v) for k, v in overall_out.items()},
+        "factors": factor_rows,
+        "by_procedure_type": [{"name": k, **v} for k, v in sorted(by_ptype.items())],
+        "monthly": [{"month": k, **v} for k, v in sorted(monthly.items())],
+    }
 
 
 class FollowUpSubmit(BaseModel):
@@ -19679,6 +20399,106 @@ async def get_unread_count(current_user: dict = Depends(get_current_user)):
         {"user_id": current_user["_id"], "read": False}
     )
     return {"count": count}
+
+
+# Dashboard Stats
+# ── iter-Jun-2026: Assistant Logbook (training record) ─────────────────────
+@api_router.get("/me/assistant-logbook")
+async def get_assistant_logbook(
+    student_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Count + list of cases the student assisted on. Students see their own;
+    supervisors / in-charge / administrators may pass `student_id` to review
+    a trainee's record. Excludes drafts and archived cases."""
+    role, uid = current_user["role"], current_user["_id"]
+    target = uid
+    if student_id and student_id != uid:
+        if role not in ("supervisor", "implant_incharge", "administrator"):
+            raise HTTPException(status_code=403, detail="Not permitted")
+        target = student_id
+    elif role == "nurse":
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+    student = await db.users.find_one({"_id": ObjectId(target)}, {"name": 1}) if ObjectId.is_valid(target) else None
+    query = {"assistant_id": target, "status": {"$ne": "draft"}, "archived": {"$ne": True}}
+    proj = {
+        "patient_name": 1, "registration_number": 1, "procedure_date": 1, "procedure_time": 1,
+        "implant_procedure_type": 1, "student_name": 1, "created_by_name": 1, "supervisor_name": 1,
+        "status": 1, "current_phase": 1, "assistant_notified_at": 1, "assistant_change_log": 1,
+        "num_implants": 1, "arch": 1,
+    }
+    docs = await db.procedures.find(query, proj).sort("procedure_date", -1).to_list(1000)
+
+    by_status = {"completed": 0, "in_progress": 0, "rejected": 0}
+    by_type: Dict[str, int] = {}
+    by_year: Dict[str, int] = {}
+    cases = []
+    for d in docs:
+        st = d.get("status") or ""
+        bucket = "completed" if st == "completed" else ("rejected" if st.startswith("rejected") else "in_progress")
+        by_status[bucket] += 1
+        ptype = d.get("implant_procedure_type") or "Other"
+        by_type[ptype] = by_type.get(ptype, 0) + 1
+        yr = (d.get("procedure_date") or "")[:4] or "Unknown"
+        by_year[yr] = by_year.get(yr, 0) + 1
+        added_at = None
+        for e in (d.get("assistant_change_log") or []):
+            if e.get("to_id") == target or (e.get("action") == "notified" and e.get("assistant_id") == target):
+                added_at = e.get("at")
+        cases.append({
+            "id": str(d["_id"]),
+            "patient_name": d.get("patient_name"),
+            "registration_number": d.get("registration_number"),
+            "procedure_date": d.get("procedure_date"),
+            "procedure_time": d.get("procedure_time"),
+            "implant_procedure_type": ptype,
+            "num_implants": d.get("num_implants"),
+            "arch": d.get("arch"),
+            "operator_name": d.get("student_name") or d.get("created_by_name"),
+            "supervisor_name": d.get("supervisor_name"),
+            "status": st,
+            "status_bucket": bucket,
+            "current_phase": d.get("current_phase"),
+            "assisted_since": added_at or (d["assistant_notified_at"].isoformat() if isinstance(d.get("assistant_notified_at"), datetime) else None),
+        })
+    return {
+        "student_id": target,
+        "student_name": (student or {}).get("name"),
+        "total": len(cases),
+        "by_status": by_status,
+        "by_procedure_type": dict(sorted(by_type.items(), key=lambda kv: -kv[1])),
+        "by_year": dict(sorted(by_year.items(), reverse=True)),
+        "cases": cases,
+    }
+
+
+@api_router.get("/me/assistant-logbook/export")
+async def export_assistant_logbook(
+    student_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """CSV export of the assistant logbook (training-record submission)."""
+    data = await get_assistant_logbook(student_id=student_id, current_user=current_user)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Assistant", data.get("student_name") or "", "Total cases assisted", data["total"]])
+    w.writerow([])
+    w.writerow(["Procedure Date", "Time", "Patient", "Registration No.", "Procedure Type", "No. of Implants", "Arch",
+                "Operator", "Supervisor", "Status", "Current Phase"])
+    for c in data["cases"]:
+        w.writerow([
+            c.get("procedure_date") or "", c.get("procedure_time") or "", c.get("patient_name") or "",
+            c.get("registration_number") or "", c.get("implant_procedure_type") or "", c.get("num_implants") or "",
+            c.get("arch") or "", c.get("operator_name") or "", c.get("supervisor_name") or "",
+            c.get("status") or "", c.get("current_phase") or "",
+        ])
+    buf.seek(0)
+    fname = f"assistant-logbook-{datetime.utcnow().strftime('%Y%m%d')}.csv"
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 
 def _user_department_ids(u: dict) -> List[str]:
     """A user's department_ids, normalized from either the array field or the
@@ -23615,7 +24435,9 @@ async def export_drilling_pdf(
             qr_url = f"{public_base.rstrip('/')}/cbct/view/{token}"
             qr_img = _qrcode_mod.make(qr_url)
             qr_buf = io.BytesIO()
-            qr_img.save(qr_buf, format="PNG")
+            # No format arg: PIL and pure-PNG backends both default to PNG,
+            # and the pure backend rejects `format=`.
+            qr_img.save(qr_buf)
             qr_buf.seek(0)
             qr_cell = RLImage(qr_buf, width=28*mm, height=28*mm)
         except Exception as exc:
@@ -23679,6 +24501,8 @@ async def export_drilling_pdf(
         team_bits.append(f"<b>Supervisor:</b> {supervisor_name_ctx}")
     if incharge_name_ctx:
         team_bits.append(f"<b>Implant In-Charge:</b> {incharge_name_ctx}")
+    if proc_doc and proc_doc.get("assistant_name"):
+        team_bits.append(f"<b>Assistant:</b> {proc_doc.get('assistant_name')}")
     if team_bits:
         team_style = ParagraphStyle(
             'team', parent=styles['BodyText'], fontSize=9.5, alignment=TA_CENTER,
@@ -27158,6 +27982,8 @@ async def _load_advanced_analytics_docs(
         "stage2_prosthetic_data.prosthesis_type": 1,
         "final_prosthetic_plan": 1,
         "implants": 1, "implant_plans": 1, "existing_implants": 1,
+        "smile_line": 1, "gingival_biotype": 1, "aesthetic_risk": 1, "missing_teeth": 1,
+        "edentulous_site_measurements": 1, "mesiodistal_space": 1,
     }
     return await db.procedures.find(match, projection).to_list(20000)
 
@@ -28713,6 +29539,29 @@ async def _internal_screenshots_index():
     )
     return HTMLResponse(html)
 
+# iter-Jun-2026: Lab Slip Scan Files (STL/PLY attachments, secure lab link, lab directory, email lab)
+from lab_files import setup_lab_files  # noqa: E402
+
+
+async def _decode_query_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        uid = payload.get("user_id")
+        if uid:
+            u = await db.users.find_one({"_id": ObjectId(uid)}, {"password_hash": 0})
+            if u:
+                u["_id"] = str(u["_id"])
+                return u
+    except Exception:
+        return None
+    return None
+
+
+setup_lab_files(
+    app, api_router, db,
+    get_current_user=get_current_user, get_current_user_optional=get_current_user_optional,
+    log_access=log_access, secret_key=SECRET_KEY, uploads_dir=UPLOADS_DIR, decode_query_token=_decode_query_token,
+)
 
 # ── Transfer Case (iter-385) ───────────────────────────────────────────────
 # Student-initiated ownership handoff to a junior student in the same
@@ -29287,16 +30136,22 @@ async def transfer_recipient_accept(procedure_id: str, request: Request,
     tr["recipient_accepted_at"] = now.isoformat()
     tr["completed_at"] = now.isoformat()
 
+    swap_set: Dict[str, Any] = {
+        "student_id": tr["to_student_id"],
+        "student_name": tr["to_student_name"],
+        "previous_students": prev_students,
+        "transfer_count": int(proc.get("transfer_count") or 0) + 1,
+        "last_transfer_attempt": tr,
+    }
+    # iter-Jun-2026: a student cannot assist their own case — if the new
+    # owner was the assistant, clear the assistant slot.
+    if proc.get("assistant_id") and proc.get("assistant_id") == tr["to_student_id"]:
+        swap_set.update({"assistant_id": "", "assistant_name": "", "assistant_notified_at": None})
+
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
         {
-            "$set": {
-                "student_id": tr["to_student_id"],
-                "student_name": tr["to_student_name"],
-                "previous_students": prev_students,
-                "transfer_count": int(proc.get("transfer_count") or 0) + 1,
-                "last_transfer_attempt": tr,
-            },
+            "$set": swap_set,
             "$push": {"transfer_history": history_entry},
             "$unset": {"transfer_request": ""},
         },

@@ -27,7 +27,12 @@ import WhatsNewBadge from "../../components/WhatsNewBadge";
 import PulsingDoubleArrow from "../../components/onboarding/primitives/PulsingDoubleArrow";
 import AskImplanrAIFab from "../../components/AskImplanrAIFab";
 import SmartTipBanner from "../../components/SmartTipBanner";
-import { getDepartmentBadgeColors, resolveUserDepartments, DepartmentItem } from "../../utils/departmentBadge";
+import {
+  getDepartmentBadgeColors,
+  resolveUserDepartments,
+  DepartmentItem,
+} from "../../utils/departmentBadge";
+import AssistingTodayStrip from "../../components/AssistingTodayStrip";
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<
@@ -190,7 +195,14 @@ function Header({ user, router }: any) {
   return (
     <View style={s.headerCard} data-testid="dashboard-header">
       {/* Top Section: User Info on left, Avatar on right */}
-      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", width: "100%" }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          width: "100%",
+        }}
+      >
         <View style={{ flex: 1, paddingRight: 12 }}>
           {/* Welcome Row */}
           <View style={s.welcomeRow}>
@@ -229,7 +241,10 @@ function Header({ user, router }: any) {
         >
           <View style={[s.avatarRing, { borderColor: roleColor }]}>
             {user?.profile_photo ? (
-              <Image source={{ uri: user.profile_photo }} style={s.avatarImage} />
+              <Image
+                source={{ uri: user.profile_photo }}
+                style={s.avatarImage}
+              />
             ) : (
               <View
                 style={[
@@ -252,7 +267,9 @@ function Header({ user, router }: any) {
       {/* Full-width Badges Section Below Top Row */}
       <View style={{ width: "100%", marginTop: 6 }}>
         {/* Department Badge Pill(s) */}
-        {(user?.department_name || (user?.departments && user.departments.length > 0) || user?.role === "implant_incharge") ? (
+        {user?.department_name ||
+        (user?.departments && user.departments.length > 0) ||
+        user?.role === "implant_incharge" ? (
           <View
             style={{
               flexDirection: "row",
@@ -263,45 +280,49 @@ function Header({ user, router }: any) {
             }}
             data-testid="dashboard-department-badge"
           >
-            {resolveUserDepartments(user).map((d: DepartmentItem, idx: number) => {
-              const badgeColors = getDepartmentBadgeColors(d.department_color);
-              return (
-                <View
-                  key={d.department_id || idx}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    alignSelf: "flex-start",
-                    backgroundColor: badgeColors.bg,
-                    borderWidth: 1,
-                    borderColor: badgeColors.border,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderRadius: 20,
-                  }}
-                >
+            {resolveUserDepartments(user).map(
+              (d: DepartmentItem, idx: number) => {
+                const badgeColors = getDepartmentBadgeColors(
+                  d.department_color,
+                );
+                return (
                   <View
+                    key={d.department_id || idx}
                     style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: badgeColors.dot,
-                    }}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: "700",
-                      color: badgeColors.text,
-                      letterSpacing: 0.3,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      alignSelf: "flex-start",
+                      backgroundColor: badgeColors.bg,
+                      borderWidth: 1,
+                      borderColor: badgeColors.border,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderRadius: 20,
                     }}
                   >
-                    {d.department_name || "All Departments"}
-                  </Text>
-                </View>
-              );
-            })}
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: badgeColors.dot,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "700",
+                        color: badgeColors.text,
+                        letterSpacing: 0.3,
+                      }}
+                    >
+                      {d.department_name || "All Departments"}
+                    </Text>
+                  </View>
+                );
+              },
+            )}
           </View>
         ) : null}
 
@@ -858,14 +879,22 @@ function SupervisorDashboard({
     () => procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
     [procedures],
   );
-  const pendingFollowups = useMemo(() =>
-    procedures.filter((p: any) => (p.followups || []).some((f: any) => f.status === 'pending_supervisor')),
-    [procedures]
+  const pendingFollowups = useMemo(
+    () =>
+      procedures.filter((p: any) =>
+        (p.followups || []).some((f: any) => f.status === "pending_supervisor"),
+      ),
+    [procedures],
   );
   // Pre-Implant Augmentation rounds awaiting this supervisor.
-  const pendingAugmentations = useMemo(() =>
-    procedures.filter((p: any) => (p.augmentations || []).some((a: any) => a.status === 'pending_supervisor')),
-    [procedures]
+  const pendingAugmentations = useMemo(
+    () =>
+      procedures.filter((p: any) =>
+        (p.augmentations || []).some(
+          (a: any) => a.status === "pending_supervisor",
+        ),
+      ),
+    [procedures],
   );
   const draftCases = useMemo(
     () => procedures.filter((p: any) => p.status === "draft"),
@@ -997,13 +1026,19 @@ function SupervisorDashboard({
           </View>
 
           {/* Pending Approval Queue */}
-          {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length > 0 && (
+          {pendingApproval.length +
+            pendingFollowups.length +
+            pendingAugmentations.length >
+            0 && (
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <Ionicons name="clipboard-outline" size={18} color="#E65100" />
                 <Text style={[s.sectionTitle, { color: "#E65100" }]}>
                   Pending Your Approval (
-                  {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length})
+                  {pendingApproval.length +
+                    pendingFollowups.length +
+                    pendingAugmentations.length}
+                  )
                 </Text>
               </View>
               {pendingAugmentations.slice(0, 5).map((proc: any) => (
@@ -1198,21 +1233,33 @@ function InChargeDashboard({
     () => procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
     [procedures],
   );
-  const pendingFollowups = useMemo(() =>
-    procedures.filter((p: any) => (p.followups || []).some((f: any) =>
-      f.status === 'pending_incharge' ||
-      (f.status === 'pending_supervisor' && p.supervisor_id && p.supervisor_id === p.implant_incharge_id)
-    )),
-    [procedures]
+  const pendingFollowups = useMemo(
+    () =>
+      procedures.filter((p: any) =>
+        (p.followups || []).some(
+          (f: any) =>
+            f.status === "pending_incharge" ||
+            (f.status === "pending_supervisor" &&
+              p.supervisor_id &&
+              p.supervisor_id === p.implant_incharge_id),
+        ),
+      ),
+    [procedures],
   );
 
   // Pre-Implant Augmentation rounds awaiting this in-charge.
-  const pendingAugmentations = useMemo(() =>
-    procedures.filter((p: any) => (p.augmentations || []).some((a: any) =>
-      a.status === 'pending_incharge' ||
-      (a.status === 'pending_supervisor' && p.supervisor_id && p.supervisor_id === p.implant_incharge_id)
-    )),
-    [procedures]
+  const pendingAugmentations = useMemo(
+    () =>
+      procedures.filter((p: any) =>
+        (p.augmentations || []).some(
+          (a: any) =>
+            a.status === "pending_incharge" ||
+            (a.status === "pending_supervisor" &&
+              p.supervisor_id &&
+              p.supervisor_id === p.implant_incharge_id),
+        ),
+      ),
+    [procedures],
   );
   return (
     <>
@@ -1359,13 +1406,19 @@ function InChargeDashboard({
           )}
 
           {/* Pending Review */}
-          {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length > 0 && (
+          {pendingApproval.length +
+            pendingFollowups.length +
+            pendingAugmentations.length >
+            0 && (
             <View style={s.section}>
               <View style={s.sectionHeader}>
                 <Ionicons name="clipboard-outline" size={18} color="#E65100" />
                 <Text style={[s.sectionTitle, { color: "#E65100" }]}>
                   Pending Review (
-                  {pendingApproval.length + pendingFollowups.length + pendingAugmentations.length})
+                  {pendingApproval.length +
+                    pendingFollowups.length +
+                    pendingAugmentations.length}
+                  )
                 </Text>
               </View>
               {pendingAugmentations.slice(0, 5).map((proc: any) => (
@@ -1632,7 +1685,8 @@ function pickLeaderboardBadges<T extends Record<string, any>>(
   riskKey: string,
 ): { topId: string | null; hotId: string | null; riskId: string | null } {
   if (rows.length === 0) return { topId: null, hotId: null, riskId: null };
-  const idOf = (r: T) => r.student_id || r.supervisor_id || r.incharge_id || r._id || r.id;
+  const idOf = (r: T) =>
+    r.student_id || r.supervisor_id || r.incharge_id || r._id || r.id;
   const top = [...rows].sort(
     (a, b) => (b[primaryKey] || 0) - (a[primaryKey] || 0),
   )[0];
@@ -1807,18 +1861,47 @@ function StudentPerformanceSection({
                 {st.student_name}
               </Text>
               {resolveUserDepartments(st).length > 0 ? (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 2, marginBottom: 2 }}>
-                  {resolveUserDepartments(st).map((d: DepartmentItem, i: number) => {
-                    const colors = getDepartmentBadgeColors(d.department_color);
-                    return (
-                      <View key={d.department_id || i} style={[s.perfDeptTag, { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }]}>
-                        <View style={[s.perfDeptDot, { backgroundColor: colors.dot }]} />
-                        <Text style={[s.perfDeptText, { color: colors.text }]} numberOfLines={1}>
-                          {d.department_name}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    marginTop: 2,
+                    marginBottom: 2,
+                  }}
+                >
+                  {resolveUserDepartments(st).map(
+                    (d: DepartmentItem, i: number) => {
+                      const colors = getDepartmentBadgeColors(
+                        d.department_color,
+                      );
+                      return (
+                        <View
+                          key={d.department_id || i}
+                          style={[
+                            s.perfDeptTag,
+                            {
+                              backgroundColor: colors.bg,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              s.perfDeptDot,
+                              { backgroundColor: colors.dot },
+                            ]}
+                          />
+                          <Text
+                            style={[s.perfDeptText, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {d.department_name}
+                          </Text>
+                        </View>
+                      );
+                    },
+                  )}
                 </View>
               ) : null}
               <View style={s.perfStats}>
@@ -1978,18 +2061,47 @@ function SupervisorPerformanceSection({
                 {sp.supervisor_name}
               </Text>
               {resolveUserDepartments(sp).length > 0 ? (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 2, marginBottom: 2 }}>
-                  {resolveUserDepartments(sp).map((d: DepartmentItem, i: number) => {
-                    const colors = getDepartmentBadgeColors(d.department_color);
-                    return (
-                      <View key={d.department_id || i} style={[s.perfDeptTag, { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }]}>
-                        <View style={[s.perfDeptDot, { backgroundColor: colors.dot }]} />
-                        <Text style={[s.perfDeptText, { color: colors.text }]} numberOfLines={1}>
-                          {d.department_name}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    marginTop: 2,
+                    marginBottom: 2,
+                  }}
+                >
+                  {resolveUserDepartments(sp).map(
+                    (d: DepartmentItem, i: number) => {
+                      const colors = getDepartmentBadgeColors(
+                        d.department_color,
+                      );
+                      return (
+                        <View
+                          key={d.department_id || i}
+                          style={[
+                            s.perfDeptTag,
+                            {
+                              backgroundColor: colors.bg,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                            },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              s.perfDeptDot,
+                              { backgroundColor: colors.dot },
+                            ]}
+                          />
+                          <Text
+                            style={[s.perfDeptText, { color: colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {d.department_name}
+                          </Text>
+                        </View>
+                      );
+                    },
+                  )}
                 </View>
               ) : null}
               <View style={s.perfStats}>
@@ -2108,7 +2220,13 @@ function InchargePerformanceSection({
           ic.departments && ic.departments.length > 0
             ? ic.departments
             : ic.department_name
-              ? [{ department_id: ic.department_id, department_name: ic.department_name, department_color: ic.department_color }]
+              ? [
+                  {
+                    department_id: ic.department_id,
+                    department_name: ic.department_name,
+                    department_color: ic.department_color,
+                  },
+                ]
               : [];
         const badge = leaderboard
           ? iid === lb.topId
@@ -2145,7 +2263,14 @@ function InchargePerformanceSection({
                 {ic.incharge_name}
               </Text>
               {departments.length > 0 && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 3, marginBottom: 2 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    marginTop: 3,
+                    marginBottom: 2,
+                  }}
+                >
                   {departments.map((d: any, dIdx: number) => {
                     const colors = getDepartmentBadgeColors(d.department_color);
                     return (
@@ -2153,11 +2278,23 @@ function InchargePerformanceSection({
                         key={d.department_id || dIdx}
                         style={[
                           s.perfDeptTag,
-                          { backgroundColor: colors.bg, borderColor: colors.border, borderWidth: 1 }
+                          {
+                            backgroundColor: colors.bg,
+                            borderColor: colors.border,
+                            borderWidth: 1,
+                          },
                         ]}
                       >
-                        <View style={[s.perfDeptDot, { backgroundColor: colors.dot }]} />
-                        <Text style={[s.perfDeptText, { color: colors.text }]} numberOfLines={1}>
+                        <View
+                          style={[
+                            s.perfDeptDot,
+                            { backgroundColor: colors.dot },
+                          ]}
+                        />
+                        <Text
+                          style={[s.perfDeptText, { color: colors.text }]}
+                          numberOfLines={1}
+                        >
                           {d.department_name}
                         </Text>
                       </View>
@@ -2183,7 +2320,8 @@ function InchargePerformanceSection({
                 </View>
                 <View style={s.perfChip}>
                   <Text style={[s.perfChipText, { color: "#00695C" }]}>
-                    {ic.students_count} student{ic.students_count === 1 ? "" : "s"}
+                    {ic.students_count} student
+                    {ic.students_count === 1 ? "" : "s"}
                   </Text>
                 </View>
               </View>
@@ -2259,7 +2397,10 @@ export default function DashboardScreen() {
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [subBanner, setSubBanner] = useState<{ status: string; daysLeft: number | null } | null>(null);
+  const [subBanner, setSubBanner] = useState<{
+    status: string;
+    daysLeft: number | null;
+  } | null>(null);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -2295,7 +2436,12 @@ export default function DashboardScreen() {
         if (status === "expired") {
           setSubBanner({ status: "expired", daysLeft: null });
         } else if (status === "trial" && trialEndsAt) {
-          const daysLeft = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000));
+          const daysLeft = Math.max(
+            0,
+            Math.ceil(
+              (new Date(trialEndsAt).getTime() - Date.now()) / 86400000,
+            ),
+          );
           setSubBanner(daysLeft <= 3 ? { status: "trial", daysLeft } : null);
         } else {
           setSubBanner(null);
@@ -2326,7 +2472,12 @@ export default function DashboardScreen() {
     <View style={s.container}>
       {subBanner && (
         <TouchableOpacity
-          style={[s.subBanner, subBanner.status === "expired" ? s.subBannerExpired : s.subBannerLow]}
+          style={[
+            s.subBanner,
+            subBanner.status === "expired"
+              ? s.subBannerExpired
+              : s.subBannerLow,
+          ]}
           onPress={() => router.push("/subscription" as any)}
           data-testid="subscription-status-banner"
         >
@@ -2492,13 +2643,18 @@ export default function DashboardScreen() {
             {isNurse && <ScheduledCasesSection router={router} />}
 
             {isStudent && (
-              <StudentDashboard
-                stats={stats}
-                procedures={procedures}
-                selectedDate={selectedDate}
-                setSelectedDate={setSelectedDate}
-                router={router}
-              />
+              <>
+                <StudentDashboard
+                  stats={stats}
+                  procedures={procedures}
+                  selectedDate={selectedDate}
+                  setSelectedDate={setSelectedDate}
+                  router={router}
+                  userId={user?.id || (user as any)?._id}
+                />
+                {/* iter-Jun-2026: cases the PG student is assisting in the next 7 days */}
+                <AssistingTodayStrip />
+              </>
             )}
             {isSupervisor && (
               <SupervisorDashboard
@@ -2956,7 +3112,12 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   perfRankText: { fontSize: 11.5, fontWeight: "800", color: "#F57F17" },
-  perfName: { fontSize: 14, fontWeight: "700", color: "#0F172A", marginBottom: 1 },
+  perfName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 1,
+  },
   perfDeptTag: {
     flexDirection: "row",
     alignItems: "center",

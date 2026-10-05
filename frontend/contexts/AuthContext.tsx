@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 interface User {
   id: string;
   name: string;
+  /** Login handle (users can sign in with email or username). */
+  username?: string;
   email: string;
   role: string;
   org_id?: string | null;

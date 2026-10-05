@@ -33,6 +33,15 @@ if (
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import RiskPill from "../../components/RiskPill";
+import CaseRiskPills from '../../components/CaseRiskPills';
+import EraGuidance from "../../components/EraGuidance";
+import {
+  computeEra,
+  isAnteriorMaxillaCase,
+  ERA_FACTORS,
+  RISK_COLORS,
+} from "../../utils/aestheticRisk";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import api, {
@@ -50,6 +59,7 @@ import {
   downloadConsentTemplate,
   printConsentTemplate,
 } from "../../utils/consentPdf";
+import { impressionRows } from "../../utils/impressionOptions";
 import BackButton from "../../components/BackButton";
 import ImplantTraceabilityCard from "../../components/ImplantTraceabilityCard";
 import RadiographThumb from "../../components/RadiographThumb";
@@ -102,6 +112,8 @@ import FollowUpSection from "../../components/FollowUpSection";
 import AugmentationSection from "../../components/AugmentationSection";
 import AugmentationPhase2Review from "../../components/AugmentationPhase2Review";
 import AddImplantSection from "../../components/AddImplantSection";
+import ScanFilesSection from "../../components/ScanFilesSection";
+import AssistantCard from "../../components/AssistantCard";
 // Treatment Complete banner above the timeline.
 import ImplantLifecycleTimeline from "../../components/ImplantLifecycleTimeline";
 import ExportPrintMenu from "../../components/ExportPrintMenu";
@@ -345,6 +357,11 @@ function resolveFieldOptions(
       return opts.length > 0 ? { options: opts } : null;
     }
     return null;
+  }
+  if (fieldKey.startsWith("aesthetic_risk.")) {
+    const factorKey = fieldKey.split(".").pop() as string;
+    const f = ERA_FACTORS.find((x) => x.key === factorKey);
+    return f ? { options: f.options.map((o) => o.value) } : null;
   }
   return FIELD_OPTIONS[fieldKey] || null;
 }
@@ -675,11 +692,20 @@ export default function ProcedureDetailScreen() {
         else if (rawValue === "No") rawValue = false;
       }
       const fields: any = {};
-      // Support nested field paths like "phase2_data.torque_values"
+      // Support nested field paths like "phase2_data.torque_values" and deeper
+      // ones like "aesthetic_risk.sites.11.infection_at_site" (deep-merged copy).
       if (fieldKey.includes(".")) {
-        const [parent, child] = fieldKey.split(".");
-        const current = procedure[parent] || {};
-        fields[parent] = { ...current, [child]: rawValue };
+        const parts = fieldKey.split(".");
+        const parent = parts[0];
+        const clone = JSON.parse(JSON.stringify(procedure[parent] || {}));
+        let cur = clone;
+        for (let i = 1; i < parts.length - 1; i++) {
+          if (!cur[parts[i]] || typeof cur[parts[i]] !== "object")
+            cur[parts[i]] = {};
+          cur = cur[parts[i]];
+        }
+        cur[parts[parts.length - 1]] = rawValue;
+        fields[parent] = clone;
       } else {
         fields[fieldKey] = rawValue;
       }
@@ -1725,7 +1751,38 @@ export default function ProcedureDetailScreen() {
                   "implant_incharge",
                   "administrator",
                 ].includes(user?.role || "")}
+                readOnly={!!procedure.viewer_is_assistant}
               />
+            )}
+            {/* iter-Jun-2026: read-only banner for the named assistant */}
+            {procedure.viewer_is_assistant && (
+              <View
+                style={{
+                  backgroundColor: "#EDE7F6",
+                  borderBottomWidth: 2,
+                  borderBottomColor: "#5E35B1",
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+                testID="assistant-readonly-banner"
+                data-testid="assistant-readonly-banner"
+              >
+                <Ionicons name="eye-outline" size={20} color="#4527A0" />
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontWeight: "700",
+                    color: "#4527A0",
+                    flex: 1,
+                  }}
+                >
+                  Assisting · read-only — you can review Phase 1 to Phase 4 of
+                  this case
+                </Text>
+              </View>
             )}
             {/* Edit Mode Banner */}
             {isEditMode && (
@@ -2329,6 +2386,9 @@ export default function ProcedureDetailScreen() {
                 </View>
               </View>
             )}
+
+        {/* iter-Jun-2026: prominent Aesthetic Risk / Medical Risk banner at case top */}
+        <CaseRiskPills procedure={procedure} variant="banner" prefix="case-detail" />
 
             {/* ── Treatment Complete + Case Summary + Digital Sign-Off (rendered above timeline on completion) ── */}
             {procedure.status === "completed" && (
@@ -4801,6 +4861,11 @@ export default function ProcedureDetailScreen() {
                         )}
                       </View>
 
+                      <AssistantCard
+                        procedure={procedure}
+                        onChanged={loadProcedure}
+                      />
+
                       <View style={styles.section}>
                         <View style={resStyles.sectionHeaderRow}>
                           <Text style={styles.sectionTitle}>Schedule</Text>
@@ -5908,51 +5973,256 @@ export default function ProcedureDetailScreen() {
                         </View>
                       )}
 
-                      {/* Aesthetic Risk Assessment */}
-                      {(procedure.smile_line || procedure.gingival_biotype) && (
-                        <View
-                          style={[
-                            styles.section,
-                            { borderLeftWidth: 4, borderLeftColor: "#E91E63" },
-                          ]}
-                          data-testid="aesthetic-risk-section"
-                        >
+                      {(() => {
+                        const era = computeEra(procedure);
+                        if (era.assessed === 0) return null;
+                        const anterior = isAnteriorMaxillaCase(
+                          procedure.missing_teeth,
+                        );
+                        const multi = era.sites.length > 1;
+                        const legacySites = !procedure.aesthetic_risk?.sites;
+                        const siteFieldKey = (leader: string, key: string) =>
+                          legacySites
+                            ? `aesthetic_risk.${key}`
+                            : `aesthetic_risk.sites.${leader}.${key}`;
+                        const renderRow = (
+                          r: any,
+                          fieldKey: string | undefined,
+                          tid: string,
+                        ) => (
                           <View
+                            key={tid}
                             style={{
                               flexDirection: "row",
                               alignItems: "center",
                               gap: 8,
-                              marginBottom: 8,
                             }}
+                            testID={tid}
+                            data-testid={tid}
                           >
-                            <Ionicons name="happy" size={20} color="#E91E63" />
-                            <Text
-                              style={[
-                                styles.sectionTitle,
-                                { marginBottom: 0, color: "#C2185B" },
-                              ]}
-                            >
-                              Aesthetic Risk Assessment
-                            </Text>
+                            <View style={{ flex: 1 }}>
+                              <InfoRow
+                                icon={
+                                  r.key === "smile_line"
+                                    ? "eye"
+                                    : r.key === "gingival_biotype"
+                                      ? "leaf"
+                                      : r.key === "edentulous_span"
+                                        ? "resize"
+                                        : "ellipse-outline"
+                                }
+                                label={r.label}
+                                value={r.value}
+                                readOnly={r.key === "edentulous_span"}
+                                fieldKey={fieldKey}
+                              />
+                            </View>
+                            <RiskPill
+                              level={r.risk}
+                              testID={`${tid.replace("-row-", "-pill-")}`}
+                            />
                           </View>
-                          {procedure.smile_line && (
-                            <InfoRow
-                              icon="eye"
-                              label="Smile Line"
-                              value={procedure.smile_line}
-                              fieldKey="smile_line"
-                            />
-                          )}
-                          {procedure.gingival_biotype && (
-                            <InfoRow
-                              icon="leaf"
-                              label="Gingival Biotype"
-                              value={procedure.gingival_biotype}
-                              fieldKey="gingival_biotype"
-                            />
-                          )}
-                        </View>
-                      )}
+                        );
+                        const overallCard = (
+                          title: string,
+                          o: any,
+                          tid: string,
+                        ) => {
+                          const oc = o.overall
+                            ? RISK_COLORS[o.overall as "Low"]
+                            : null;
+                          if (!oc) return null;
+                          return (
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 12,
+                                marginTop: 10,
+                                padding: 12,
+                                borderRadius: 12,
+                                borderWidth: 1.5,
+                                borderColor: oc.border,
+                                backgroundColor: oc.bg,
+                              }}
+                              testID={tid}
+                              data-testid={tid}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: "700",
+                                    color: "#1A1A2E",
+                                  }}
+                                >
+                                  {title}
+                                </Text>
+                                <Text
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#546E7A",
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  {o.assessed}/{o.total} factors assessed ·{" "}
+                                  {o.counts.High} high · {o.counts.Medium}{" "}
+                                  medium · {o.counts.Low} low
+                                </Text>
+                              </View>
+                              <RiskPill level={o.overall} large />
+                            </View>
+                          );
+                        };
+                        return (
+                          <View
+                            style={[
+                              styles.section,
+                              {
+                                borderLeftWidth: 4,
+                                borderLeftColor: "#E91E63",
+                              },
+                            ]}
+                            data-testid="aesthetic-risk-section"
+                          >
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 8,
+                                marginBottom: 8,
+                              }}
+                            >
+                              <Ionicons
+                                name="happy"
+                                size={20}
+                                color="#E91E63"
+                              />
+                              <Text
+                                style={[
+                                  styles.sectionTitle,
+                                  {
+                                    marginBottom: 0,
+                                    color: "#C2185B",
+                                    flex: 1,
+                                  },
+                                ]}
+                              >
+                                Aesthetic Risk Assessment
+                              </Text>
+                              <RiskPill
+                                level={era.overall}
+                                testID="era-detail-overall-pill"
+                              />
+                            </View>
+                            {era.patientRows
+                              .filter(
+                                (r) =>
+                                  r.value &&
+                                  (anterior ||
+                                    r.key === "smile_line" ||
+                                    r.key === "gingival_biotype"),
+                              )
+                              .map((r) =>
+                                renderRow(
+                                  r,
+                                  r.key === "smile_line" ||
+                                    r.key === "gingival_biotype"
+                                    ? r.key
+                                    : `aesthetic_risk.${r.key}`,
+                                  `era-detail-row-${r.key}`,
+                                ),
+                              )}
+                            {anterior &&
+                              era.sites.map((site, idx) => (
+                                <View
+                                  key={site.leader}
+                                  style={
+                                    multi
+                                      ? {
+                                          borderWidth: 1.5,
+                                          borderColor: "#F8BBD0",
+                                          borderRadius: 12,
+                                          padding: 10,
+                                          marginTop: 10,
+                                          backgroundColor: "#FFFBFC",
+                                        }
+                                      : undefined
+                                  }
+                                  testID={`era-detail-site-${site.leader}`}
+                                  data-testid={`era-detail-site-${site.leader}`}
+                                >
+                                  {multi && (
+                                    <View
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        marginBottom: 4,
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name="location"
+                                        size={14}
+                                        color="#AD1457"
+                                      />
+                                      <Text
+                                        style={{
+                                          flex: 1,
+                                          fontSize: 13,
+                                          fontWeight: "700",
+                                          color: "#880E4F",
+                                        }}
+                                      >
+                                        Area {idx + 1} — {site.label}
+                                      </Text>
+                                      <RiskPill level={site.overall} />
+                                    </View>
+                                  )}
+                                  {site.rows
+                                    .filter((r) => r.value)
+                                    .map((r) =>
+                                      renderRow(
+                                        r,
+                                        r.key === "edentulous_span"
+                                          ? undefined
+                                          : siteFieldKey(site.leader, r.key),
+                                        multi
+                                          ? `era-detail-row-${r.key}-${site.leader}`
+                                          : `era-detail-row-${r.key}`,
+                                      ),
+                                    )}
+                                  {overallCard(
+                                    multi
+                                      ? `Aesthetic Risk — ${site.label}`
+                                      : "Overall Aesthetic Risk",
+                                    site,
+                                    multi
+                                      ? `era-detail-site-${site.leader}-overall`
+                                      : "era-detail-overall",
+                                  )}
+                                  <EraGuidance
+                                    rows={[...era.patientRows, ...site.rows]}
+                                    overall={site.overall}
+                                    complete={site.assessed >= site.total}
+                                    testID={
+                                      multi
+                                        ? `era-detail-guidance-${site.leader}`
+                                        : "era-detail-guidance"
+                                    }
+                                  />
+                                </View>
+                              ))}
+                            {anterior &&
+                              multi &&
+                              overallCard(
+                                "Overall Aesthetic Risk (case — highest area)",
+                                era,
+                                "era-detail-overall",
+                              )}
+                          </View>
+                        );
+                      })()}
 
                       {/* Medical Assessment */}
                       {procedure.medical_assessment &&
@@ -10969,43 +11239,23 @@ export default function ProcedureDetailScreen() {
                                     fieldKey="phase4_step1_data.overdenture_attachment"
                                   />
                                 )}
-                                {procedure.phase4_step1_data
-                                  .impression_type && (
-                                  <InfoRow
-                                    icon="scan"
-                                    label="Impression Type"
-                                    value={
-                                      procedure.phase4_step1_data
-                                        .impression_type === "intraoral_scans"
-                                        ? "Intraoral Scans"
-                                        : `Conventional Impressions${
-                                            procedure.phase4_step1_data
-                                              .conventional_tray_type
-                                              ? ` (${procedure.phase4_step1_data.conventional_tray_type === "open_tray" ? "Open Tray" : "Closed Tray"})`
-                                              : ""
-                                          }${
-                                            procedure.phase4_step1_data
-                                              .impression_material
-                                              ? ` — ${
-                                                  {
-                                                    polyether: "Polyether",
-                                                    heavy_light_body:
-                                                      "Heavy and Light body",
-                                                    putty_light_body:
-                                                      "Putty and Light body",
-                                                  }[
-                                                    procedure.phase4_step1_data
-                                                      .impression_material as string
-                                                  ] ||
-                                                  procedure.phase4_step1_data
-                                                    .impression_material
-                                                }`
-                                              : ""
-                                          }`
-                                    }
-                                    fieldKey="phase4_step1_data.impression_type"
-                                  />
-                                )}
+                                {!!procedure.phase4_step1_data
+                                  .impression_type &&
+                                  impressionRows(
+                                    procedure.phase4_step1_data,
+                                  ).map((row) => (
+                                    <InfoRow
+                                      key={row.label}
+                                      icon={row.icon as any}
+                                      label={row.label}
+                                      value={row.value}
+                                      fieldKey={
+                                        row.label === "Impression Type"
+                                          ? "phase4_step1_data.impression_type"
+                                          : undefined
+                                      }
+                                    />
+                                  ))}
                                 {procedure.phase4_step1_data
                                   .payment_complete !== undefined && (
                                   <InfoRow
@@ -11300,6 +11550,22 @@ export default function ProcedureDetailScreen() {
                                   </View>
                                 );
                               })()}
+                              {procedure.phase4_step1_data?.impression_type ===
+                                "intraoral_scans" && (
+                                <ScanFilesSection
+                                  procedureId={String(id)}
+                                  canEdit={
+                                    !procedure.viewer_is_assistant &&
+                                    (user?.id === procedure.student_id ||
+                                      user?.id === procedure.created_by_id ||
+                                      [
+                                        "implant_incharge",
+                                        "administrator",
+                                      ].includes(user?.role || ""))
+                                  }
+                                  onChanged={() => loadProcedure()}
+                                />
+                              )}
 
                               <TouchableOpacity
                                 style={{
@@ -12021,10 +12287,12 @@ export default function ProcedureDetailScreen() {
                 )}
               </View>
             )}
-            <FollowUpSection
-              procedure={procedure}
-              onChanged={() => loadProcedure()}
-            />
+            {!procedure.viewer_is_assistant && (
+              <FollowUpSection
+                procedure={procedure}
+                onChanged={() => loadProcedure()}
+              />
+            )}
             {/* Implant Planning - Standalone Section.
             iter-223: hidden for existing-implant cases — those have the
             implants pre-captured in `procedure.existing_implants[]` and the
@@ -13139,6 +13407,7 @@ function InfoRow({
   onSave: onSaveProp,
   onCancel: onCancelProp,
   saving: savingProp,
+  readOnly,
 }: {
   icon: string;
   label: string;
@@ -13151,6 +13420,7 @@ function InfoRow({
   onSave?: () => void;
   onCancel?: () => void;
   saving?: boolean;
+  readOnly?: boolean;
 }) {
   const editCtx = useReactContext(EditContext);
 
@@ -13181,8 +13451,8 @@ function InfoRow({
       let seed: any;
       if (cfg) {
         if (key.includes(".")) {
-          const [p, c] = key.split(".");
-          seed = editCtx.procedure?.[p]?.[c];
+          seed = key.split('.').reduce((acc: any, part: string) => (acc == null ? undefined : acc[part]), editCtx.procedure);
+
         } else {
           seed = editCtx.procedure?.[key];
         }
@@ -13217,7 +13487,8 @@ function InfoRow({
     if (useCtx) editCtx.setEditValues((prev) => ({ ...prev, [key]: v }));
   };
 
-  const showPencil = (editCtx?.isEditMode || !!onEdit) && !isEditing;
+  const showPencil =
+    !readOnly && (editCtx?.isEditMode || !!onEdit) && !isEditing;
 
   // Resolve picker config if the field has predefined options. Configs without
   // an options list (e.g. numeric free-text like healing_abutment_cuff_height)

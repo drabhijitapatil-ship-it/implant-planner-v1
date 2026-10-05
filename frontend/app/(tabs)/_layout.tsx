@@ -76,13 +76,13 @@ function DrawerMenu({
 
   const t = useMemo(() => ({
     ...staticStyles,
-    overlay: [staticStyles.overlay, isTablet && { justifyContent: 'center', alignItems: 'center' }],
+    overlay: [staticStyles.overlay, isTablet && { justifyContent: 'center' as const, alignItems: 'center' as const }],
     sheet: [
       staticStyles.sheet,
       { paddingTop: insets.top + 14 },
       isTablet && {
         maxWidth: 600,
-        width: '90%',
+        width: '90%' as const,
         borderRadius: 28,
         borderTopLeftRadius: 28,
         borderTopRightRadius: 28,
@@ -622,7 +622,6 @@ export default function TabsLayout() {
           tabBarActiveTintColor: '#1565C0',
           tabBarInactiveTintColor: '#8E8E93',
           headerShown: true,
-          headerBackVisible: false,
           headerLeftContainerStyle: { paddingLeft: 0, marginLeft: 0 },
           headerRightContainerStyle: { paddingRight: 0, marginRight: 0 },
           headerStyle: { backgroundColor: '#FFF' },

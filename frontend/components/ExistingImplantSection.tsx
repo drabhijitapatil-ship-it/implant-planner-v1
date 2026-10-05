@@ -243,6 +243,8 @@ type Props = {
     procedure_date: string;
     procedure_time: string;
     remark: string;
+    assistant_id?: string;
+    assistant_name?: string;
   };
   validatePatient: () => string | null;
   /** iter-222: When set, the section hydrates its state from the persisted
@@ -785,6 +787,8 @@ export default function ExistingImplantSection({ patient, validatePatient, draft
         amount_paid: parseFloat(patient.amount_paid),
         procedure_date: todayDate,
         procedure_time: todayTime,
+        assistant_id: patient.assistant_id || '',
+        assistant_name: patient.assistant_name || '',
         original_procedure_type: originalProcedure,
         existing_implants: implants.map(r => ({
           tooth: r.tooth,

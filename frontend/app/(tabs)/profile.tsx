@@ -24,6 +24,7 @@ import api from '../../utils/api';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import PhotoOptionsModal from '../../components/PhotoOptionsModal';
 import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
+import AssistantLogbookCard from '../../components/AssistantLogbookCard';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -444,6 +445,13 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        {user?.role === 'student' && (
+          <View style={styles.section} testID="training-records-section" data-testid="training-records-section">
+            <Text style={styles.sectionTitle}>Training Records</Text>
+            <AssistantLogbookCard />
+          </View>
+        )}
+        
         {/* Section: Help */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Help</Text>
@@ -457,6 +465,18 @@ export default function ProfileScreen() {
               <Ionicons name="help-circle" size={20} color="#3F51B5" />
             </View>
             <Text style={styles.photoButtonText}>How it works</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.rowItem}
+            onPress={() => router.push('/analytics/guide')}
+            data-testid="link-analytics-guide"
+            testID="link-analytics-guide"
+          >
+            <View style={[styles.iconBadge, { backgroundColor: '#E3F2FD' }]}>
+              <Ionicons name="stats-chart-outline" size={20} color="#1565C0" />
+            </View>
+            <Text style={styles.photoButtonText}>Analytics guide</Text>
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
           <TouchableOpacity
@@ -499,6 +519,30 @@ export default function ProfileScreen() {
                 <Ionicons name="calendar" size={20} color="#1565C0" />
               </View>
               <Text style={styles.photoButtonText}>Backfill treatment timeline</Text>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rowItem}
+              onPress={() => router.push('/admin/scanner-suggestions' as any)}
+              data-testid="link-scanner-suggestions"
+              testID="link-scanner-suggestions"
+            >
+              <View style={[styles.iconBadge, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="scan-outline" size={20} color="#1565C0" />
+              </View>
+              <Text style={styles.photoButtonText}>Intraoral scanner suggestions</Text>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rowItem}
+              onPress={() => router.push('/admin/labs' as any)}
+              data-testid="link-lab-directory"
+              testID="link-lab-directory"
+            >
+              <View style={[styles.iconBadge, { backgroundColor: '#E3F2FD' }]}>
+                <Ionicons name="business-outline" size={20} color="#1565C0" />
+              </View>
+              <Text style={styles.photoButtonText}>Lab directory</Text>
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
             <TouchableOpacity
@@ -820,6 +864,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   photoButtonText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  legalRowText: {
     flex: 1,
     fontSize: 14,
     color: '#0F172A',

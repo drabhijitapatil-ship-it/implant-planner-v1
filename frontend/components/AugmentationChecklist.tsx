@@ -34,9 +34,11 @@ const CATEGORY_STYLE: Record<string, { bg: string; border: string; chip: string;
 export default function AugmentationChecklist({
   procedureId,
   canSignOff,
+  readOnly = false,
 }: {
   procedureId: string;
   canSignOff: boolean;
+  readOnly?: boolean;
 }) {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +111,7 @@ export default function AugmentationChecklist({
             {completedCount} of {items.length} signed off · auto-derived from per-site clinical findings
           </Text>
         </View>
+             {!readOnly && (
         <TouchableOpacity
           style={[s.regenBtn, regenerating && { opacity: 0.5 }]}
           onPress={regenerate}
@@ -119,6 +122,7 @@ export default function AugmentationChecklist({
           <Ionicons name="refresh" size={14} color="#1565C0" />
           <Text style={s.regenTxt}>{regenerating ? 'Refreshing…' : 'Regenerate'}</Text>
         </TouchableOpacity>
+         )}
       </View>
 
       {items.map(item => {

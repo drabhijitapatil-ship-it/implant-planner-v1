@@ -31,6 +31,8 @@ import CancelCaseModal from "../../components/CancelCaseModal";
 import TransferCaseModal from "../../components/TransferCaseModal";
 import ReferredCaseAssignModal from "../../components/ReferredCaseAssignModal";
 import SafeDeleteModal from "../../components/SafeDeleteModal";
+import CaseRiskPills from '../../components/CaseRiskPills';
+
 
 export default function ProceduresScreen() {
   const { user } = useAuth();
@@ -211,8 +213,10 @@ function DefaultProceduresScreen() {
   const isSupervisorOrIncharge =
     user?.role === "supervisor" || user?.role === "implant_incharge";
   const [filter, setFilter] = useState<
-    "needs_action" | "in_progress" | "completed" | "all"
+    "needs_action" | "in_progress" | "completed" | "all" | "assisted"
   >(isSupervisorOrIncharge ? "needs_action" : "needs_action");
+  // iter-Jun-2026: cases where the signed-in PG student is the named assistant (read-only)
+  const [assistedProcedures, setAssistedProcedures] = useState<any[]>([]);
   const [phaseFilter, setPhaseFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   // iter-350: org owner (is_admin) isn't auto-scoped to any department, so
@@ -261,7 +265,7 @@ function DefaultProceduresScreen() {
       setFilter("all");
     } else if (params.filter) {
       if (
-        ["needs_action", "in_progress", "completed", "all"].includes(
+        ["needs_action", "in_progress", "completed", "all", "assisted"].includes(
           params.filter
         )
       ) {
@@ -289,9 +293,16 @@ function DefaultProceduresScreen() {
       if (user?.is_admin && deptFilter !== "all") {
         reqParams.department_id = deptFilter;
       }
-      const response = await api.get("/procedures", { params: reqParams });
+      const isStudent = user?.role === "student";
+      const [response, assistedRes] = await Promise.all([
+        api.get("/procedures", { params: reqParams }),
+        isStudent
+          ? api.get("/procedures", { params: { scope: "assisted" } }).catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
+      ]);
       const filtered = response.data.filter((p: any) => p.status !== "draft");
       setProcedures(filtered);
+      setAssistedProcedures(Array.isArray(assistedRes.data) ? assistedRes.data : []);
     } catch (error: any) {
       if (error?.response?.status !== 401 && error?.response?.status !== 403) {
         console.error("Failed to load procedures:", error);
@@ -578,7 +589,8 @@ function DefaultProceduresScreen() {
   };
 
   const renderProcedure = ({ item }: any) => {
-    const actions = getMenuActions(item);
+    const isAssistedView = filter === "assisted" || !!item.viewer_is_assistant;
+    const actions = isAssistedView ? [] : getMenuActions(item);
     const statusStyle = getStatusBadgeStyle(item.status);
 
     return (
@@ -599,6 +611,12 @@ function DefaultProceduresScreen() {
         <View style={styles.procedureHeader}>
           <View style={styles.headerLeft}>
             <Text style={styles.patientName} numberOfLines={1}>{item.patient_name}</Text>
+            {isAssistedView ? (
+              <View style={styles.assistingChip} data-testid={`assisting-chip-${item.id}`}>
+                <Ionicons name="eye-outline" size={11} color="#4527A0" />
+                <Text style={styles.assistingChipTxt}>Assisting · read-only</Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.headerRight}>
             <View style={styles.registrationBadge}>
@@ -687,6 +705,8 @@ function DefaultProceduresScreen() {
         )}
 
         <View style={styles.divider} />
+                <CaseRiskPills procedure={item} variant="card" prefix={`case-${item.id}`} />
+
 
         {/* iter-Jun-2026 (v8): Zygoma / Pterygoid / Config pills — highlights
             advanced procedure types at-a-glance on the My Cases list. */}
@@ -733,6 +753,20 @@ function DefaultProceduresScreen() {
                   <Text style={styles.detailLabel}>Student</Text>
                   <Text style={styles.detailValue} numberOfLines={1}>
                     {item.student_name}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            {item.assistant_name && !isAssistedView ? (
+              <View style={styles.detailItem}>
+                <View style={[styles.detailIconContainer, { backgroundColor: '#EDE7F6' }]}>
+                  <Ionicons name="people" size={16} color="#673AB7" />
+                </View>
+                <View style={styles.detailTextContainer}>
+                  <Text style={styles.detailLabel}>Assistant</Text>
+                  <Text style={styles.detailValue} numberOfLines={1}>
+                    {item.assistant_name}
                   </Text>
                 </View>
               </View>
@@ -819,34 +853,60 @@ function DefaultProceduresScreen() {
       { key: "in_progress", label: "In Progress", shortLabel: "In Progress" },
       { key: "completed", label: "Completed", shortLabel: "Completed" },
       { key: "all", label: "All", shortLabel: "All" },
+      ...(user?.role === "student" ? [{ key: "assisted", label: "Assisted", shortLabel: "Assisted" }] : []),
     ],
-    []
+    [user?.role]
   );
 
+  const sourceList: any[] = filter === "assisted" ? assistedProcedures : procedures;
+
   const searchFiltered = useMemo(() => {
-    if (!searchQuery.trim()) return procedures;
+    if (!searchQuery.trim()) return sourceList;
     const q = searchQuery.toLowerCase();
-    return procedures.filter((p: any) => (
+    return sourceList.filter((p: any) => (
       p.patient_name?.toLowerCase().includes(q) ||
       p.registration_number?.toLowerCase().includes(q) ||
       p.student_name?.toLowerCase().includes(q) ||
       p.supervisor_name?.toLowerCase().includes(q)
     ));
-  }, [procedures, searchQuery]);
+  }, [sourceList, searchQuery]);
 
-  // Tab counts: computed per role for "Needs my action", plus in_progress, completed, all.
-  const tabCounts = useMemo<Record<string, number>>(() => ({
-    needs_action: searchFiltered.filter((p: any) => isNeedsMyAction(p, user)).length,
-    in_progress: searchFiltered.filter((p: any) =>
-      IN_PROGRESS_STATUSES.has(p.status)
-    ).length,
-    completed: searchFiltered.filter((p: any) => p.status === "completed")
-      .length,
-    all: searchFiltered.length,
-  }), [searchFiltered, user]);
+  // Tab counts: computed per role for "Needs my action", plus in_progress, completed, all, assisted.
+  const tabCounts = useMemo<Record<string, number>>(() => {
+    const filterBySearch = (list: any[]) => {
+      if (!searchQuery.trim()) return list;
+      const q = searchQuery.toLowerCase();
+      return list.filter((p: any) =>
+        p.patient_name?.toLowerCase().includes(q) ||
+        p.registration_number?.toLowerCase().includes(q) ||
+        p.student_name?.toLowerCase().includes(q) ||
+        p.supervisor_name?.toLowerCase().includes(q)
+      );
+    };
+    const ownSearchFiltered = filterBySearch(procedures);
+    const assistedSearchFiltered = filterBySearch(assistedProcedures);
+
+    return {
+      needs_action: ownSearchFiltered.filter((p: any) => isNeedsMyAction(p, user)).length,
+      in_progress: ownSearchFiltered.filter((p: any) =>
+        IN_PROGRESS_STATUSES.has(p.status)
+      ).length,
+      completed: ownSearchFiltered.filter((p: any) => p.status === "completed")
+        .length,
+      all: ownSearchFiltered.length,
+      assisted: assistedSearchFiltered.length,
+    };
+  }, [procedures, assistedProcedures, searchQuery, user]);
 
   const filteredProcedures = useMemo(() => {
     return searchFiltered.filter((p: any) => {
+      if (filter === "assisted") {
+        if (phaseFilter !== "all") {
+          if (!matchesPhase(p, phaseFilter)) return false;
+        }
+        return true;
+      }
+
       // 1. Action / Status Filter
       if (filter === "needs_action") {
         if (!isNeedsMyAction(p, user)) return false;
@@ -931,7 +991,7 @@ function DefaultProceduresScreen() {
       </View>
 
       {/* Action-Oriented Segmented Control */}
-      {/* <View style={[styles.segmentedWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
+      <View style={[styles.segmentedWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -949,6 +1009,7 @@ function DefaultProceduresScreen() {
                 style={[
                   styles.segmentItem,
                   isActive && styles.segmentItemActive,
+                  btn.key === "assisted" && !isActive && styles.filterButtonAssisted,
                 ]}
                 onPress={() => setFilter(btn.key as any)}
                 activeOpacity={0.7}
@@ -985,7 +1046,7 @@ function DefaultProceduresScreen() {
             );
           })}
         </ScrollView>
-      </View> */}
+      </View>
 
       {/* Phase Chip Row */}
       <View style={[styles.phaseChipsWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
@@ -1082,7 +1143,11 @@ function DefaultProceduresScreen() {
             color="#CCC"
           />
           <Text style={styles.emptyText}>
-            {searchQuery ? "No matching cases found" : "No procedures found"}
+            {searchQuery
+              ? "No matching cases found"
+              : filter === "assisted"
+                ? "You have not been added as an assistant on any case yet"
+                : "No procedures found"}
           </Text>
         </View>
       ) : (
@@ -1979,6 +2044,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#E65100",
+  },
+  assistingChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#EDE7F6",
+    borderWidth: 1,
+    borderColor: "#D1C4E9",
+  },
+  assistingChipTxt: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#4527A0",
+  },
+  filterButtonAssisted: {
+    backgroundColor: "#EDE7F6",
   },
   divider: {
     height: 1,

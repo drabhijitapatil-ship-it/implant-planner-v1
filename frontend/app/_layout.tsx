@@ -97,6 +97,7 @@ export default function RootLayout() {
               <Stack.Screen name="admin/backfill-timeline" options={{ headerShown: false }} />
               <Stack.Screen name="analytics/procedure-overview" options={{ headerShown: false }} />
               <Stack.Screen name="analytics/advanced" options={{ headerShown: false }} />
+              <Stack.Screen name="analytics/guide" options={{ headerShown: false }} />
             </Stack>
             <AttachPickerModalRoot />
           </ActivityTracker>

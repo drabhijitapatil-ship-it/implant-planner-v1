@@ -53,6 +53,8 @@ type Section =
   | "followup"
   | "adherence"
   | "augmentation"
+  | "impressions"
+  | "aesthetic"
   | "benchmarks"
   | "export";
 
@@ -78,6 +80,8 @@ const SECTIONS: {
   { key: "followup", label: "Follow-up", icon: "repeat-outline" },
   { key: "adherence", label: "Plan Adherence", icon: "git-compare-outline" },
   { key: "augmentation", label: "Augmentation", icon: "bandage-outline" },
+  { key: "impressions", label: "Impressions & Scanners", icon: "scan-outline" },
+  { key: "aesthetic", label: "Aesthetic Risk", icon: "happy-outline" },
   { key: "benchmarks", label: "Benchmarks", icon: "ribbon-outline" },
   { key: "export", label: "Research Export", icon: "download-outline" },
 ];
@@ -144,6 +148,9 @@ export default function AdvancedAnalyticsHub() {
           </Text>
           <Text style={s.headerSub}>Phase Analytics-2 · Phase Analytics-3</Text>
         </View>
+          <TouchableOpacity onPress={() => router.push('/analytics/guide')} style={s.headerIcon} testID="adv-analytics-guide" /* @ts-ignore */ data-testid="adv-analytics-guide" accessibilityLabel="Open analytics guide">
+          <Ionicons name="help-circle-outline" size={22} color="#1565C0" />
+        </TouchableOpacity>
       </View>
 
       {/* Section tabs (uniform capsules) */}
@@ -210,6 +217,11 @@ export default function AdvancedAnalyticsHub() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        <TouchableOpacity onPress={() => router.push(`/analytics/guide?tab=${section}`)} style={s.howToRow} testID="adv-how-to-read" /* @ts-ignore */ data-testid="adv-how-to-read">
+          <Ionicons name="information-circle-outline" size={16} color="#1565C0" />
+          <Text style={s.howToTxt}>How to read this view</Text>
+          <Ionicons name="chevron-forward" size={14} color="#1565C0" />
+        </TouchableOpacity>
         {section === "km" && (
           <KaplanMeierPane fromDate={fromDate} toDate={toDate} />
         )}
@@ -240,6 +252,12 @@ export default function AdvancedAnalyticsHub() {
         )}
         {section === "augmentation" && (
           <AugmentationPane fromDate={fromDate} toDate={toDate} />
+        )}
+        {section === "impressions" && (
+          <ImpressionsPane fromDate={fromDate} toDate={toDate} />
+        )}
+        {section === "aesthetic" && (
+          <AestheticRiskPane fromDate={fromDate} toDate={toDate} />
         )}
         {section === "benchmarks" && (
           <BenchmarksPane fromDate={fromDate} toDate={toDate} />
@@ -1967,7 +1985,13 @@ function FollowUpPane({
 }
 
 // ─────────────────────── Guided-plan adherence (iter-392) ───────────────────────
-function AdherencePane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+function AdherencePane({
+  fromDate,
+  toDate,
+}: {
+  fromDate: string;
+  toDate: string;
+}) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const load = useCallback(async () => {
@@ -1976,80 +2000,186 @@ function AdherencePane({ fromDate, toDate }: { fromDate: string; toDate: string 
       const params: any = {};
       if (fromDate) params.from_date = fromDate;
       if (toDate) params.to_date = toDate;
-      const r = await api.get('/analytics/protocol-adherence', { params });
+      const r = await api.get("/analytics/protocol-adherence", { params });
       setData(r.data);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, [fromDate, toDate]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
-  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  if (loading)
+    return (
+      <View style={s.pane}>
+        <ActivityIndicator style={{ marginVertical: 24 }} />
+      </View>
+    );
+  if (!data)
+    return (
+      <View style={s.pane}>
+        <EmptyMsg />
+      </View>
+    );
   const sum = data.summary || {};
-  const rateColor = (r: number | null) => (r ?? 100) >= 90 ? '#2E7D32' : (r ?? 100) >= 70 ? '#F9A825' : '#C62828';
+  const rateColor = (r: number | null) =>
+    (r ?? 100) >= 90 ? "#2E7D32" : (r ?? 100) >= 70 ? "#F9A825" : "#C62828";
   return (
     <View style={s.pane} testID="adherence-analytics-pane">
-      <SectionCard title="Guided-plan adherence" hint="How often the Phase 2 drilling protocol matched the Phase 1 surgical plan.">
+      <SectionCard
+        title="Guided-plan adherence"
+        hint="How often the Phase 2 drilling protocol matched the Phase 1 surgical plan."
+      >
         <View style={s.bucketsRow}>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1565C0' }]}>{sum.comparable_cases ?? 0}</Text><Text style={s.bucketLbl}>Comparable cases</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1B5E20' }]}>{sum.as_planned ?? 0}</Text><Text style={s.bucketLbl}>As planned</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: sum.deviated ? '#C62828' : '#37474F' }]}>{sum.deviated ?? 0}</Text><Text style={s.bucketLbl}>Deviated</Text></View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#1565C0" }]}>
+              {sum.comparable_cases ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Comparable cases</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#1B5E20" }]}>
+              {sum.as_planned ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>As planned</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text
+              style={[
+                s.bucketCount,
+                { color: sum.deviated ? "#C62828" : "#37474F" },
+              ]}
+            >
+              {sum.deviated ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Deviated</Text>
+          </View>
         </View>
         {sum.adherence_rate != null && (
           <View style={s.sweetCard} testID="adherence-rate-card">
-            <Text style={[s.sweetHead, { color: rateColor(sum.adherence_rate) }]}>Overall adherence: {sum.adherence_rate}%</Text>
-            <Text style={s.sweetLine}>Cases where the surgery followed the planned drilling protocol exactly.</Text>
+            <Text
+              style={[s.sweetHead, { color: rateColor(sum.adherence_rate) }]}
+            >
+              Overall adherence: {sum.adherence_rate}%
+            </Text>
+            <Text style={s.sweetLine}>
+              Cases where the surgery followed the planned drilling protocol
+              exactly.
+            </Text>
           </View>
         )}
       </SectionCard>
 
-      <SectionCard title="Adherence by student" hint="Sorted lowest first — a teaching KPI for who most often abandons the plan intra-operatively.">
-        {!(data.by_student || []).length ? <EmptyMsg /> :
+      <SectionCard
+        title="Adherence by student"
+        hint="Sorted lowest first — a teaching KPI for who most often abandons the plan intra-operatively."
+      >
+        {!(data.by_student || []).length ? (
+          <EmptyMsg />
+        ) : (
           (data.by_student || []).map((row: any) => (
-            <View key={row.student_name} style={{ marginBottom: 8 }} testID={`adherence-student-${row.student_name}`}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View
+              key={row.student_name}
+              style={{ marginBottom: 8 }}
+              testID={`adherence-student-${row.student_name}`}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Text style={s.paretoLbl}>{row.student_name}</Text>
-                <Text style={s.paretoRight}>{row.adherence_rate}% · {row.deviated}/{row.total} deviated</Text>
+                <Text style={s.paretoRight}>
+                  {row.adherence_rate}% · {row.deviated}/{row.total} deviated
+                </Text>
               </View>
               <View style={s.paretoBar}>
-                <View style={[s.paretoBarFill, { width: `${row.adherence_rate}%`, backgroundColor: rateColor(row.adherence_rate) }]} />
+                <View
+                  style={[
+                    s.paretoBarFill,
+                    {
+                      width: `${row.adherence_rate}%`,
+                      backgroundColor: rateColor(row.adherence_rate),
+                    },
+                  ]}
+                />
               </View>
             </View>
-          ))}
+          ))
+        )}
       </SectionCard>
 
-      <SectionCard title="What changes most" hint="Which part of the protocol deviates most often during surgery.">
+      <SectionCard
+        title="What changes most"
+        hint="Which part of the protocol deviates most often during surgery."
+      >
         {!(data.deviation_fields || []).length ? (
-          <Text style={{ color: '#2E7D32', fontStyle: 'italic', marginTop: 4 }}>No deviations recorded — every surgery followed its plan.</Text>
-        ) : (data.deviation_fields || []).map((row: any) => (
-          <View key={row.field} style={s.failRow} testID={`adherence-field-${row.field}`}>
-            <Text style={[s.failName, { flex: 1 }]}>{row.field}</Text>
-            <Text style={s.failRate}>{row.count}</Text>
-          </View>
-        ))}
+          <Text style={{ color: "#2E7D32", fontStyle: "italic", marginTop: 4 }}>
+            No deviations recorded — every surgery followed its plan.
+          </Text>
+        ) : (
+          (data.deviation_fields || []).map((row: any) => (
+            <View
+              key={row.field}
+              style={s.failRow}
+              testID={`adherence-field-${row.field}`}
+            >
+              <Text style={[s.failName, { flex: 1 }]}>{row.field}</Text>
+              <Text style={s.failRate}>{row.count}</Text>
+            </View>
+          ))
+        )}
       </SectionCard>
 
-      <SectionCard title="Recent deviations" hint="Latest cases where the intra-op protocol differed from the plan.">
-        {!(data.recent_deviations || []).length ? <EmptyMsg /> :
+      <SectionCard
+        title="Recent deviations"
+        hint="Latest cases where the intra-op protocol differed from the plan."
+      >
+        {!(data.recent_deviations || []).length ? (
+          <EmptyMsg />
+        ) : (
           (data.recent_deviations || []).map((row: any, i: number) => (
-            <View key={i} style={[s.failRow, { alignItems: 'flex-start' }]} testID={`adherence-recent-${i}`}>
+            <View
+              key={i}
+              style={[s.failRow, { alignItems: "flex-start" }]}
+              testID={`adherence-recent-${i}`}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={s.failName}>{row.patient_name}</Text>
-                <Text style={s.failN}>{row.student_name}{row.date ? ` · ${row.date}` : ''}</Text>
+                <Text style={s.failN}>
+                  {row.student_name}
+                  {row.date ? ` · ${row.date}` : ""}
+                </Text>
                 {(row.diffs || []).map((d: any, j: number) => (
-                  <Text key={j} style={{ fontSize: 11, color: '#5D4037', marginTop: 1 }}>
-                    {d.field}: {d.planned} → <Text style={{ color: '#C62828', fontWeight: '700' }}>{d.actual}</Text>
+                  <Text
+                    key={j}
+                    style={{ fontSize: 11, color: "#5D4037", marginTop: 1 }}
+                  >
+                    {d.field}: {d.planned} →{" "}
+                    <Text style={{ color: "#C62828", fontWeight: "700" }}>
+                      {d.actual}
+                    </Text>
                   </Text>
                 ))}
               </View>
             </View>
-          ))}
+          ))
+        )}
       </SectionCard>
     </View>
   );
 }
 
 // Pre-Implant & Phase 2 augmentation analytics.
-function AugmentationPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+function AugmentationPane({
+  fromDate,
+  toDate,
+}: {
+  fromDate: string;
+  toDate: string;
+}) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const load = useCallback(async () => {
@@ -2058,127 +2188,315 @@ function AugmentationPane({ fromDate, toDate }: { fromDate: string; toDate: stri
       const params: any = {};
       if (fromDate) params.from_date = fromDate;
       if (toDate) params.to_date = toDate;
-      const r = await api.get('/analytics/augmentation', { params });
+      const r = await api.get("/analytics/augmentation", { params });
       setData(r.data);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, [fromDate, toDate]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
-  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  if (loading)
+    return (
+      <View style={s.pane}>
+        <ActivityIndicator style={{ marginVertical: 24 }} />
+      </View>
+    );
+  if (!data)
+    return (
+      <View style={s.pane}>
+        <EmptyMsg />
+      </View>
+    );
   const sm = data.summary || {};
-  const maxComp = Math.max(1, ...(data.complications || []).map((c: any) => c.count));
-  const rateColor = (r: number | null) => r == null ? '#90A4AE' : r >= 85 ? '#2E7D32' : r >= 60 ? '#F9A825' : '#C62828';
+  const maxComp = Math.max(
+    1,
+    ...(data.complications || []).map((c: any) => c.count),
+  );
+  const rateColor = (r: number | null) =>
+    r == null
+      ? "#90A4AE"
+      : r >= 85
+        ? "#2E7D32"
+        : r >= 60
+          ? "#F9A825"
+          : "#C62828";
   const gain = (h: number | null, v: number | null) =>
-    (h == null && v == null) ? '—' : `H ${h != null ? `+${h}` : '—'} / V ${v != null ? `+${v}` : '—'} mm`;
+    h == null && v == null
+      ? "—"
+      : `H ${h != null ? `+${h}` : "—"} / V ${v != null ? `+${v}` : "—"} mm`;
 
-  const CompareTable = ({ rows, testPrefix }: { rows: any[]; testPrefix: string }) => (
-    !rows.length ? <EmptyMsg /> : (
+  const CompareTable = ({
+    rows,
+    testPrefix,
+  }: {
+    rows: any[];
+    testPrefix: string;
+  }) =>
+    !rows.length ? (
+      <EmptyMsg />
+    ) : (
       <>
         {rows.map((t: any) => (
-          <View key={t.name} style={s.failRow} testID={`${testPrefix}-${t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+          <View
+            key={t.name}
+            style={s.failRow}
+            testID={`${testPrefix}-${t.name
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "")}`}
+          >
             <View style={{ flex: 1 }}>
               <Text style={s.failName}>{t.name}</Text>
               <Text style={s.failN}>
                 staged n={t.staged_n} · simultaneous n={t.simultaneous_n}
-                {t.complication_rate != null ? ` · compl. ${t.complication_rate}%` : ''}
+                {t.complication_rate != null
+                  ? ` · compl. ${t.complication_rate}%`
+                  : ""}
               </Text>
-              <Text style={s.failN}>bone gain: {gain(t.mean_gain_h, t.mean_gain_v)}</Text>
+              <Text style={s.failN}>
+                bone gain: {gain(t.mean_gain_h, t.mean_gain_v)}
+              </Text>
             </View>
             <Text style={[s.failRate, { color: rateColor(t.success_rate) }]}>
-              {t.success_rate != null ? `${t.success_rate}%` : 'no outcome'}
+              {t.success_rate != null ? `${t.success_rate}%` : "no outcome"}
             </Text>
           </View>
         ))}
       </>
-    )
-  );
+    );
 
   return (
     <View style={s.pane} testID="augmentation-analytics-pane">
-      <SectionCard title="Augmentation overview" hint="Staged = Pre-Implant Augmentation workflow (Phase 1). Simultaneous = Bone & Soft Tissue Augmentation done during Phase 2 implant surgery.">
+      <SectionCard
+        title="Augmentation overview"
+        hint="Staged = Pre-Implant Augmentation workflow (Phase 1). Simultaneous = Bone & Soft Tissue Augmentation done during Phase 2 implant surgery."
+      >
         <View style={s.bucketsRow}>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#5D4037' }]}>{sm.staged_cases ?? 0}</Text><Text style={s.bucketLbl}>Staged cases</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1565C0' }]}>{sm.simultaneous_cases ?? 0}</Text><Text style={s.bucketLbl}>Simultaneous (Phase 2)</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{sm.total_rounds ?? 0}</Text><Text style={s.bucketLbl}>Graft rounds</Text></View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#5D4037" }]}>
+              {sm.staged_cases ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Staged cases</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#1565C0" }]}>
+              {sm.simultaneous_cases ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Simultaneous (Phase 2)</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#37474F" }]}>
+              {sm.total_rounds ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Graft rounds</Text>
+          </View>
         </View>
         <View style={[s.bucketsRow, { marginTop: 8 }]}>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#1B5E20' }]}>{sm.success ?? 0}</Text><Text style={s.bucketLbl}>Successful</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#F9A825' }]}>{sm.partially_successful ?? 0}</Text><Text style={s.bucketLbl}>Partially successful</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#C62828' }]}>{sm.failed ?? 0}</Text><Text style={s.bucketLbl}>Failed</Text></View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#1B5E20" }]}>
+              {sm.success ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Successful</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#F9A825" }]}>
+              {sm.partially_successful ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Partially successful</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#C62828" }]}>
+              {sm.failed ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Failed</Text>
+          </View>
         </View>
         <View style={[s.bucketsRow, { marginTop: 8 }]}>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#00695C', fontSize: 14, lineHeight: 20 }]}>{gain(sm.mean_gain_h, sm.mean_gain_v)}</Text><Text style={s.bucketLbl}>Mean bone gain</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#E65100' }]}>{sm.repeat_cases ?? 0}</Text><Text style={s.bucketLbl}>Repeat rounds needed</Text></View>
-          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#C62828' }]}>{sm.terminated_cases ?? 0}</Text><Text style={s.bucketLbl}>Treatment terminated</Text></View>
+          <View style={s.bucketCard}>
+            <Text
+              style={[
+                s.bucketCount,
+                { color: "#00695C", fontSize: 14, lineHeight: 20 },
+              ]}
+            >
+              {gain(sm.mean_gain_h, sm.mean_gain_v)}
+            </Text>
+            <Text style={s.bucketLbl}>Mean bone gain</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#E65100" }]}>
+              {sm.repeat_cases ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Repeat rounds needed</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#C62828" }]}>
+              {sm.terminated_cases ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Treatment terminated</Text>
+          </View>
         </View>
       </SectionCard>
 
-      <SectionCard title="Technique comparison" hint="Success rate & mean bone gain per grafting procedure (outcomes from Step 3 reviews; simultaneous events count usage only).">
+      <SectionCard
+        title="Technique comparison"
+        hint="Success rate & mean bone gain per grafting procedure (outcomes from Step 3 reviews; simultaneous events count usage only)."
+      >
         <CompareTable rows={data.techniques || []} testPrefix="aug-an-tech" />
       </SectionCard>
 
-      <SectionCard title="Graft material performance" hint="Autogenous / Allograft / Xenograft / Alloplast and others — success and complication rates.">
+      <SectionCard
+        title="Graft material performance"
+        hint="Autogenous / Allograft / Xenograft / Alloplast and others — success and complication rates."
+      >
         <CompareTable rows={data.materials || []} testPrefix="aug-an-mat" />
       </SectionCard>
 
-      <SectionCard title="Complication pareto" hint="Most frequent graft complications recorded in Step 3 reviews.">
-        {!(data.complications || []).length ? <EmptyMsg /> :
+      <SectionCard
+        title="Complication pareto"
+        hint="Most frequent graft complications recorded in Step 3 reviews."
+      >
+        {!(data.complications || []).length ? (
+          <EmptyMsg />
+        ) : (
           (data.complications || []).map((c: any) => (
-            <View key={c.name} style={{ marginBottom: 8 }} testID={`aug-an-comp-${c.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <View
+              key={c.name}
+              style={{ marginBottom: 8 }}
+              testID={`aug-an-comp-${c.name
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-+|-+$/g, "")}`}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Text style={s.paretoLbl}>{c.name}</Text>
                 <Text style={s.paretoRight}>{c.count}</Text>
               </View>
               <View style={s.paretoBar}>
-                <View style={[s.paretoBarFill, { width: `${(c.count / maxComp) * 100}%`, backgroundColor: '#C62828' }]} />
+                <View
+                  style={[
+                    s.paretoBarFill,
+                    {
+                      width: `${(c.count / maxComp) * 100}%`,
+                      backgroundColor: "#C62828",
+                    },
+                  ]}
+                />
               </View>
             </View>
-          ))}
+          ))
+        )}
       </SectionCard>
 
-      <SectionCard title="Risk factors × outcome" hint="Graft success rate split by smoking and diabetes status captured in Step 1.">
-        {['smoking', 'diabetes'].map(f => (
+      <SectionCard
+        title="Risk factors × outcome"
+        hint="Graft success rate split by smoking and diabetes status captured in Step 1."
+      >
+        {["smoking", "diabetes"].map((f) => (
           <View key={f} style={{ marginBottom: 6 }}>
-            <Text style={[s.failName, { marginBottom: 4, textTransform: 'capitalize' }]}>{f}</Text>
-            {!((data.risk_factors || {})[f] || []).length ? <EmptyMsg /> :
+            <Text
+              style={[
+                s.failName,
+                { marginBottom: 4, textTransform: "capitalize" },
+              ]}
+            >
+              {f}
+            </Text>
+            {!((data.risk_factors || {})[f] || []).length ? (
+              <EmptyMsg />
+            ) : (
               (data.risk_factors[f] || []).map((r: any) => (
-                <View key={r.level} style={s.failRow} testID={`aug-an-risk-${f}-${String(r.level).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+                <View
+                  key={r.level}
+                  style={s.failRow}
+                  testID={`aug-an-risk-${f}-${String(r.level)
+                    .toLowerCase()
+                    .replace(/[^a-z0-9]+/g, "-")
+                    .replace(/^-+|-+$/g, "")}`}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={s.failName}>{r.level}</Text>
                     <Text style={s.failN}>n={r.n} rounds with outcome</Text>
                   </View>
-                  <Text style={[s.failRate, { color: rateColor(r.success_rate) }]}>{r.success_rate != null ? `${r.success_rate}%` : '—'}</Text>
+                  <Text
+                    style={[s.failRate, { color: rateColor(r.success_rate) }]}
+                  >
+                    {r.success_rate != null ? `${r.success_rate}%` : "—"}
+                  </Text>
                 </View>
-              ))}
+              ))
+            )}
           </View>
         ))}
       </SectionCard>
 
-      <SectionCard title="Healing period vs outcome" hint="Does a longer healing protocol improve graft success?">
-        {!(data.healing || []).length ? <EmptyMsg /> :
+      <SectionCard
+        title="Healing period vs outcome"
+        hint="Does a longer healing protocol improve graft success?"
+      >
+        {!(data.healing || []).length ? (
+          <EmptyMsg />
+        ) : (
           (data.healing || []).map((h: any) => (
-            <View key={h.protocol} style={s.failRow} testID={`aug-an-heal-${h.protocol.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+            <View
+              key={h.protocol}
+              style={s.failRow}
+              testID={`aug-an-heal-${h.protocol
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-+|-+$/g, "")}`}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={s.failName}>{h.protocol}</Text>
-                <Text style={s.failN}>staged n={h.staged_n} · simultaneous n={h.simultaneous_n}</Text>
+                <Text style={s.failN}>
+                  staged n={h.staged_n} · simultaneous n={h.simultaneous_n}
+                </Text>
               </View>
-              <Text style={[s.failRate, { color: rateColor(h.success_rate) }]}>{h.success_rate != null ? `${h.success_rate}%` : 'no outcome'}</Text>
+              <Text style={[s.failRate, { color: rateColor(h.success_rate) }]}>
+                {h.success_rate != null ? `${h.success_rate}%` : "no outcome"}
+              </Text>
             </View>
-          ))}
+          ))
+        )}
       </SectionCard>
 
-      <SectionCard title="Implant survival by augmentation timing" hint="Correlates Phase 5 survival reviews with whether/when augmentation was done (staged vs simultaneous vs none).">
-        {!(data.survival_by_timing || []).length ? <EmptyMsg /> :
+      <SectionCard
+        title="Implant survival by augmentation timing"
+        hint="Correlates Phase 5 survival reviews with whether/when augmentation was done (staged vs simultaneous vs none)."
+      >
+        {!(data.survival_by_timing || []).length ? (
+          <EmptyMsg />
+        ) : (
           (data.survival_by_timing || []).map((g: any) => (
-            <View key={g.group} style={s.failRow} testID={`aug-an-surv-${g.group.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`}>
+            <View
+              key={g.group}
+              style={s.failRow}
+              testID={`aug-an-surv-${g.group
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-+|-+$/g, "")}`}
+            >
               <View style={{ flex: 1 }}>
                 <Text style={s.failName}>{g.group}</Text>
-                <Text style={s.failN}>{g.cases} case{g.cases === 1 ? '' : 's'} · {g.implants_placed} implants · {g.implants_failed} failed</Text>
+                <Text style={s.failN}>
+                  {g.cases} case{g.cases === 1 ? "" : "s"} · {g.implants_placed}{" "}
+                  implants · {g.implants_failed} failed
+                </Text>
               </View>
-              <Text style={[s.failRate, { color: rateColor(g.survival_rate) }]}>{g.survival_rate != null ? `${g.survival_rate}%` : '—'}</Text>
+              <Text style={[s.failRate, { color: rateColor(g.survival_rate) }]}>
+                {g.survival_rate != null ? `${g.survival_rate}%` : "—"}
+              </Text>
             </View>
-          ))}
+          ))
+        )}
       </SectionCard>
     </View>
   );
@@ -2198,6 +2516,441 @@ function SectionCard({
       <Text style={s.cardTitle}>{title}</Text>
       {hint ? <Text style={s.cardHint}>{hint}</Text> : null}
       {children}
+    </View>
+  );
+}
+
+
+function AestheticRiskPane({ fromDate, toDate }: { fromDate: string; toDate: string }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const r = await api.get('/analytics/aesthetic-risk', { params });
+      setData(r.data);
+    } finally { setLoading(false); }
+  }, [fromDate, toDate]);
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <View style={s.pane}><ActivityIndicator style={{ marginVertical: 24 }} /></View>;
+  if (!data) return <View style={s.pane}><EmptyMsg /></View>;
+  const sm = data.summary || {};
+  const dist = sm.distribution || { Low: 0, Medium: 0, High: 0 };
+  const GRADES: Array<'Low' | 'Medium' | 'High'> = ['Low', 'Medium', 'High'];
+  const GC: Record<string, string> = { Low: '#2E7D32', Medium: '#EF6C00', High: '#C62828' };
+  const slug = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const anterior = sm.anterior_cases || 0;
+  const monthly: any[] = data.monthly || [];
+  const maxMonth = Math.max(1, ...monthly.map((m: any) => m.Low + m.Medium + m.High));
+  const oo = data.overall_outcomes || {};
+
+  const StackBar = ({ row }: { row: any }) => {
+    const tot = Math.max(1, (row.Low || 0) + (row.Medium || 0) + (row.High || 0));
+    return (
+      <View style={{ flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'hidden', backgroundColor: '#ECEFF1' }}>
+        {GRADES.map(g => (row[g] ? <View key={g} style={{ width: `${(row[g] / tot) * 100}%`, backgroundColor: GC[g] }} /> : null))}
+      </View>
+    );
+  };
+
+  return (
+    <View style={s.pane} testID="aesthetic-analytics-pane">
+      <SectionCard title="Overall aesthetic risk" hint="Phase 1 ERA — anterior-maxilla cases (FDI 11–13 / 21–23).">
+        <View style={s.bucketsRow}>
+          <View style={s.bucketCard}><Text style={[s.bucketCount, { color: '#37474F' }]}>{anterior}</Text><Text style={s.bucketLbl}>Anterior cases</Text></View>
+          {GRADES.map(g => (
+            <View key={g} style={s.bucketCard} testID={`era-an-dist-${g.toLowerCase()}`}>
+              <Text style={[s.bucketCount, { color: GC[g] }]}>{dist[g] ?? 0}</Text>
+              <Text style={s.bucketLbl}>{g}{anterior ? ` (${Math.round(((dist[g] || 0) / anterior) * 100)}%)` : ''}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={[s.failN, { marginTop: 8 }]}>{sm.total_assessed ?? 0} case(s) with any aesthetic data · {sm.complete_cases ?? 0} fully graded · {sm.anterior_areas ?? 0} anterior area(s){sm.area_distribution ? ` (L ${sm.area_distribution.Low} · M ${sm.area_distribution.Medium} · H ${sm.area_distribution.High})` : ''}.</Text>
+        {monthly.length > 0 ? (
+          <View style={{ marginTop: 14 }}>
+            <Text style={s.failN}>Monthly trend — green Low · orange Medium · red High</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 90, marginTop: 8 }}>
+              {monthly.slice(-12).map((m: any) => (
+                <View key={m.month} style={{ flex: 1, maxWidth: 48, alignItems: 'center' }} testID={`era-an-month-${m.month}`}>
+                  <View style={{ width: '100%', height: 70, justifyContent: 'flex-end' }}>
+                    <View style={{ height: `${(m.High / maxMonth) * 100}%`, backgroundColor: GC.High, borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />
+                    <View style={{ height: `${(m.Medium / maxMonth) * 100}%`, backgroundColor: GC.Medium }} />
+                    <View style={{ height: `${(m.Low / maxMonth) * 100}%`, backgroundColor: GC.Low }} />
+                  </View>
+                  <Text style={{ fontSize: 8, color: '#78909C', marginTop: 3 }}>{m.month.slice(2).replace('-', '/')}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard title="Outcomes by overall grade" hint="Implant failure / replacement and early treatment termination per overall risk grade.">
+        {GRADES.map(g => {
+          const b = oo[g] || {};
+          return (
+            <View key={g} style={s.failRow} testID={`era-an-outcome-${g.toLowerCase()}`}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: GC[g], marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{g} risk</Text>
+                <Text style={s.failN}>{b.cases ?? 0} case(s) · {b.implants ?? 0} implant(s) · {b.failed ?? 0} failed · {b.ended ?? 0} ended early</Text>
+              </View>
+              <Text style={[s.failRate, { color: b.failure_rate == null ? '#B0BEC5' : b.failure_rate > 5 ? '#C62828' : '#2E7D32' }]}>
+                {b.survival_rate != null ? `${b.survival_rate}% surv.` : '—'}
+              </Text>
+            </View>
+          );
+        })}
+      </SectionCard>
+
+      <SectionCard title="Risk factors" hint="Option mix per factor (sorted by share of High grades) and implant survival by grade.">
+        {(data.factors || []).map((f: any) => {
+          const tot = Math.max(1, (f.options || []).reduce((a: number, o: any) => a + o.count, 0));
+          return (
+            <View key={f.key} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' }} testID={`era-an-factor-${slug(f.key)}`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={s.failName}>{f.label}</Text>
+                <Text style={[s.paretoRight, { color: (f.high_pct || 0) >= 40 ? '#C62828' : '#78909C' }]}>{f.high_pct != null ? `${f.high_pct}% high` : '—'}</Text>
+              </View>
+              {(f.options || []).length === 0 ? <EmptyMsg /> : (f.options || []).map((o: any) => (
+                <View key={o.name} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: GC[o.risk] }} />
+                  <Text style={[s.paretoLbl, { fontWeight: '500' }]} numberOfLines={2}>{o.name}</Text>
+                  <View style={[s.paretoBar, { width: 70 }]}><View style={[s.paretoBarFill, { width: `${(o.count / tot) * 100}%`, backgroundColor: GC[o.risk] }]} /></View>
+                  <Text style={[s.paretoRight, { width: 34, textAlign: 'right' }]}>{o.count}</Text>
+                </View>
+              ))}
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 6 }}>
+                {GRADES.map(g => {
+                  const b = f.by_grade?.[g] || {};
+                  return (
+                    <View key={g} style={{ flex: 1, backgroundColor: '#F5F7FB', borderRadius: 8, paddingVertical: 6, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 10, color: GC[g], fontWeight: '700' }}>{g}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '800', color: '#1A2332' }}>{b.survival_rate != null ? `${b.survival_rate}%` : '—'}</Text>
+                      <Text style={{ fontSize: 9, color: '#90A4AE' }}>{b.implants ?? 0} impl · {b.cases ?? 0} cases</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        })}
+      </SectionCard>
+
+      {(data.by_procedure_type || []).length ? (
+        <SectionCard title="Overall grade by procedure type" hint="Low / Medium / High split per implant procedure type (anterior cases).">
+          {(data.by_procedure_type || []).map((r: any) => (
+            <View key={r.name} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F4F8' }} testID={`era-an-ptype-${slug(r.name)}`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={s.failName}>{r.name}</Text>
+                <Text style={s.failN}>L {r.Low} · M {r.Medium} · H {r.High}</Text>
+              </View>
+              <StackBar row={r} />
+            </View>
+          ))}
+        </SectionCard>
+      ) : null}
+    </View>
+  );
+}
+// iter-Jun-2026 — Phase 4 Step 1 impression analytics: IOS vs conventional,
+// IOS usage by scanner (company / model) and impression-material trends.
+function ImpressionsPane({
+  fromDate,
+  toDate,
+}: {
+  fromDate: string;
+  toDate: string;
+}) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = {};
+      if (fromDate) params.from_date = fromDate;
+      if (toDate) params.to_date = toDate;
+      const r = await api.get("/analytics/impressions", { params });
+      setData(r.data);
+    } finally {
+      setLoading(false);
+    }
+  }, [fromDate, toDate]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading)
+    return (
+      <View style={s.pane}>
+        <ActivityIndicator style={{ marginVertical: 24 }} />
+      </View>
+    );
+  if (!data)
+    return (
+      <View style={s.pane}>
+        <EmptyMsg />
+      </View>
+    );
+  const sm = data.summary || {};
+  const slug = (v: string) =>
+    v
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  const Pareto = ({
+    rows,
+    color,
+    testPrefix,
+  }: {
+    rows: any[];
+    color: string;
+    testPrefix: string;
+  }) => {
+    if (!rows?.length) return <EmptyMsg />;
+    const max = Math.max(1, ...rows.map((r: any) => r.count));
+    const total = rows.reduce((a: number, r: any) => a + r.count, 0) || 1;
+    return (
+      <>
+        {rows.map((r: any) => (
+          <View
+            key={r.name}
+            style={{ marginBottom: 8 }}
+            testID={`${testPrefix}-${slug(r.name)}`}
+          >
+            <View
+              style={{ flexDirection: "row", justifyContent: "space-between" }}
+            >
+              <Text style={s.paretoLbl} numberOfLines={2}>
+                {r.name}
+              </Text>
+              <Text style={s.paretoRight}>
+                {r.count} · {Math.round((r.count / total) * 100)}%
+              </Text>
+            </View>
+            <View style={s.paretoBar}>
+              <View
+                style={[
+                  s.paretoBarFill,
+                  {
+                    width: `${(r.count / max) * 100}%`,
+                    backgroundColor: color,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        ))}
+      </>
+    );
+  };
+
+  const monthly: any[] = data.monthly || [];
+  const maxMonth = Math.max(
+    1,
+    ...monthly.map((m: any) => m.intraoral + m.conventional),
+  );
+
+  return (
+    <View style={s.pane} testID="impressions-analytics-pane">
+      <SectionCard
+        title="Impression modality"
+        hint="Phase 4 Step 1 — final impression method recorded per case."
+      >
+        <View style={s.bucketsRow}>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#37474F" }]}>
+              {sm.total ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Cases with impressions</Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#2E7D32" }]}>
+              {sm.intraoral ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>
+              Intraoral scans
+              {sm.intraoral_pct != null ? ` (${sm.intraoral_pct}%)` : ""}
+            </Text>
+          </View>
+          <View style={s.bucketCard}>
+            <Text style={[s.bucketCount, { color: "#E65100" }]}>
+              {sm.conventional ?? 0}
+            </Text>
+            <Text style={s.bucketLbl}>Conventional</Text>
+          </View>
+        </View>
+        {monthly.length > 0 ? (
+          <View style={{ marginTop: 14 }}>
+            <Text style={s.failN}>
+              Monthly trend — green = intraoral scan, orange = conventional
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "flex-end",
+                gap: 4,
+                height: 90,
+                marginTop: 8,
+              }}
+            >
+              {monthly.slice(-12).map((m: any) => (
+                <View
+                  key={m.month}
+                  style={{ flex: 1, alignItems: "center" }}
+                  testID={`imp-month-${m.month}`}
+                >
+                  <View
+                    style={{
+                      width: "100%",
+                      height: 70,
+                      justifyContent: "flex-end",
+                    }}
+                  >
+                    <View
+                      style={{
+                        height: `${(m.conventional / maxMonth) * 100}%`,
+                        backgroundColor: "#FB8C00",
+                        borderTopLeftRadius: 3,
+                        borderTopRightRadius: 3,
+                      }}
+                    />
+                    <View
+                      style={{
+                        height: `${(m.intraoral / maxMonth) * 100}%`,
+                        backgroundColor: "#43A047",
+                      }}
+                    />
+                  </View>
+                  <Text style={{ fontSize: 8, color: "#78909C", marginTop: 3 }}>
+                    {m.month.slice(2).replace("-", "/")}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard
+        title="IOS usage by scanner"
+        hint={`${sm.distinct_scanners ?? 0} distinct scanner model(s) recorded.`}
+      >
+        <Pareto
+          rows={data.scanners || []}
+          color="#2E7D32"
+          testPrefix="imp-scanner"
+        />
+        {(data.scanners_by_company || []).length > 1 ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={[s.failName, { marginBottom: 6 }]}>By company</Text>
+            <Pareto
+              rows={data.scanners_by_company || []}
+              color="#00838F"
+              testPrefix="imp-company"
+            />
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard
+        title="Impression material trends"
+        hint="Conventional impressions — material used (structured list + Other)."
+      >
+        <Pareto
+          rows={data.materials || []}
+          color="#E65100"
+          testPrefix="imp-material"
+        />
+        {(data.material_families || []).length > 1 ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={[s.failName, { marginBottom: 6 }]}>
+              By material family
+            </Text>
+            <Pareto
+              rows={data.material_families || []}
+              color="#8E24AA"
+              testPrefix="imp-family"
+            />
+          </View>
+        ) : null}
+        {(data.techniques || []).length ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={[s.failName, { marginBottom: 6 }]}>
+              Impression technique
+            </Text>
+            <Pareto
+              rows={data.techniques || []}
+              color="#6D4C41"
+              testPrefix="imp-technique"
+            />
+          </View>
+        ) : null}
+      </SectionCard>
+
+      <SectionCard
+        title="Digital workflow details"
+        hint="Scan body material, type of scan body and scan level for intraoral-scan cases."
+      >
+        <Text style={[s.failName, { marginBottom: 6 }]}>
+          Scan body material
+        </Text>
+        <Pareto
+          rows={data.scan_body_materials || []}
+          color="#1E88E5"
+          testPrefix="imp-sbm"
+        />
+        <Text style={[s.failName, { marginBottom: 6, marginTop: 12 }]}>
+          Type of scan body
+        </Text>
+        <Pareto
+          rows={data.scan_body_types || []}
+          color="#5E35B1"
+          testPrefix="imp-sbt"
+        />
+        <Text style={[s.failName, { marginBottom: 6, marginTop: 12 }]}>
+          Scan level
+        </Text>
+        <Pareto
+          rows={data.scan_levels || []}
+          color="#00838F"
+          testPrefix="imp-level"
+        />
+      </SectionCard>
+
+      {(data.by_procedure_type || []).length ? (
+        <SectionCard
+          title="Modality by procedure type"
+          hint="Intraoral vs conventional split per implant procedure type."
+        >
+          {(data.by_procedure_type || []).map((r: any) => (
+            <View
+              key={r.name}
+              style={s.failRow}
+              testID={`imp-ptype-${slug(r.name)}`}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={s.failName}>{r.name}</Text>
+                <Text style={s.failN}>
+                  IOS {r.intraoral} · conventional {r.conventional}
+                </Text>
+              </View>
+              <Text style={[s.failRate, { color: "#2E7D32" }]}>
+                {Math.round(
+                  (r.intraoral / Math.max(1, r.intraoral + r.conventional)) *
+                    100,
+                )}
+                % IOS
+              </Text>
+            </View>
+          ))}
+        </SectionCard>
+      ) : null}
     </View>
   );
 }
@@ -2240,6 +2993,8 @@ const s = StyleSheet.create({
   },
   headerTitle: { fontSize: 17, fontWeight: "800", color: "#1A2332" },
   headerSub: { fontSize: 11, color: "#78909C", marginTop: 2 },
+  howToRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-end', marginHorizontal: 14, marginTop: 10, paddingHorizontal: 10, paddingVertical: 8, minHeight: 36, borderRadius: 999, backgroundColor: '#E3F2FD' },
+  howToTxt: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
 
   tabsScroll: {
     backgroundColor: "#FFF",
