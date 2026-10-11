@@ -64,6 +64,17 @@ export async function removeToken(key: string): Promise<void> {
 let _onAuthFailure: (() => void) | null = null;
 export function setOnAuthFailure(cb: () => void) { _onAuthFailure = cb; }
 
+// AI consent (App Store 5.1.1/5.1.2): the backend refuses AI requests with
+// 403 "AI_CONSENT_REQUIRED…" until the user allows AI features. The app-level
+// <AiConsentGate> registers a handler that shows the consent screen and
+// resolves true if the user allows — the original request is then retried.
+let _onAiConsentRequired: ((force?: boolean) => Promise<boolean>) | null = null;
+export function setOnAiConsentRequired(cb: ((force?: boolean) => Promise<boolean>) | null) { _onAiConsentRequired = cb; }
+/** Show the AI consent screen on demand (e.g. Profile toggle). Resolves true if allowed. */
+export function requestAiConsent(): Promise<boolean> {
+  return _onAiConsentRequired ? _onAiConsentRequired(true) : Promise.resolve(false);
+}
+
 // iter-169: Activity recorder — set by AuthContext so every authenticated API
 // call bumps the inactivity timer. This closes the HIPAA compliance gap where
 // ScrollView / TextInput consumed touch events before they reached the
@@ -191,6 +202,21 @@ api.interceptors.response.use(
         return Promise.reject(error);
       } finally {
         isRefreshing = false;
+      }
+    }
+
+    const detail = error.response?.data?.detail;
+    if (
+      error.response?.status === 403 &&
+      typeof detail === 'string' &&
+      detail.startsWith('AI_CONSENT_REQUIRED') &&
+      !originalRequest?._aiConsentRetry &&
+      _onAiConsentRequired
+    ) {
+      const allowed = await _onAiConsentRequired();
+      if (allowed) {
+        originalRequest._aiConsentRetry = true;
+        return api(originalRequest);
       }
     }
 

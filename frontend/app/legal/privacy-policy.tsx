@@ -69,7 +69,7 @@ export default function PrivacyPolicyScreen() {
           • Legal & regulatory compliance (subpoenas, tax filing, medical record retention).{"\n"}
           • Billing, payments, and GST invoicing.{"\n"}
           • Marketing communications (only with your consent; you can opt out anytime).{"\n\n"}
-          We do NOT use Clinical Content (PHI) to train any general-purpose AI model. AI features are stateless calls to OpenAI / Anthropic / Google with no training opt-in.
+          We do NOT use Clinical Content (PHI) to train any AI model. AI features run only after you allow them, and are request-by-request calls to Anthropic and OpenAI — see section 8.
         </Section>
 
         <Section title="6. Sharing & sub-processors">
@@ -80,7 +80,7 @@ export default function PrivacyPolicyScreen() {
           • Google Workspace SMTP — transactional email{"\n"}
           • Twilio Verify / MSG91 — mobile-OTP{"\n"}
           • Stripe — payments & subscriptions{"\n"}
-          • OpenAI / Anthropic / Google (via Emergent LLM key) — AI prompts (anonymised where possible){"\n"}
+          • Anthropic (Claude) and OpenAI (GPT) — AI features, only with your consent; patient identifiers removed (see section 8){"\n"}
           • Apple APNs, Google FCM — push notifications{"\n"}
           • Sentry — crash & error monitoring{"\n"}
           • Expo Application Services — mobile build & OTA delivery{"\n\n"}
@@ -91,12 +91,19 @@ export default function PrivacyPolicyScreen() {
           Implanr is operated from India. If you access the Service from outside India, your data will be transferred to and processed on servers in India / our region. Where required, we use Standard Contractual Clauses or equivalent safeguards under DPDP § 16 and GDPR.
         </Section>
 
-        <Section title="8. AI processing of your data">
-          Implanr uses third-party LLM providers via the Emergent Universal LLM integration to power "Ask Implanr", implant recommendations, and explainable suggestions.{"\n\n"}
-          • We send only the minimum context needed.{"\n"}
-          • LLM providers have contractually agreed not to train on our prompts and to delete prompts within 30 days.{"\n"}
-          • AI suggestions are clinical decision support, not a substitute for professional judgment.{"\n"}
-          • You can disable AI features at Settings → AI Features → Off.
+        <Section title="8. AI features and third-party AI providers">
+          Some features use third-party AI services: the "Ask Implanr" assistant and chat, AI case summaries, surgical and exit notes, explanations of implant recommendations, and radiograph comparison notes.{"\n\n"}
+          Your permission first: the first time you use an AI feature, the app explains what is sent, who receives it and why, and asks you to Allow or Don't Allow. Nothing is sent to an AI provider unless you allow it. You can change your choice at any time in Profile → Privacy → AI features; if you turn it off, no further data is sent and the rest of the app keeps working.{"\n\n"}
+          What is sent:{"\n"}
+          • The question or request you type to the AI assistant{"\n"}
+          • Clinical details of the case you are viewing — procedure type, teeth involved, measurements, risk factors, phase findings and notes{"\n"}
+          • Radiograph images, only when you use radiograph comparison{"\n\n"}
+          What is NOT sent: patient identifiers. Before any request leaves our servers we remove the patient's name, phone number, email address, date of birth and address. We also never send your password or payment details.{"\n\n"}
+          Who receives it:{"\n"}
+          • Anthropic, PBC (Claude) — assistant, chat, summaries, notes and explanations{"\n"}
+          • OpenAI, L.L.C. (GPT) — radiograph comparison notes{"\n\n"}
+          How they protect it: data is sent over encrypted connections under each provider's commercial API terms. The providers process it only to return the AI response, do not use it to train their models, and keep it only for a limited period for abuse and safety monitoring. These protections are equal to or stronger than our own.{"\n\n"}
+          Why: to generate the summaries, answers, explanations and draft notes you ask for. AI output is clinical decision support only and is not a substitute for professional judgment.
         </Section>
 
         <Section title="9. Data retention">
@@ -124,7 +131,7 @@ export default function PrivacyPolicyScreen() {
           Under DPDP Act 2023 (and GDPR / HIPAA where applicable):{"\n\n"}
           • Access — Settings → Account → Download my data{"\n"}
           • Correct — Settings → Profile → Edit, or contact your workspace admin{"\n"}
-          • Erase — Settings → Account → Delete account (90-day soft-delete; instant hard-delete on request){"\n"}
+          • Erase — Profile → Delete Account. Your account and personal data are deleted permanently and immediately; patient case records stay with your college / clinic as required by medical-record retention law{"\n"}
           • Withdraw consent — Settings → Privacy → Manage consents, or email admin@implanr.com{"\n"}
           • Data portability — Settings → Account → Export data (JSON){"\n"}
           • Nominate a representative — Settings → Account → Nominee{"\n"}

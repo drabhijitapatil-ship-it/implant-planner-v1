@@ -11,6 +11,7 @@ import {
   Animated,
   Pressable,
   Image,
+  Keyboard,
 } from "react-native";
 import ScrollView from "@/components/KeyboardAwareScrollView";
 import { LinearGradient } from "expo-linear-gradient";
@@ -159,6 +160,9 @@ export default function LoginScreen() {
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            // Extra room so the "Log In" button below the password field stays
+            // visible with the keyboard open, not just the focused field.
+            keyboardBottomOffset={140}
           >
             <View style={styles.innerContainer}>
               <View style={styles.bgWaveBottom} />
@@ -240,6 +244,10 @@ export default function LoginScreen() {
                       placeholderTextColor="#94A3B8"
                       value={email}
                       onChangeText={(text) => {
+                        // Autofill (password manager / keychain) fills in one
+                        // jump; if the password is already there too, close the
+                        // keyboard so the Log In button isn't hidden behind it.
+                        if (text.length - email.length > 1 && password) Keyboard.dismiss();
                         setEmail(text);
                         if (emailError) setEmailError(null);
                         if (generalError) setGeneralError(null);
@@ -255,6 +263,12 @@ export default function LoginScreen() {
                       keyboardType="email-address"
                       autoCapitalize="none"
                       autoCorrect={false}
+                      autoComplete="username"
+                      textContentType="username"
+                      importantForAutofill="yes"
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => passwordInputRef.current?.focus()}
                       data-testid="login-email-input"
                     />
                   </View>
@@ -304,6 +318,9 @@ export default function LoginScreen() {
                       placeholderTextColor="#94A3B8"
                       value={password}
                       onChangeText={(text) => {
+                        // Autofilled in one jump (not typed) → close the keyboard
+                        // so the Log In button is visible.
+                        if (text.length - password.length > 1) Keyboard.dismiss();
                         setPassword(text);
                         if (passwordError) setPasswordError(null);
                         if (generalError) setGeneralError(null);
@@ -318,8 +335,14 @@ export default function LoginScreen() {
                       onBlur={() => setPasswordFocus(false)}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      autoComplete="off"
+                      autoComplete="password"
                       textContentType="password"
+                      importantForAutofill="yes"
+                      returnKeyType="go"
+                      onSubmitEditing={() => {
+                        Keyboard.dismiss();
+                        handleLogin();
+                      }}
                       data-testid="login-password-input"
                     />
                   </View>

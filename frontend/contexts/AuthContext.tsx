@@ -18,6 +18,8 @@ interface User {
    *  Distinct from `role`: an is_admin user can create/edit departments and
    *  assign any user (incl. Implant In-Charges) to any department. */
   is_admin?: boolean;
+  /** AI features consent: null = not asked yet, true = allowed, false = declined. */
+  ai_consent?: boolean | null;
   /** Department this user is scoped to. Null/undefined = org-wide (the
    *  behavior every account had before departments existed). */
   department_id?: string | null;

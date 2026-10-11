@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import AiConsentGate from '../components/AiConsentGate';
 import { Stack, router, usePathname } from 'expo-router';
 import { View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
@@ -75,6 +76,7 @@ export default function RootLayout() {
               <Stack.Screen name="onboarding" options={{ headerShown: false }} />
               <Stack.Screen name="help-workflow" options={{ headerShown: false }} />
               <Stack.Screen name="whatsnew" options={{ headerShown: false }} />
+              <Stack.Screen name="delete-account" options={{ headerShown: false }} />
               <Stack.Screen name="admin/audit-log" options={{ headerShown: false }} />
               <Stack.Screen name="admin/departments" options={{ headerShown: false }} />
               <Stack.Screen name="admin/department-stats" options={{ headerShown: false }} />
@@ -101,6 +103,7 @@ export default function RootLayout() {
               <Stack.Screen name="analytics/guide" options={{ headerShown: false }} />
             </Stack>
             <AttachPickerModalRoot />
+            <AiConsentGate />
           </ActivityTracker>
         </TabletFrame>
       </AuthProvider>

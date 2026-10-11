@@ -1257,15 +1257,20 @@ export default function ProcedureDetailScreen() {
     // Students and nurses cannot approve
     if (user?.role === "nurse" || user?.role === "student") return false;
 
-    // Faculty & Org Admins always have approval authority on pending cases
-    const isFacultyOrAdmin =
-      user?.is_admin ||
-      user?.role === "administrator" ||
-      user?.role === "implant_incharge" ||
-      user?.role === "supervisor" ||
-      user?.role === "chief_dentist";
-
-    if (!isFacultyOrAdmin) return false;
+    // Only the people NAMED on the case approve it — the assigned supervisor
+    // and the assigned In-Charge (or the In-Charge who created it with no
+    // separate supervisor). Other In-Charges / admins can view & edit only.
+    // Mirrors _check_user_approval_rights on the backend.
+    const uid = String(user?.id || (user as any)?._id || "");
+    const idOf = (v: any) => (v && typeof v === "object" ? String(v._id || v.id || "") : String(v || ""));
+    const supId = idOf(procedure.supervisor_id);
+    const incId = idOf(procedure.implant_incharge_id);
+    const selfCreatedIncharge =
+      ["implant_incharge", "chief_dentist"].includes(procedure.created_by_role) &&
+      idOf(procedure.created_by_id) === uid &&
+      (!supId || supId === uid);
+    const isNamedApprover = !!uid && (uid === supId || uid === incId || selfCreatedIncharge);
+    if (!isNamedApprover) return false;
 
     const PENDING = new Set([
       "pending_phase1",

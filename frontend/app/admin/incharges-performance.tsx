@@ -29,6 +29,8 @@ type InchargeRow = {
   total: number;
   completed: number;
   pending: number;
+  /** Cases this In-Charge is named on (as In-Charge or supervisor). */
+  supervised?: number;
   rejected?: number;
   students_count?: number;
   supervisors_count?: number;
@@ -244,7 +246,8 @@ export default function InchargesPerformanceScreen() {
                     </View>
                   )}
                   <View style={s.stats}>
-                    <View style={s.chip}><Text style={[s.chipT, { color: '#1A73E8' }]}>{ic.total} cases</Text></View>
+                    <View style={s.chip}><Text style={[s.chipT, { color: '#1A73E8' }]}>{ic.total} total</Text></View>
+                    <View style={s.chip}><Text style={[s.chipT, { color: '#6A1B9A' }]}>{ic.supervised ?? 0} supervised</Text></View>
                     <View style={s.chip}><Text style={[s.chipT, { color: '#4CAF50' }]}>{ic.completed} completed</Text></View>
                     <View style={s.chip}><Text style={[s.chipT, { color: '#FF9800' }]}>{ic.pending} pending</Text></View>
                     <View style={s.chip}><Text style={[s.chipT, { color: '#00695C' }]}>{ic.students_count || 0} students</Text></View>

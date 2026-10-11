@@ -91,8 +91,9 @@ export const isNeedsMyAction = (p: any, user: any): boolean => {
   const s = p.status || "";
 
   if (role === "supervisor") {
+    // Only cases this supervisor is named on (they're the ones they can approve).
     const isAssigned = p.supervisor_id === uid || p.created_by_id === uid;
-    if (!isAssigned && !user.is_admin) return false;
+    if (!isAssigned) return false;
     return (
       s === "pending_phase1" ||
       s === "pending_phase2" ||
@@ -107,6 +108,13 @@ export const isNeedsMyAction = (p: any, user: any): boolean => {
   }
 
   if (role === "implant_incharge") {
+    // Referral waiting for a department In-Charge to assign it — any In-Charge
+    // of that department can act on it.
+    if (p.active_referral?.status === "pending_assignment") return true;
+    // Approvals: only cases where this In-Charge is the named In-Charge (or
+    // named supervisor). Others can still open/edit, but can't approve.
+    const isNamed = p.implant_incharge_id === uid || p.supervisor_id === uid;
+    if (!isNamed) return false;
     return (
       s === "pending_phase1" ||
       s === "pending_phase2" ||

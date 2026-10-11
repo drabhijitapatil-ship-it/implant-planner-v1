@@ -1603,14 +1603,13 @@ function InChargeDashboard({
           )}
 
           {/* Supervisor Performance */}
-          {(stats.supervisor_stats || []).length > 0 && (
-            <SupervisorPerformanceSection
-              rows={(stats.supervisor_stats || []).filter(
-                (sp: any) => sp.supervisor_name,
-              )}
-              router={router}
-            />
-          )}
+          {/* Always shown to In-Charge / admin (empty state when the org has no supervisors yet). */}
+          <SupervisorPerformanceSection
+            rows={(stats.supervisor_stats || []).filter(
+              (sp: any) => sp.supervisor_name,
+            )}
+            router={router}
+          />
 
           {/* Implant In-Charge Performance — College Admin only; backend
               only populates incharge_stats for role === "administrator". */}
@@ -2106,7 +2105,12 @@ function SupervisorPerformanceSection({
           testID="supervisor-leaderboard-toggle"
         />
       </View>
-      {leaderboard && <LeaderboardLegend />}
+      {leaderboard && rows.length > 0 && <LeaderboardLegend />}
+      {rows.length === 0 && (
+        <Text style={{ fontSize: 12, color: "#90A4AE", paddingVertical: 6 }} testID="supervisor-perf-empty">
+          No supervisors in this department yet.
+        </Text>
+      )}
       {shown.map((sp: any, idx: number) => {
         const sid = sp.supervisor_id;
         const onPress = sid
@@ -2392,9 +2396,16 @@ function InchargePerformanceSection({
                 </View>
               )}
               <View style={s.perfStats}>
+                {/* Total = actual cases in their department/unit;
+                    Supervised = cases they're named on (In-Charge/supervisor). */}
                 <View style={s.perfChip}>
                   <Text style={[s.perfChipText, { color: "#1A73E8" }]}>
-                    {ic.total} cases
+                    {ic.total} total
+                  </Text>
+                </View>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#6A1B9A" }]}>
+                    {ic.supervised ?? 0} supervised
                   </Text>
                 </View>
                 <View style={s.perfChip}>

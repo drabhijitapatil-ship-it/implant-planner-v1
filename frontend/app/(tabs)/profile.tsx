@@ -12,7 +12,10 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   Platform,
+  Switch,
 } from 'react-native';
+import { requestAiConsent } from '../../utils/api';
+import { saveAiConsent } from '../../components/AiConsentGate';
 import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,7 +32,25 @@ import AssistantLogbookCard from '../../components/AssistantLogbookCard';
 const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function ProfileScreen() {
-  const { user, logout, updateProfilePhoto } = useAuth();
+  const { user, logout, updateProfilePhoto, refreshUser } = useAuth();
+  const [aiSaving, setAiSaving] = useState(false);
+  // Profile → Privacy → AI features. Turning ON shows the full consent
+  // screen (what is sent / to whom / why) before anything is allowed.
+  const toggleAiConsent = async (next: boolean) => {
+    setAiSaving(true);
+    try {
+      if (next) {
+        await requestAiConsent();
+      } else {
+        await saveAiConsent(false);
+        await refreshUser().catch(() => null);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not update your AI preference. Please try again.');
+    } finally {
+      setAiSaving(false);
+    }
+  };
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [org, setOrg] = useState<any>(null);
@@ -579,6 +600,33 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* Section: Privacy — AI features consent (App Store 5.1.1 / 5.1.2) */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Privacy</Text>
+          <View style={[styles.rowItem, styles.rowItemLast]} data-testid="ai-consent-row">
+            <View style={[styles.iconBadge, { backgroundColor: '#E3F2FD' }]}>
+              <Ionicons name="sparkles" size={20} color="#1565C0" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.photoButtonText}>AI features</Text>
+              <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                {user?.ai_consent
+                  ? 'On — de-identified case data is sent to Anthropic / OpenAI for AI answers'
+                  : 'Off — no data is sent to AI providers'}
+              </Text>
+            </View>
+            {aiSaving ? (
+              <ActivityIndicator size="small" color="#1565C0" />
+            ) : (
+              <Switch
+                value={!!user?.ai_consent}
+                onValueChange={toggleAiConsent}
+                testID="ai-consent-switch"
+              />
+            )}
+          </View>
+        </View>
+
         {/* Section: Legal */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Legal</Text>
@@ -609,6 +657,19 @@ export default function ProfileScreen() {
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out" size={20} color="#DC2626" />
           <Text style={styles.logoutButtonText}>Logout</Text>
+        </TouchableOpacity>
+
+        {/* Self-service account deletion (App Store Guideline 5.1.1(v)). */}
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: -16, marginBottom: 32, paddingVertical: 12 }}
+          onPress={() => router.push('/delete-account' as any)}
+          testID="profile-delete-account"
+          data-testid="profile-delete-account"
+        >
+          <Ionicons name="trash-outline" size={16} color="#94A3B8" />
+          <Text style={{ color: '#64748B', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' }}>
+            Delete Account
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 

@@ -546,6 +546,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         await _touch_last_active(user)
+        _AI_CONSENT.set(bool(user.get("ai_consent")))
         user["_id"] = str(user["_id"])
         user["_original_role"] = user.get("role", "")
         # super_admin is a platform-wide role with no org_id of its own. It is never
@@ -644,6 +645,9 @@ class UserResponse(BaseModel):
     # haven't seen any → frontend shows the most-recent changelog entry before
     # routing to dashboard. Bumped by POST /api/whatsnew/ack.
     last_seen_whatsnew_version: Optional[str] = None
+    # AI features consent (App Store 5.1.1/5.1.2): None = not asked yet,
+    # True = allowed, False = declined. Set via POST /api/ai/consent.
+    ai_consent: Optional[bool] = None
 
 class ChecklistItem(BaseModel):
     id: Optional[str] = None
@@ -2024,6 +2028,7 @@ async def login(request: Request, user: UserLogin):
         role=db_user["role"],
         profile_photo=db_user.get("profile_photo"),
         is_admin=db_user.get("is_admin", False),
+        ai_consent=db_user.get("ai_consent"),
         **dept_fields,
     )
 
@@ -2066,6 +2071,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         workflow_seen_at=current_user.get("workflow_seen_at"),
         workflow_seen_version=current_user.get("workflow_seen_version", 0),
         last_seen_whatsnew_version=current_user.get("last_seen_whatsnew_version"),
+        ai_consent=current_user.get("ai_consent"),
         org_id=org_id,
         org_type=org_type,
         org_name=org_name,
@@ -2275,6 +2281,68 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
         return {"message": "Logged out successfully"}
     except Exception:
         return {"message": "Logged out"}
+
+# --- Self-service account deletion (App Store Guideline 5.1.1(v)) ---
+class DeleteAccountBody(BaseModel):
+    password: str = Field(..., min_length=1, max_length=128)
+    confirm: str = Field(..., max_length=20)  # must be "DELETE"
+
+
+@api_router.post("/auth/delete-account")
+async def delete_own_account(
+    body: DeleteAccountBody,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_user: dict = Depends(get_current_user),
+):
+    """Permanently delete the signed-in user's own account.
+
+    Deleted: the user record (name, email, username, password, photo, push
+    token, preferences), sessions, notifications, saved tips/tip history,
+    chat read markers and pending OTPs. Forum/chat authorship is anonymised
+    to "Deleted user" so shared discussions stay readable.
+    Retained: patient case records — they are the institution's clinical
+    records and must be kept under medical-record retention law; they keep
+    the name as it was entered on the case."""
+    if (body.confirm or "").strip().upper() != "DELETE":
+        raise HTTPException(status_code=400, detail='Type DELETE to confirm account deletion.')
+    uid = current_user["_id"]
+    db_user = await db.users.find_one({"_id": ObjectId(uid)})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if not db_user.get("password_hash") or not verify_password(body.password, db_user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    email = (db_user.get("email") or "").lower()
+    # Personal data
+    await db.refresh_tokens.delete_many({"user_id": uid})
+    await db.notifications.delete_many({"user_id": uid})
+    await db.tip_saves.delete_many({"user_id": uid})
+    await db.tip_history.delete_many({"user_id": uid})
+    await db.chat_group_reads.delete_many({"user_id": uid})
+    if email:
+        await db.otp_verifications.delete_many({"email": email})
+    # Anonymise authorship in shared discussions
+    await db.forum_posts.update_many({"author_id": uid}, {"$set": {"author_name": "Deleted user"}})
+    await db.chat_messages.update_many({"author_id": uid}, {"$set": {"author_name": "Deleted user"}})
+    await db.forum_threads.update_many({"shared_by_id": uid}, {"$set": {"shared_by_name": "Deleted user"}})
+    # The account itself
+    await db.users.delete_one({"_id": ObjectId(uid)})
+
+    # Revoke the token used for this request.
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("jti"):
+            token_blocklist.add(payload["jti"])
+    except Exception:
+        pass
+    await log_access(
+        action="account_deleted", resource_type="user", resource_id=uid,
+        user={"_id": uid, "name": None, "role": current_user.get("role")}, request=request,
+        extra={"was_org_admin": bool(db_user.get("is_admin")), "org_id": db_user.get("org_id")},
+    )
+    return {"message": "Your account has been deleted."}
+
 
 # --- Token Refresh ---
 class RefreshTokenRequest(BaseModel):
@@ -12531,6 +12599,75 @@ except ImportError:
         class ImageContent(_AIStub): pass  # type: ignore[no-redef]
 
 
+# ── AI consent + outgoing de-identification (App Store 5.1.1(i) / 5.1.2(i)) ──
+# Every AI request in the app goes through LlmChat.send_message, so it is
+# guarded here once:
+#   1. No data leaves unless the requesting user has allowed AI features
+#      (`ai_consent`), set per request in get_current_user. Requests without
+#      a user context (background jobs) are blocked too.
+#   2. Patient identifiers are scrubbed from the OUTGOING prompt and system
+#      message (name, phone, email, DOB, address) using the case(s) the
+#      endpoint loaded (registered via _ai_track_proc) plus generic patterns.
+#      Previously only AI *responses* were scrubbed.
+import contextvars as _contextvars
+_AI_CONSENT: "_contextvars.ContextVar[bool]" = _contextvars.ContextVar("ai_consent", default=False)
+_AI_PHI_PROCS: "_contextvars.ContextVar[tuple]" = _contextvars.ContextVar("ai_phi_procs", default=())
+AI_CONSENT_REQUIRED = "AI_CONSENT_REQUIRED"
+
+
+def _ai_track_proc(proc: Optional[dict]) -> None:
+    """Register a case whose identifiers must be scrubbed from AI prompts."""
+    if proc:
+        _AI_PHI_PROCS.set(_AI_PHI_PROCS.get() + (proc,))
+
+
+def _ai_scrub_outgoing(text: Any) -> Any:
+    if not isinstance(text, str) or not text:
+        return text
+    import re as _re
+    # Emails first (before name tokens, which may sit inside an address).
+    text = _re.sub(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", "[email redacted]", text)
+    # Phone numbers in any grouping, e.g. "+91 98765 43210", "98765-43210":
+    # a run of digits/spaces/hyphens/brackets holding 10+ digits.
+    def _phone(m):
+        return "[phone redacted]" if sum(ch.isdigit() for ch in m.group(0)) >= 10 else m.group(0)
+    text = _re.sub(r"(?<![\w.])\+?\(?\d[\d\s()\-]{8,}\d(?![\w.])", _phone, text)
+    procs = _AI_PHI_PROCS.get() or ({"_generic": True},)  # generic phone/email/DOB patterns always
+    for proc in procs:
+        try:
+            text = _redact_phi_from_ai_text(text, proc)
+        except Exception:
+            pass
+    return text
+
+
+if hasattr(LlmChat, "send_message") and not getattr(LlmChat, "_consent_guarded", False):
+    _llm_original_send = LlmChat.send_message
+
+    async def _llm_guarded_send(self, message, *a, **kw):
+        if not _AI_CONSENT.get():
+            raise HTTPException(
+                status_code=403,
+                detail=f"{AI_CONSENT_REQUIRED}: AI features are turned off. Turn them on in Profile → Privacy → AI features to use this.",
+            )
+        try:
+            if hasattr(message, "text"):
+                message.text = _ai_scrub_outgoing(message.text)
+            for attr in ("_system_message", "system_message"):
+                if isinstance(getattr(self, attr, None), str):
+                    setattr(self, attr, _ai_scrub_outgoing(getattr(self, attr)))
+            for m in getattr(self, "_messages", None) or []:
+                if isinstance(m, dict) and isinstance(m.get("content"), str):
+                    m["content"] = _ai_scrub_outgoing(m["content"])
+        except Exception as exc:  # never send unscrubbed text silently
+            logging.error("AI outgoing scrub failed: %s", exc)
+            raise HTTPException(status_code=500, detail="Could not prepare AI request safely")
+        return await _llm_original_send(self, message, *a, **kw)
+
+    LlmChat.send_message = _llm_guarded_send  # type: ignore[assignment]
+    LlmChat._consent_guarded = True  # type: ignore[attr-defined]
+
+
 def _redact_phi_from_ai_text(text: str, proc: Optional[dict]) -> str:
     """iter-339 HIPAA: redact all patient PHI identifiers from an AI response.
     Belt-and-braces net that runs on every AI response before the DB stores it
@@ -12713,6 +12850,7 @@ def _build_case_context(proc: dict) -> str:
     intentionally NOT sent to the AI. The LLM only sees 'the patient' +
     demographic minimums (age/sex/profession) that are clinically relevant.
     Full identity stays server-side."""
+    _ai_track_proc(proc)
     parts = [f"Patient: the patient, Age: {proc.get('age','N/A')}, Sex: {proc.get('sex','N/A')}"]
     if proc.get('profession'):
         parts.append(f"Profession: {proc.get('profession')}")
@@ -13094,6 +13232,7 @@ async def _build_case_context_full(proc: dict, current_user: Optional[dict]) -> 
     """`_build_case_context` augmented with role/phase + Smart Tips + program
     stats + implant alternatives + workflow-graph blocks. Returns the full
     string to feed into the Implanr AI prompt."""
+    _ai_track_proc(proc)
     base = _build_case_context(proc)
     role_block = _build_role_and_phase_block(proc, current_user)
     tips_block = await _build_smart_tips_block(proc)
@@ -13259,6 +13398,7 @@ async def ai_explain_recommendation(request: Request, current_user: dict = Depen
     implant_index = body.get("implant_index", 0)
     
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    _ai_track_proc(proc)
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     await _assert_procedure_org_access(proc, current_user)
@@ -13487,6 +13627,7 @@ Rules:
 
 async def _ensure_exit_summary(procedure_id: str, proc: dict, current_user: dict, force: bool = False) -> str:
     """Idempotently generate + persist the AI Exit Summary. Returns the text."""
+    _ai_track_proc(proc)
     existing = proc.get("ai_exit_summary") or {}
     if not force and isinstance(existing, dict) and existing.get("text"):
         return existing["text"]
@@ -13748,6 +13889,7 @@ async def generate_radiograph_ai_notes(
     The frontend lets the primary student, supervisor, or implant in-charge
     edit the saved text afterwards via the PUT endpoint below."""
     procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    _ai_track_proc(procedure)
     if not procedure:
         raise HTTPException(status_code=404, detail="Procedure not found")
     await _assert_procedure_org_access(procedure, current_user)
@@ -14679,6 +14821,7 @@ async def ai_ask_implanr(request: Request, current_user: dict = Depends(get_curr
     if procedure_id and not system_key:
         try:
             proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0, "implant_plans": 1})
+            _ai_track_proc(proc)
             if proc and proc.get("implant_plans"):
                 p0 = proc["implant_plans"][0]
                 case_system = f"{p0.get('brand','')}|{p0.get('system','')}".strip("|")
@@ -14870,6 +15013,7 @@ async def ai_case_summary(request: Request, current_user: dict = Depends(get_cur
     procedure_id = body.get("procedure_id")
 
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    _ai_track_proc(proc)
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
 
@@ -15030,6 +15174,7 @@ async def ai_surgical_notes(request: Request, current_user: dict = Depends(get_c
     procedure_id = body.get("procedure_id")
     
     proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)}, {"_id": 0})
+    _ai_track_proc(proc)
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
@@ -15302,12 +15447,36 @@ class AIChatMessage(BaseModel):
     message: str
 
 
+
+class AIConsentBody(BaseModel):
+    granted: bool
+
+
+@api_router.get("/ai/consent")
+async def get_ai_consent(current_user: dict = Depends(get_current_user)):
+    return {"ai_consent": current_user.get("ai_consent"), "ai_consent_at": current_user.get("ai_consent_at")}
+
+
+@api_router.post("/ai/consent")
+async def set_ai_consent(body: AIConsentBody, request: Request, current_user: dict = Depends(get_current_user)):
+    """Record the user's choice on the AI-features consent screen (or the
+    Profile → Privacy toggle). Audit-logged."""
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"_id": ObjectId(current_user["_id"])},
+        {"$set": {"ai_consent": bool(body.granted), "ai_consent_at": now, "ai_consent_version": 1}},
+    )
+    await log_access(action="ai_consent_granted" if body.granted else "ai_consent_declined",
+                     resource_type="user", resource_id=current_user["_id"], user=current_user, request=request)
+    return {"ai_consent": bool(body.granted), "ai_consent_at": now.isoformat()}
+
 @api_router.post("/ai/chat")
 async def ai_chat(body: AIChatMessage, current_user: dict = Depends(get_current_user)):
     """Implanr AI chat — context-aware clinical assistant."""
     if current_user.get("role") in _AI_BLOCKED_ROLES:
         raise HTTPException(status_code=403, detail="AI features not available for this role")
     proc = await db.procedures.find_one({"_id": ObjectId(body.procedure_id)}, {"_id": 0})
+    _ai_track_proc(proc)
     if not proc:
         raise HTTPException(status_code=404, detail="Procedure not found")
     
@@ -17519,22 +17688,11 @@ def _check_user_approval_rights(procedure: dict, current_user: dict):
     is_supervisor = bool(cur_user_id and sup_id and cur_user_id == sup_id)
     is_implant_incharge = bool(cur_user_id and inc_id and cur_user_id == inc_id)
 
-    # Faculty & Org Admins (supervisors, implant_incharges, administrators) always have approval authority!
-    is_faculty_or_admin = (
-        current_user.get("role") in ("supervisor", "implant_incharge", "administrator", "chief_dentist") or
-        bool(current_user.get("is_admin"))
-    )
-
-    # An unassigned faculty member may still approve, but only in the ONE slot
-    # matching their role — never both. (Regression b67f6a43, Jul-2026, made
-    # every faculty approval count as supervisor AND in-charge, so an
-    # In-Charge approving first approved the whole phase and their comment
-    # showed as the supervisor's too.)
-    if is_faculty_or_admin and not (is_supervisor or is_implant_incharge):
-        if current_user.get("role") == "supervisor":
-            is_supervisor = True
-        else:
-            is_implant_incharge = True
+    # Only the people NAMED on the case approve it: the assigned supervisor
+    # and the assigned In-Charge (one person if they hold both). Other
+    # In-Charges / admins can view and edit the case but cannot approve it.
+    # (Regression b67f6a43, Jul-2026, had let any faculty approve — and as
+    # BOTH roles, so an In-Charge approving first approved the whole phase.)
 
     # In-Charge self-created shortcut (one click approves both slots) applies
     # only when no DIFFERENT supervisor is assigned. If the In-Charge picked
@@ -17833,10 +17991,10 @@ async def approve_procedure(
             implant_incharge_approved = procedure.get("implant_incharge_phase2_approved", False) or is_implant_incharge or (same_person_both_roles and is_supervisor)
             
             if supervisor_approved and implant_incharge_approved:
-                # Both approved - procedure complete!
+                # Both approved — Phase 2 is complete (NOT the whole treatment;
+                # "fully completed" is only announced after Phase 4).
                 update_fields["status"] = "phase2_approved"
                 update_fields["phase2_completed_at"] = datetime.utcnow()
-                update_fields["fully_completed_at"] = datetime.utcnow()
                 if _rx.has_drugs(procedure.get("prescription")):
                     update_fields["prescription"] = _rx.rx_mark_approved(
                         procedure.get("prescription"),
@@ -17846,7 +18004,7 @@ async def approve_procedure(
                 await db.notifications.insert_one({
                     "user_id": procedure["student_id"],
                     "procedure_id": procedure_id,
-                    "message": "🎉 Procedure completed! Phase 2 (Surgical) approved by both reviewers.",
+                    "message": f"✅ Phase 2 (Implant Surgery) completed for {procedure['patient_name']} — approved by both reviewers. You can now proceed to Phase 3.",
                     "type": "approved",
                     "read": False,
                     "created_at": datetime.utcnow()
@@ -17854,9 +18012,9 @@ async def approve_procedure(
                 # Push notify student of completion
                 await send_expo_push_notifications(
                     [procedure["student_id"]],
-                    "Procedure Complete!",
-                    f"Stage 1 Implant Placement for {procedure['patient_name']} done successfully!",
-                    {"procedure_id": procedure_id, "type": "completed"},
+                    "Phase 2 Completed",
+                    f"Phase 2 (Implant Surgery) for {procedure['patient_name']} approved. You can now proceed to Phase 3.",
+                    {"procedure_id": procedure_id, "type": "approved", "phase": 2},
                     redact=[procedure['patient_name']],
                 )
                 
@@ -17864,7 +18022,7 @@ async def approve_procedure(
                 await db.notifications.insert_one({
                     "user_id": procedure["supervisor_id"],
                     "procedure_id": procedure_id,
-                    "message": f"Procedure for {procedure['patient_name']} fully completed",
+                    "message": f"Phase 2 (Implant Surgery) completed for {procedure['patient_name']} — approved by both reviewers",
                     "type": "approved",
                     "read": False,
                     "created_at": datetime.utcnow()
@@ -17873,7 +18031,7 @@ async def approve_procedure(
                 await db.notifications.insert_one({
                     "user_id": procedure["implant_incharge_id"],
                     "procedure_id": procedure_id,
-                    "message": f"Procedure for {procedure['patient_name']} fully completed",
+                    "message": f"Phase 2 (Implant Surgery) completed for {procedure['patient_name']} — approved by both reviewers",
                     "type": "approved",
                     "read": False,
                     "created_at": datetime.utcnow()
@@ -21045,7 +21203,8 @@ async def _incharge_department_snapshot(current_user: dict) -> List[Dict[str, An
             continue
         agg_doc = None
         async for r in db.procedures.aggregate([
-            {"$match": {"student_id": {"$in": student_ids}, "archived": {"$ne": True}}},
+            # "Total" = actual cases in the department/unit (drafts excluded).
+            {"$match": {"student_id": {"$in": student_ids}, "archived": {"$ne": True}, "status": {"$ne": "draft"}}},
             {"$group": {
                 "_id": None,
                 "total": {"$sum": 1},
@@ -21071,6 +21230,20 @@ async def _incharge_department_snapshot(current_user: dict) -> List[Dict[str, An
             dept_names[str(dep["_id"])] = dep.get("name")
             if dep.get("color"):
                 dept_colors[str(dep["_id"])] = dep.get("color")
+
+    # "Supervised" = actual cases each In-Charge is NAMED on (as In-Charge or
+    # supervisor), across any department — the cases they personally oversee.
+    ic_ids = [ic["id"] for ic in incharges]
+    supervised_by: Dict[str, int] = {}
+    if ic_ids:
+        async for r in db.procedures.aggregate([
+            {"$match": {"archived": {"$ne": True}, "status": {"$ne": "draft"},
+                        "$or": [{"implant_incharge_id": {"$in": ic_ids}}, {"supervisor_id": {"$in": ic_ids}}]}},
+            {"$project": {"who": {"$setIntersection": [[{"$ifNull": ["$implant_incharge_id", ""]}, {"$ifNull": ["$supervisor_id", ""]}], ic_ids]}}},
+            {"$unwind": "$who"},
+            {"$group": {"_id": "$who", "n": {"$sum": 1}}},
+        ]):
+            supervised_by[str(r["_id"])] = r["n"]
 
     incharge_stats: List[Dict[str, Any]] = []
     for ic in incharges:
@@ -21099,6 +21272,7 @@ async def _incharge_department_snapshot(current_user: dict) -> List[Dict[str, An
             "department_name": departments[0]["department_name"] if departments else None,
             "department_color": departments[0]["department_color"] if departments else None,
             "total": total,
+            "supervised": supervised_by.get(ic["id"], 0),
             "completed": completed,
             "pending": pending,
             "rejected": rejected,
@@ -21158,7 +21332,13 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         if role == "supervisor":
             my_pending = await db.procedures.count_documents({"supervisor_id": user_id, "status": {"$in": pending_statuses}})
         else:
-            my_pending = await db.procedures.count_documents({**(await _org_scope_match(current_user)), "status": {"$in": pending_statuses}})
+            # Only cases this user is NAMED on — the ones they can actually
+            # approve (other In-Charges can view/edit but not approve).
+            my_pending = await db.procedures.count_documents({
+                "$or": [{"implant_incharge_id": user_id}, {"supervisor_id": user_id}],
+                "status": {"$in": pending_statuses},
+                "archived": {"$ne": True},
+            })
         result["pending_my_approval"] = my_pending
 
         # Student + Supervisor performance stats — In-Charge/Admin see their
@@ -21278,7 +21458,20 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                     _role_by_sup_id[str(u["_id"])] = normalize_role(u.get("role") or "")
                 supervisor_stats = [r for r in supervisor_stats if _role_by_sup_id.get(r.get("supervisor_id")) == "supervisor"]
 
-            supervisor_stats.sort(key=lambda x: x["total"], reverse=True)
+            # Every supervisor in scope, even with no cases yet — otherwise the
+            # whole Supervisor Performance section vanished from Home when no
+            # supervisor had a case (same fix as student_stats above).
+            _seen_sup = {r["supervisor_id"] for r in supervisor_stats}
+            _sup_q: Dict[str, Any] = {"role": "supervisor"}
+            if not current_user.get("is_super_admin"):
+                _sup_q.update(_dept_scope_query(current_user))
+            async for u in db.users.find(_sup_q, {"name": 1, "username": 1}):
+                sid = str(u["_id"])
+                if sid not in _seen_sup:
+                    supervisor_stats.append({"supervisor_id": sid, "supervisor_name": u.get("name") or u.get("username") or "Unknown",
+                                             "total": 0, "approved": 0, "rejected": 0, "pending": 0})
+
+            supervisor_stats.sort(key=lambda x: (-x["total"], (x["supervisor_name"] or "").lower()))
             result["supervisor_stats"] = supervisor_stats
 
             # iter-351: attach each student/supervisor's department so the
@@ -30167,6 +30360,7 @@ async def _generate_transfer_handoff_summary(proc: dict) -> str:
     """LLM-generated de-identified case brief for the receiving student.
     Strict PHI policy: age + sex only. No name, DOB, address, phone.
     """
+    _ai_track_proc(proc)
     # Build a de-identified payload. Field names must match this app's actual
     # procedure schema — NOT the "implants"/"phase1..4" shape from the other
     # instance's server.py; that shape doesn't exist here and silently reads
