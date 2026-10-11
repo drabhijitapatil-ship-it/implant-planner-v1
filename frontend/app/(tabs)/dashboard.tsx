@@ -1,9 +1,8 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
@@ -11,6 +10,7 @@ import {
   Alert,
   useWindowDimensions,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Calendar } from "react-native-calendars";
 import { format } from "date-fns";
@@ -1207,6 +1207,85 @@ function SupervisorDashboard({
 }
 
 // ── In-Charge / Admin Dashboard ───────────────────────────
+// Org admin only — "Departments & Units" home section: a preview row per
+// department / unit (members, cases, completion). Tapping a row opens the
+// statistics screen with that department expanded; "View all" opens the full
+// screen. Data: GET /org/department-stats (same as the stats screen).
+function DepartmentsUnitsSection({ router }: { router: any }) {
+  const { user } = useAuth();
+  const [rows, setRows] = useState<any[] | null>(null);
+  useEffect(() => {
+    if (!user?.is_admin) return;
+    let alive = true;
+    api
+      .get("/org/department-stats")
+      .then((r) => { if (alive) setRows(r.data?.departments || []); })
+      .catch(() => { if (alive) setRows([]); });
+    return () => { alive = false; };
+  }, [user?.is_admin]);
+  if (!user?.is_admin || !rows || rows.length === 0) return null;
+  const shown = rows.slice(0, 4);
+  return (
+    <View style={s.section} data-testid="home-dept-units-section">
+      <View style={s.sectionHeader}>
+        <Ionicons name="business-outline" size={18} color="#B8860B" />
+        <Text style={[s.sectionTitle, { color: "#8D6E00" }]}>Departments & Units</Text>
+      </View>
+      {shown.map((d: any) => {
+        const c = d.cases || {};
+        const completion = c.total > 0 ? `${Math.round((c.completed / c.total) * 100)}%` : "—";
+        return (
+          <TouchableOpacity
+            key={d.id}
+            style={s.perfCard}
+            activeOpacity={0.7}
+            onPress={() => router.push(`/admin/department-stats?dept=${encodeURIComponent(d.id)}`)}
+            data-testid={`home-dept-row-${d.id}`}
+            accessibilityRole="button"
+          >
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: d.color || "#90A4AE", marginRight: 10 }} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={[s.perfName, { flexShrink: 1 }]} numberOfLines={1}>{d.name}</Text>
+                {d.is_unit && (
+                  <View style={{ backgroundColor: "#EDE7F6", borderRadius: 5, paddingHorizontal: 5, paddingVertical: 1 }}>
+                    <Text style={{ fontSize: 9, fontWeight: "800", color: "#5E35B1", letterSpacing: 0.4 }}>UNIT</Text>
+                  </View>
+                )}
+              </View>
+              <View style={s.perfStats}>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#455A64" }]}>{d.members_total} members</Text>
+                </View>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#1A73E8" }]}>{c.total || 0} cases</Text>
+                </View>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#FF9800" }]}>{c.pending_approval || 0} pending</Text>
+                </View>
+                <View style={s.perfChip}>
+                  <Text style={[s.perfChipText, { color: "#4CAF50" }]}>{completion} done</Text>
+                </View>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />
+          </TouchableOpacity>
+        );
+      })}
+      <TouchableOpacity
+        style={s.showMoreBtn}
+        onPress={() => router.push("/admin/department-stats")}
+        data-testid="home-dept-view-all"
+      >
+        <Text style={s.showMoreText}>
+          {rows.length > shown.length ? `View all ${rows.length} departments & units` : "View statistics by role"}
+        </Text>
+        <Ionicons name="chevron-forward" size={14} color="#1A73E8" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 function InChargeDashboard({
   stats,
   procedures,
@@ -1366,6 +1445,9 @@ function InChargeDashboard({
               ))}
             </View>
           </View>
+
+          {/* Departments & Units — College / Org admin only */}
+          <DepartmentsUnitsSection router={router} />
 
           {/* Draft Cases */}
           {draftCases.length > 0 && (
@@ -1920,6 +2002,13 @@ function StudentPerformanceSection({
                     {st.active} active
                   </Text>
                 </View>
+                {typeof st.under_me === "number" && (
+                  <View style={s.perfChip}>
+                    <Text style={[s.perfChipText, { color: "#6A1B9A" }]}>
+                      {st.under_me} under you
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
             {onPress && (
@@ -2380,6 +2469,7 @@ function StatCard({
 }
 
 // ── Main Dashboard ────────────────────────────────────────
+
 export default function DashboardScreen() {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;

@@ -63,7 +63,13 @@ export default function ImplantTraceabilityCard({ traceability, labelFor }: {
 }
 
 const st = StyleSheet.create({
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 16, borderLeftWidth: 4, borderLeftColor: '#00897B' },
+  // Matches the case screen's `styles.section` cards (margins, padding, border,
+  // shadow) so it lines up with its neighbours instead of running edge-to-edge.
+  card: {
+    backgroundColor: '#FFF', borderRadius: 16, padding: 18, marginHorizontal: 12, marginBottom: 12,
+    borderWidth: 1, borderColor: '#E8EDF5', borderLeftWidth: 4, borderLeftColor: '#00897B',
+    shadowColor: '#1565C0', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 3,
+  },
   head: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   title: { fontSize: 16, fontWeight: '700', color: '#00695C' },
   row: { flexDirection: 'row', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#ECEFF1' },

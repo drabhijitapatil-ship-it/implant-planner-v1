@@ -8,10 +8,10 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
-  ScrollView,
   Alert,
   KeyboardAvoidingView,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Calendar } from 'react-native-calendars';

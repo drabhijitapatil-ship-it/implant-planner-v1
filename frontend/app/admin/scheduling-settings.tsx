@@ -1,8 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
-  TextInput, Switch, Alert, KeyboardAvoidingView, Platform, Modal, FlatList, Pressable, Image,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  TextInput,
+  Switch,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Modal,
+  FlatList,
+  Pressable,
+  Image,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';

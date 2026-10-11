@@ -7,12 +7,12 @@ import {
   Image,
   Modal,
   Pressable,
-  ScrollView,
   Platform,
   ActivityIndicator,
   TextInput,
   Alert,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 import { Ionicons } from "@expo/vector-icons";
 import api, { getAuthFileUrl } from "../utils/api";
 import { useAuth } from "../contexts/AuthContext";

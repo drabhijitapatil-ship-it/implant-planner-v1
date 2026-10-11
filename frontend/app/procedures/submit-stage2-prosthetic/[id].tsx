@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +11,8 @@ import {
   ActivityIndicator,
   Switch,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
+import IntraoralPhotosSection, { IntraoralPhotoSlots, emptyIntraoralSlots, slotsFromSaved, photosPayload } from '@/components/IntraoralPhotosSection';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api from "../../../utils/api";
@@ -122,6 +123,8 @@ export default function Phase4Step1Screen() {
   // iter-197: form-level Note to the Lab — same UX as the case-detail card.
   const [labSlipNote, setLabSlipNote] = useState("");
   const [studentNotes, setStudentNotes] = useState("");
+  // Patient intra-oral photographs for this phase (same UI as Phase 1).
+  const [intraoralPhotos, setIntraoralPhotos] = useState<IntraoralPhotoSlots>(emptyIntraoralSlots());
 
   // iter-210: Multi-Unit Abutment override editor for Phase 4 Step 1.
   // Phase 2 captures MUA at the time of immediate loading; the prosthodontist
@@ -188,6 +191,7 @@ export default function Phase4Step1Screen() {
   const [screenLoaded, setScreenLoaded] = useState(false);
   const draftKey = draftStorageKey("phase4step1", String(id), user?.id);
   const getDraftSnapshot = () => ({
+    intraoralPhotos,
     doneDate,
     finalProsthesis,
     prostheticMaterial,
@@ -244,6 +248,7 @@ export default function Phase4Step1Screen() {
     if (d.shadeNotes !== undefined) setShadeNotes(d.shadeNotes);
     if (d.labSlipNote !== undefined) setLabSlipNote(d.labSlipNote);
     if (d.studentNotes !== undefined) setStudentNotes(d.studentNotes);
+    if (d.intraoralPhotos !== undefined) setIntraoralPhotos(d.intraoralPhotos);
     if (d.muaRows !== undefined) setMuaRows(d.muaRows);
     if (d.muaTouched !== undefined) setMuaTouched(d.muaTouched);
     if (d.perImplantPlans !== undefined) setPerImplantPlans(d.perImplantPlans);
@@ -395,6 +400,7 @@ export default function Phase4Step1Screen() {
 
       // iter-Jun-2026 (v13, Chunk G, Ask 3): hydrate Intra-Oral Scan sub-fields.
       const p4 = procRes.data?.phase4_step1_data || {};
+      if (Array.isArray(p4.intraoral_photos) && p4.intraoral_photos.length) setIntraoralPhotos(slotsFromSaved(p4.intraoral_photos));
       if (p4.impression_type) setImpressionType(p4.impression_type);
       if (p4.conventional_tray_type)
         setConventionalTrayType(p4.conventional_tray_type);
@@ -708,6 +714,7 @@ export default function Phase4Step1Screen() {
       ).map((v) => (v || "").trim()),
       shade_notes: shadeNotes ? shadeNotes.trim() : null,
       shade_layout: isFullArch ? "full_arch" : "per_implant",
+      intraoral_photos: photosPayload(intraoralPhotos),
       student_notes: studentNotes || null,
     };
     if (isPerImplantMode) {
@@ -845,7 +852,10 @@ export default function Phase4Step1Screen() {
       const isInchargeSelfCreated =
         user?.role === "implant_incharge" &&
         procedure?.created_by_role === "implant_incharge" &&
-        user?.id === procedure?.created_by_id;
+        user?.id === procedure?.created_by_id &&
+        // Only when no DIFFERENT supervisor is assigned — otherwise the
+        // supervisor must approve separately (backend enforces the same rule).
+        (!procedure?.supervisor_id || procedure?.supervisor_id === user?.id);
       if (isInchargeSelfCreated) {
         try {
           await api.post(`/procedures/${id}/stage2/prosthetic/approve`, {
@@ -2315,6 +2325,13 @@ export default function Phase4Step1Screen() {
               </View>
             );
           })()}
+
+          {/* ── Patient Intra-oral Photograph (Phase 4) — same UI as Phase 1 ── */}
+          <IntraoralPhotosSection
+            value={intraoralPhotos}
+            onChange={setIntraoralPhotos}
+            testIDPrefix="phase4-intraoral"
+          />
 
           {/* ── Notes ── */}
           <View style={s.section}>

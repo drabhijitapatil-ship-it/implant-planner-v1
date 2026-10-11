@@ -19,13 +19,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   TextInput,
   ActivityIndicator,
   Alert,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 import Svg, {
   Path,
   Circle,

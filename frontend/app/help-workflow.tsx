@@ -5,8 +5,13 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -245,7 +250,7 @@ export default function HelpWorkflowScreen() {
                 <FeatureCard
                   icon="shield-checkmark-outline" tint="#475569"
                   title="HIPAA Safeguards"
-                  bullets={['15-min auto-logout on inactivity', 'Screen-capture blocking on Android', 'Append-only audit log']}
+                  bullets={['Secure sign-in with encrypted session tokens', 'Screen-capture blocking on Android', 'Append-only audit log']}
                 />
                 <View style={{ flex: 1 }} />
               </View>

@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Alert,
   Image,
   ActivityIndicator,
@@ -14,6 +13,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -604,10 +604,6 @@ export default function ProfileScreen() {
             <Text style={styles.photoButtonText}>Terms of Service</Text>
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
-          <View style={styles.legalFootnote}>
-            <Ionicons name="time-outline" size={12} color="#94A3B8" />
-            <Text style={styles.legalFootnoteText}>Auto-logout after 15 min of inactivity</Text>
-          </View>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>

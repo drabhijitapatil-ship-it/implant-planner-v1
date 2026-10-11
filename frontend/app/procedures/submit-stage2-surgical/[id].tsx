@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +14,8 @@ import {
   Linking,
   Modal,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
+import IntraoralPhotosSection, { IntraoralPhotoSlots, emptyIntraoralSlots, slotsFromSaved, photosPayload } from '@/components/IntraoralPhotosSection';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import api, { getAuthFileUrl, getToken } from "../../../utils/api";
@@ -64,6 +65,7 @@ export default function Stage2SurgicalSubmissionScreen() {
   const [phase2ProsthesisOther, setPhase2ProsthesisOther] = useState<string>('');
   const [phase2HealingCuffs, setPhase2HealingCuffs] = useState<string[]>([]);
   const [createdById, setCreatedById] = useState<string | null>(null);
+  const [supervisorId, setSupervisorId] = useState<string | null>(null);
   const [createdByRole, setCreatedByRole] = useState<string | null>(null);
   const [doneCompleted, setDoneCompleted] = useState(false);
   const [phase2Components, setPhase2Components] = useState<string[]>([]);
@@ -127,6 +129,8 @@ export default function Stage2SurgicalSubmissionScreen() {
   }, []);
   // Notes
   const [studentNotes, setStudentNotes] = useState("");
+  // Patient intra-oral photographs for this phase (same UI as Phase 1).
+  const [intraoralPhotos, setIntraoralPhotos] = useState<IntraoralPhotoSlots>(emptyIntraoralSlots());
 
   // ── Local draft autosave (survives backgrounding / navigating away before
   // final Submit) — see utils/draftAutosave.ts. Only user-edited fields are
@@ -135,6 +139,7 @@ export default function Stage2SurgicalSubmissionScreen() {
   const [screenLoaded, setScreenLoaded] = useState(false);
   const draftKey = draftStorageKey("stage2surgical", String(id), user?.id);
   const getDraftSnapshot = () => ({
+    intraoralPhotos,
     doneDate, checklistState, isqValues, healingAbutmentHeight,
     iopaFiles, studentNotes, haConfig,
   });
@@ -145,6 +150,7 @@ export default function Stage2SurgicalSubmissionScreen() {
     if (d.healingAbutmentHeight !== undefined) setHealingAbutmentHeight(d.healingAbutmentHeight);
     if (d.iopaFiles !== undefined) setIopaFiles(d.iopaFiles);
     if (d.studentNotes !== undefined) setStudentNotes(d.studentNotes);
+    if (d.intraoralPhotos !== undefined) setIntraoralPhotos(d.intraoralPhotos);
     if (d.haConfig !== undefined) setHaConfig(d.haConfig);
   };
   const { saveNow } = useDraftAutosave({
@@ -213,6 +219,7 @@ export default function Stage2SurgicalSubmissionScreen() {
     try {
       const p = await api.get(`/procedures/${id}`);
       const d = p.data || {};
+      if (Array.isArray(d.phase3_data?.intraoral_photos) && d.phase3_data.intraoral_photos.length) setIntraoralPhotos(slotsFromSaved(d.phase3_data.intraoral_photos));
       const p2 = d.phase2_data || {};
       // iter-356: hydrate per-implant Prosthetic Components (falls back to [] if
       // Phase 2 used the single global dropdown).
@@ -270,6 +277,7 @@ export default function Stage2SurgicalSubmissionScreen() {
       }
       setPhase1PlanSummary(summary);
       setCreatedById(d.created_by_id || null);
+      setSupervisorId(d.supervisor_id || null);
       setCreatedByRole(d.created_by_role || null);
       if (Array.isArray(p2.healing_abutment_cuff_height))
         setPhase2HealingCuffs(p2.healing_abutment_cuff_height);
@@ -551,6 +559,7 @@ export default function Stage2SurgicalSubmissionScreen() {
             original_name: f!.original_name,
             tooth_label: f!.tooth_label,
           })),
+        intraoral_photos: photosPayload(intraoralPhotos),
         student_notes: studentNotes || null,
         done_date: doneDate || null,
       });
@@ -558,7 +567,10 @@ export default function Stage2SurgicalSubmissionScreen() {
       const isInchargeSelfCreated =
         user?.role === "implant_incharge" &&
         createdByRole === "implant_incharge" &&
-        user?.id === createdById;
+        user?.id === createdById &&
+        // Only when no DIFFERENT supervisor is assigned — otherwise the
+        // supervisor must approve separately (backend enforces the same rule).
+        (!supervisorId || supervisorId === user?.id);
       if (isInchargeSelfCreated) {
         try {
           await api.post(`/procedures/${id}/stage2/surgical/approve`, {
@@ -1473,6 +1485,13 @@ export default function Stage2SurgicalSubmissionScreen() {
 
           {/* ── Clinical / Radiographical Assessment Notes ── */}
           <View style={s.section}>
+            {/* ── Patient Intra-oral Photograph (Phase 3) — same UI as Phase 1 ── */}
+            <IntraoralPhotosSection
+              value={intraoralPhotos}
+              onChange={setIntraoralPhotos}
+              testIDPrefix="phase3-intraoral"
+            />
+
             <View style={s.sectionHeader}>
               <Ionicons
                 name="document-text-outline"

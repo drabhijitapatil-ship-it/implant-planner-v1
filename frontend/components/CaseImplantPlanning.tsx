@@ -9,9 +9,9 @@ import {
   TextInput,
   Modal,
   FlatList,
-  ScrollView,
   Platform,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 import {
   SafeAreaView,
   useSafeAreaInsets,

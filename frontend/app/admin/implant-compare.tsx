@@ -1,8 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
   SafeAreaView,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import api from '../../utils/api';
@@ -61,19 +66,53 @@ const num = (v: unknown): number | null => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, ''));
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 };
-const numList = (single: unknown, many: unknown): number[] => {
+// Accepts any mix of single values and arrays — some catalog rows store a
+// LIST in the singular field (angulation_deg: [15, 25]); stringifying that
+// gave "15,25" → 1525°, so those components never matched any pill.
+const numList = (...sources: unknown[]): number[] => {
   const out: number[] = [];
-  const a = num(single); if (a !== null) out.push(a);
-  if (Array.isArray(many)) for (const v of many) { const n = num(v); if (n !== null) out.push(n); }
+  const add = (v: unknown) => {
+    if (Array.isArray(v)) { v.forEach(add); return; }
+    const n = num(v);
+    if (n !== null && !out.includes(n)) out.push(n);
+  };
+  sources.forEach(add);
   return out;
 };
-// Platform labels — trim; drop bare numbers (mis-tagged diameters) so the
-// Platform row only offers real platform codes (RP, NP, WP, IH, UNP…).
+const isNumeric = (p: string) => /^[0-9]+(\.[0-9]+)?$/.test(p.trim());
+const rawPlatforms = (c: Component): string[] => {
+  const out: string[] = [];
+  const add = (v: unknown) => {
+    if (Array.isArray(v)) { v.forEach(add); return; }
+    if (typeof v === 'string' && v.trim()) out.push(v.trim());
+  };
+  add(c.platform); add(c.platforms);
+  return out;
+};
+// Diameters — the catalog also records them as platforms_mm /
+// platforms_diam_mm, or as numeric entries in `platforms` (["3.8","4.3"]).
+const diamList = (c: Component): number[] =>
+  numList(c.diameter_mm, c.diameters_mm, (c as any).platforms_mm, (c as any).platforms_diam_mm,
+    rawPlatforms(c).filter(isNumeric));
+const ghList = (c: Component): number[] => numList(c.gingival_height_mm, c.gingival_heights_mm);
+// No angulation recorded = straight (0°) — clinically what an unangled part
+// is, and without this almost no component could match all four filters.
+const angList = (c: Component): number[] => {
+  const a = numList(c.angulation_deg, c.angulations_deg);
+  return a.length ? a : [0];
+};
+// Platform labels — real platform codes (RP, NP, Regular…), case-normalised
+// so "regular" and "Regular" are one pill. Numeric ones are diameters.
+const platLabel = (p: string) =>
+  p.length <= 3 ? p.toUpperCase() : p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
 const platList = (c: Component): string[] => {
   const out: string[] = [];
-  if (typeof c.platform === 'string' && c.platform.trim()) out.push(c.platform.trim());
-  if (Array.isArray(c.platforms)) for (const p of c.platforms) if (typeof p === 'string' && p.trim()) out.push(p.trim());
-  return out.filter(p => !/^[0-9.]+$/.test(p));
+  for (const p of rawPlatforms(c)) {
+    if (isNumeric(p)) continue;
+    const l = platLabel(p);
+    if (!out.includes(l)) out.push(l);
+  }
+  return out;
 };
 
 const titleCase = (s: string) =>
@@ -113,17 +152,17 @@ const computeAtAGlance = (rows: SystemRow[]): AtAGlanceBuckets => {
     const b = sys.brand;
     for (const c of sys.components) {
       // Diameters — accept SINGULAR (diameter_mm) and plural (diameters_mm[])
-      for (const d of numList(c.diameter_mm, c.diameters_mm)) {
+      for (const d of diamList(c)) {
         if (!diam.has(d)) diam.set(d, new Set());
         diam.get(d)!.add(b);
       }
       // GH heights
-      for (const h of numList(c.gingival_height_mm, c.gingival_heights_mm)) {
+      for (const h of ghList(c)) {
         if (!gh.has(h)) gh.set(h, new Set());
         gh.get(h)!.add(b);
       }
       // Angulations
-      for (const a of numList(c.angulation_deg, c.angulations_deg)) {
+      for (const a of angList(c)) {
         if (!ang.has(a)) ang.set(a, new Set());
         ang.get(a)!.add(b);
       }
@@ -151,21 +190,37 @@ const computeAtAGlance = (rows: SystemRow[]): AtAGlanceBuckets => {
 type FilterMap = Partial<Record<'diameter' | 'gh' | 'angulation' | 'platform', number | string>>;
 
 const componentMatches = (c: Component, filter: FilterMap): boolean => {
-  if (filter.diameter !== undefined && !numList(c.diameter_mm, c.diameters_mm).includes(num(filter.diameter) as number)) return false;
-  if (filter.gh !== undefined && !numList(c.gingival_height_mm, c.gingival_heights_mm).includes(num(filter.gh) as number)) return false;
-  if (filter.angulation !== undefined && !numList(c.angulation_deg, c.angulations_deg).includes(num(filter.angulation) as number)) return false;
+  if (filter.diameter !== undefined && !diamList(c).includes(num(filter.diameter) as number)) return false;
+  if (filter.gh !== undefined && !ghList(c).includes(num(filter.gh) as number)) return false;
+  if (filter.angulation !== undefined && !angList(c).includes(num(filter.angulation) as number)) return false;
   if (filter.platform !== undefined && !platList(c).includes(String(filter.platform))) return false;
   return true;
 };
 
+// SYSTEM-level matching: a system qualifies when its components of this type
+// TOGETHER offer every selected value. The catalog often splits one product
+// line across records (one lists gingival heights, another platform
+// diameters), so requiring a single record to carry all four values left
+// almost nothing once Diameter + GH + Angulation + Platform were all picked.
+const one = (kind: keyof FilterMap, value: number | string): FilterMap => ({ [kind]: value });
+const systemMatches = (sys: SystemRow, filter: FilterMap): boolean =>
+  (Object.keys(filter) as (keyof FilterMap)[]).every(
+    (k) => sys.components.some((c) => componentMatches(c, one(k, filter[k] as number | string))),
+  );
+// Full systems (all their components) that match — used for the facets.
+const matchingSystems = (rows: SystemRow[], filter: FilterMap): SystemRow[] =>
+  Object.keys(filter).length === 0 ? rows : rows.filter((sys) => systemMatches(sys, filter));
+// For the result cards: matching systems, showing the components relevant to
+// the selection — exact matches first, else any part matching ≥1 filter.
 const applyFilter = (rows: SystemRow[], filter: FilterMap): SystemRow[] => {
   if (Object.keys(filter).length === 0) return rows;
-  const out: SystemRow[] = [];
-  for (const sys of rows) {
-    const keep = sys.components.filter(c => componentMatches(c, filter));
-    if (keep.length > 0) out.push({ ...sys, components: keep });
-  }
-  return out;
+  return matchingSystems(rows, filter).map((sys) => {
+    const exact = sys.components.filter((c) => componentMatches(c, filter));
+    const partial = sys.components.filter((c) =>
+      (Object.keys(filter) as (keyof FilterMap)[]).some((k) => componentMatches(c, one(k, filter[k] as number | string))),
+    );
+    return { ...sys, components: exact.length ? exact : partial };
+  });
 };
 
 // iter-442: FACETED summary — each dimension's pills/counts are computed from
@@ -175,10 +230,10 @@ const applyFilter = (rows: SystemRow[], filter: FilterMap): SystemRow[] => {
 const computeFaceted = (rows: SystemRow[], filter: FilterMap): AtAGlanceBuckets => {
   const without = (kind: keyof FilterMap) => { const f = { ...filter }; delete f[kind]; return f; };
   return {
-    diameters:   computeAtAGlance(applyFilter(rows, without('diameter'))).diameters,
-    ghHeights:   computeAtAGlance(applyFilter(rows, without('gh'))).ghHeights,
-    angulations: computeAtAGlance(applyFilter(rows, without('angulation'))).angulations,
-    platforms:   computeAtAGlance(applyFilter(rows, without('platform'))).platforms,
+    diameters:   computeAtAGlance(matchingSystems(rows, without('diameter'))).diameters,
+    ghHeights:   computeAtAGlance(matchingSystems(rows, without('gh'))).ghHeights,
+    angulations: computeAtAGlance(matchingSystems(rows, without('angulation'))).angulations,
+    platforms:   computeAtAGlance(matchingSystems(rows, without('platform'))).platforms,
   };
 };
 
@@ -235,6 +290,9 @@ export default function ImplantCompare() {
   const summary = React.useMemo(() => computeFaceted(rows, filter), [rows, filter]);
   const hasSummary = summary.diameters.length + summary.ghHeights.length +
                      summary.angulations.length + summary.platforms.length > 0;
+  // Which dimensions this component type has at all (unfiltered) — those rows
+  // stay visible with a note instead of silently disappearing.
+  const baseSummary = React.useMemo(() => computeAtAGlance(rows), [rows]);
 
   return (
     <SafeAreaView style={s.safe}>
@@ -292,16 +350,16 @@ export default function ImplantCompare() {
               </TouchableOpacity>
             ) : null}
           </View>
-          {summary.diameters.length > 0 ? (
+          {baseSummary.diameters.length > 0 ? (
             <SummaryRow label="Diameters" entries={summary.diameters} kind="diameter" filter={filter} onPick={togglePillFilter} />
           ) : null}
-          {summary.ghHeights.length > 0 ? (
+          {baseSummary.ghHeights.length > 0 ? (
             <SummaryRow label="Gingival heights" entries={summary.ghHeights} kind="gh" filter={filter} onPick={togglePillFilter} />
           ) : null}
-          {summary.angulations.length > 0 ? (
+          {baseSummary.angulations.length > 0 ? (
             <SummaryRow label="Angulations" entries={summary.angulations} kind="angulation" filter={filter} onPick={togglePillFilter} />
           ) : null}
-          {summary.platforms.length > 0 ? (
+          {baseSummary.platforms.length > 0 ? (
             <SummaryRow label="Platforms" entries={summary.platforms} kind="platform" filter={filter} onPick={togglePillFilter} />
           ) : null}
         </View>
@@ -334,22 +392,24 @@ export default function ImplantCompare() {
                     {c.subtype ? titleCase(c.subtype) : (TYPE_LABELS[c.type] || titleCase(c.type))}
                   </Text>
                   <View style={s.specGrid}>
-                    {(c.platform || (c.platforms?.length || 0) > 0) ? (
-                      <Spec label="Platform" value={c.platform || fmt(c.platforms)} />
+                    {platList(c).length ? (
+                      <Spec label="Platform" value={platList(c).join(', ')} />
                     ) : null}
-                    {(typeof c.diameter_mm === 'number' || (c.diameters_mm?.length || 0) > 0) ? (
-                      <Spec label="Diameter (mm)" value={typeof c.diameter_mm === 'number' ? String(c.diameter_mm) : fmt(c.diameters_mm)} />
+                    {diamList(c).length ? (
+                      <Spec label="Diameter (mm)" value={fmt(diamList(c))} />
                     ) : null}
-                    {c.gingival_heights_mm?.length ? (
-                      <Spec label="GH (mm)" value={fmt(c.gingival_heights_mm)} />
+                    {ghList(c).length ? (
+                      <Spec label="GH (mm)" value={fmt(ghList(c))} />
                     ) : null}
                     {typeof c.abutment_height_mm === 'number' ? (
                       <Spec label="Height (mm)" value={String(c.abutment_height_mm)} />
                     ) : c.heights_mm?.length ? (
                       <Spec label="Height (mm)" value={fmt(c.heights_mm)} />
                     ) : null}
-                    {(typeof c.angulation_deg === 'number' || (c.angulations_deg?.length || 0) > 0) ? (
-                      <Spec label="Angulation (°)" value={typeof c.angulation_deg === 'number' ? String(c.angulation_deg) : fmt(c.angulations_deg)} />
+                    {(c.angulation_deg != null || (c.angulations_deg?.length || 0) > 0) ? (
+                      <Spec label="Angulation (°)" value={fmt(angList(c))} />
+                    ) : filter.angulation !== undefined ? (
+                      <Spec label="Angulation (°)" value="0 (straight)" />
                     ) : null}
                     {c.material?.length ? (
                       <Spec label="Material" value={prettyArr(c.material)} />
@@ -402,6 +462,9 @@ const SummaryRow = ({
 }) => (
   <View style={s.summaryRow}>
     <Text style={s.summaryRowLabel}>{label}</Text>
+    {entries.length === 0 ? (
+      <Text style={s.summaryNone} testID={`compare-none-${kind}`}>None recorded for this selection</Text>
+    ) : (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
       {entries.map((e) => {
         const active = filter[kind] === e.value;
@@ -421,6 +484,7 @@ const SummaryRow = ({
         );
       })}
     </ScrollView>
+    )}
   </View>
 );
 
@@ -455,6 +519,7 @@ const s = StyleSheet.create({
   summaryHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   summaryTitle: { fontSize: 12, fontWeight: '700', color: '#0277BD', marginLeft: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  summaryNone: { fontSize: 12, color: '#90A4AE', fontStyle: 'italic' },
   summaryRowLabel: { minWidth: 110, fontSize: 11, fontWeight: '600', color: '#546E7A', textTransform: 'uppercase', letterSpacing: 0.4 },
   summaryPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E1F5FE', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 999, borderWidth: 1, borderColor: '#B3E5FC' },
   summaryPillActive: { backgroundColor: '#0277BD', borderColor: '#01579B' },

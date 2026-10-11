@@ -1,9 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
-  Modal, FlatList, Pressable, Alert, Keyboard, Image,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  Modal,
+  FlatList,
+  Pressable,
+  Alert,
+  Keyboard,
+  Image,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -182,7 +194,6 @@ export default function CollegeRegisterScreen() {
       const { access_token, refresh_token } = res.data || {};
       if (access_token) await setToken('access_token', access_token);
       if (refresh_token) await setToken('refresh_token', refresh_token);
-      await setToken('last_activity_at', String(Date.now()));
       await refreshUser();
       setStep('departments');
     } catch (err: any) {

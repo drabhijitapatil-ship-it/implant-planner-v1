@@ -12,10 +12,10 @@ import {
   Modal,
   LayoutAnimation,
   useWindowDimensions,
-  ScrollView,
   UIManager,
   Platform,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 import { Ionicons } from "@expo/vector-icons";
 import api from "../../utils/api";
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
@@ -78,7 +78,7 @@ export const PHASE_OPTIONS = [
   { key: "all", label: "All Phases" },
   { key: "1", label: "Phase 1" },
   { key: "2", label: "Phase 2" },
-  { key: "3", label: "Stage 2" },
+  { key: "3", label: "Phase 3" },
   { key: "4", label: "Phase 4" },
   { key: "augmentation", label: "Augmentation" },
   { key: "follow_up", label: "Follow-up" },
@@ -209,12 +209,13 @@ function DefaultProceduresScreen() {
   const [refreshing, setRefreshing] = useState(false);
   // iter-267: unified filter row — single set of tabs replaces the older
   // Action-oriented filter tabs: "Needs my action", "In progress", "Completed", "All".
-  // "Needs my action" defaults to active for supervisors and in-charges.
-  const isSupervisorOrIncharge =
-    user?.role === "supervisor" || user?.role === "implant_incharge";
+  // Opens on "All" for every role. Defaulting to "Needs Action" showed an
+  // empty screen whenever nothing awaited the user, who then had to clear the
+  // filter to see any case. Deep links (?filter=pending / needs_action) still
+  // open straight on the action tab.
   const [filter, setFilter] = useState<
     "needs_action" | "in_progress" | "completed" | "all" | "assisted"
-  >(isSupervisorOrIncharge ? "needs_action" : "needs_action");
+  >("all");
   // iter-Jun-2026: cases where the signed-in PG student is the named assistant (read-only)
   const [assistedProcedures, setAssistedProcedures] = useState<any[]>([]);
   const [phaseFilter, setPhaseFilter] = useState<string>("all");
@@ -225,9 +226,7 @@ function DefaultProceduresScreen() {
   const [departments, setDepartments] = useState<{ id: string; name: string; color?: string }[]>([]);
   const [deptFilter, setDeptFilter] = useState<string>("all");
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [tempFilter, setTempFilter] = useState<string>(
-    isSupervisorOrIncharge ? "needs_action" : "needs_action"
-  );
+  const [tempFilter, setTempFilter] = useState<string>("all");
   const [tempPhaseFilter, setTempPhaseFilter] = useState<string>("all");
   const [tempDeptFilter, setTempDeptFilter] = useState<string>("all");
   const [shareCase, setShareCase] = useState<{
@@ -273,10 +272,8 @@ function DefaultProceduresScreen() {
       } else if (params.filter === "pending") {
         setFilter("needs_action");
       }
-    } else if (isSupervisorOrIncharge) {
-      setFilter("needs_action");
     }
-  }, [params.filter, params.phase, isSupervisorOrIncharge]);
+  }, [params.filter, params.phase]);
 
   useEffect(() => {
     if (!user?.is_admin) return;
@@ -455,6 +452,24 @@ function DefaultProceduresScreen() {
         });
       }
     } else if (role === "administrator") {
+      // College / Organization Admin — same Edit + Archive as faculty (the
+      // backend already permits both; the menu simply never offered them).
+      if (!isCompleted && !isReferredToMyDept)
+        actions.push({
+          key: "edit",
+          label: "Edit",
+          icon: "create-outline",
+          color: "#1565C0",
+          onPress: () => handleEdit(pid),
+        });
+      if (!isReferredToMyDept)
+        actions.push({
+          key: "archive",
+          label: "Archive",
+          icon: "archive-outline",
+          color: "#1565C0",
+          onPress: () => handleArchive(pid),
+        });
       // Organization Admin — transfer within the case's own department,
       // skips Supervisor/In-Charge approval.
       if (user?.is_admin && transferEligible && item.student_id) {
@@ -849,14 +864,27 @@ function DefaultProceduresScreen() {
 
   const filterButtons = useMemo(
     () => [
+      // "All" first: it is the default, so the selected tab is never the one
+      // pushed off-screen on narrow phones.
+      { key: "all", label: "All", shortLabel: "All" },
       { key: "needs_action", label: "Needs Action", shortLabel: "Action" },
       { key: "in_progress", label: "In Progress", shortLabel: "In Progress" },
       { key: "completed", label: "Completed", shortLabel: "Completed" },
-      { key: "all", label: "All", shortLabel: "All" },
       ...(user?.role === "student" ? [{ key: "assisted", label: "Assisted", shortLabel: "Assisted" }] : []),
     ],
     [user?.role]
   );
+
+  // Keep the selected status tab visible (e.g. arriving via ?filter=needs_action).
+  const segmentScrollRef = useRef<any>(null);
+  const segmentX = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const x = segmentX.current[filter];
+      if (typeof x === "number") segmentScrollRef.current?.scrollTo({ x: Math.max(0, x - 16), animated: true });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [filter]);
 
   const sourceList: any[] = filter === "assisted" ? assistedProcedures : procedures;
 
@@ -993,6 +1021,7 @@ function DefaultProceduresScreen() {
       {/* Action-Oriented Segmented Control */}
       <View style={[styles.segmentedWrapper, isTablet && { maxWidth: 960, alignSelf: "center", width: "100%" }]}>
         <ScrollView
+          ref={segmentScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={[styles.segmentedContainerScroll]}
@@ -1012,6 +1041,7 @@ function DefaultProceduresScreen() {
                   btn.key === "assisted" && !isActive && styles.filterButtonAssisted,
                 ]}
                 onPress={() => setFilter(btn.key as any)}
+                onLayout={(e) => { segmentX.current[btn.key] = e.nativeEvent.layout.x; }}
                 activeOpacity={0.7}
                 testID={`filter-tab-${btn.key}`}
                 {...({ "data-testid": `filter-tab-${btn.key}` } as any)}
@@ -1709,7 +1739,6 @@ const styles = StyleSheet.create({
     borderColor: "#FFF",
   },
   segmentedWrapper: {
-    paddingHorizontal: 16,
     marginBottom: 8,
     marginTop: 4,
   },
@@ -1722,34 +1751,38 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   segmentedContainerScroll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderWidth: 0,
-    borderColor: 'transparent',
-    marginHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 2,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   segmentItem: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 999,
-    gap: 8,
+    gap: 6,
     alignSelf: "flex-start",
-    marginRight: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E6EEF8",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   segmentItemActive: {
-    backgroundColor: "#1565C0",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
   },
   segmentText: {
     fontSize: 13,
@@ -1762,9 +1795,9 @@ const styles = StyleSheet.create({
   },
   segmentBadge: {
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-    minWidth: 18,
+    paddingVertical: 1,
+    borderRadius: 999,
+    minWidth: 20,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1772,7 +1805,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
   },
   segmentBadgeActive: {
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(255,255,255,0.22)",
   },
   segmentBadgeAlert: {
     backgroundColor: "#FFF2F2",
@@ -1782,10 +1815,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   segmentBadgeTextInactive: {
-    color: "#334155",
+    color: "#1E293B",
   },
   segmentBadgeTextActive: {
-    color: "#E6F0FF",
+    color: "#FFFFFF",
   },
   segmentBadgeTextAlert: {
     color: "#C62828",
@@ -1794,20 +1827,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   phaseChipsScroll: {
-    paddingHorizontal: 12,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 2,
+    gap: 8,
   },
   phaseChip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E6EEF8",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   phaseChipActive: {
     backgroundColor: "#2563EB",
     borderColor: "#2563EB",
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   phaseChipText: {
     fontSize: 13,

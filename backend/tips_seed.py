@@ -86,7 +86,7 @@ TIP_LIBRARY = [
      "tip_text": "The D1–D4 classification predicts surgical protocol selection. D1/D2 favours conventional drilling and immediate loading; D3/D4 may require osteotomy under-preparation and a longer healing period before loading.",
      "tags": ["bone density", "loading"]},
 
-    # ─────────── Surgical (10) ───────────
+    # ─────────── Surgical (11) ───────────
     {"tip_id": "ITI_020", "title": "D4 Bone Protocol", "category": "Surgical",
      "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "High",
      "source_organization": "ITI", "source_reference": "ITI Treatment Guide Volume 11",
@@ -157,6 +157,18 @@ TIP_LIBRARY = [
      "publication_year": 2020,
      "tip_text": "Honour the manufacturer's drill sequence — including the pilot. Skipping drills to save time concentrates heat and micro-fractures the osteotomy walls, undermining the very stability you were trying to improve.",
      "tags": ["drilling", "protocol"]},
+
+    {"tip_id": "PASS_001", "title": "The PASS Principles for Bone Grafting", "category": "Surgical",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "Wang & Boyapati",
+     "source_reference": "Wang & Boyapati — PASS principles for predictable bone regeneration",
+     "publication_year": 2006,
+     "tip_text": "The PASS principles for bone graft procedures:\n"
+                 "1. Primary closure — the most crucial principle. It protects the blood clot and graft material from the external environment. Tension-free closure is mandatory.\n"
+                 "2. Angiogenesis — adequate blood supply provides the nutrients and oxygen needed for new bone formation.\n"
+                 "3. Space maintenance — physically maintain the space for bone formation with a barrier membrane or other structures (e.g. Ti-mesh, tenting screws).\n"
+                 "4. Stability — minimise micromovement of the grafted blood clot and bone graft material to encourage healing. Fixation of the membrane and graft is key.",
+     "tags": ["bone graft", "GBR", "augmentation", "PASS"]},
 
     # ─────────── Prosthetic (8) ───────────
     {"tip_id": "ITI_040", "title": "Soft-Tissue Thickness", "category": "Prosthetic",

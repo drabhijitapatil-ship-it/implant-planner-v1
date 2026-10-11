@@ -22,7 +22,7 @@ function resolveBackendUrl(): string {
   return 'https://api.implanr.com';
 }
 
-const BACKEND_URL: string = resolveBackendUrl();
-console.log(BACKEND_URL)
+const BACKEND_URL: string = "https://api.implanr.com";
+// const BACKEND_URL: string = resolveBackendUrl();
 
 export { BACKEND_URL };

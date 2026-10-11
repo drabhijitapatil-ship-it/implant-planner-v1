@@ -14,7 +14,8 @@
  *   Locked                  → toast "Locked until previous phase is approved"
  */
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform, ToastAndroid, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, ToastAndroid, Alert } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 

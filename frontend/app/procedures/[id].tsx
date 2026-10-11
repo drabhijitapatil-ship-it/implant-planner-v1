@@ -9,7 +9,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -23,6 +22,7 @@ import {
   LayoutAnimation,
   UIManager,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 
 if (
   Platform.OS === "android" &&
@@ -34,7 +34,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import RiskPill from "../../components/RiskPill";
-import CaseRiskPills from '../../components/CaseRiskPills';
+import PatientHeaderStrip from '../../components/PatientHeaderStrip';
+import PrescriptionEditor from '../../components/PrescriptionEditor';
 import EraGuidance from "../../components/EraGuidance";
 import {
   computeEra,
@@ -91,7 +92,29 @@ import {
   MEDICAL_RISK_FACTORS,
   calculateMedicalRisk,
   getProstheticOptions,
+  SURGERY_APPROACH_TYPES,
+  GUIDED_SURGERY_TYPES,
+  STATIC_GUIDE_TYPES,
+  SLEEVE_TYPES,
+  DYNAMIC_NAV_SYSTEMS,
 } from "../../constants/checklist";
+import {
+  OptionDesc,
+  PROVISIONAL_GROUPED_OPTIONS,
+  SC_ABUTMENT_TYPE_OPTIONS,
+  SC_RETENTION_TYPE_OPTIONS,
+  SC_CROWN_MATERIAL_OPTIONS,
+} from "../../constants/singleConventional";
+import {
+  GROUP_A_PROSTHESIS_TYPE_OPTIONS,
+  GROUP_A_ABUTMENT_TYPE_OPTIONS,
+  GROUP_A_RETENTION_OPTIONS,
+  GROUP_A_CROWN_MATERIAL_OPTIONS,
+  GROUP_C_PROSTHETIC_PLAN_OPTIONS,
+  getGroupBPlanOptions,
+  getEffectiveWorkflow,
+  getProvisionalOptionsForProcType,
+} from "../../constants/prosthesisWorkflows";
 import { format } from "date-fns";
 import {
   generateProcedurePDF,
@@ -230,6 +253,45 @@ type FieldOptionsConfig = {
   options: string[] | { value: string; label: string }[];
   multi?: boolean; // multi-select array (e.g. loading_type)
   bool?: boolean; // Yes/No → store true/false
+  // Sibling free-text field used when "Other" is picked (e.g.
+  // sc_abutment_type → sc_abutment_type_other). Cleared on any other choice.
+  otherKey?: string;
+};
+
+// Flatten {label}/grouped option lists from the workflow constants into the
+// plain label list the picker uses (deduped, "Other" kept last).
+const labelsOf = (
+  list: Array<OptionDesc | { group: string; options: OptionDesc[] }> | null | undefined,
+): string[] => {
+  const out: string[] = [];
+  for (const item of list || []) {
+    const opts = "options" in item ? item.options : [item as OptionDesc];
+    for (const o of opts) if (o?.label && !out.includes(o.label)) out.push(o.label);
+  }
+  const i = out.indexOf("Other");
+  if (i >= 0) out.splice(i, 1);
+  out.push("Other");
+  return out;
+};
+
+// iter-Feb-2026 workflow plan fields (Phase 1) — options depend on the
+// case's effective workflow (SC / Group A / B / C).
+const WORKFLOW_PLAN_FIELDS: Record<string, (proc: any) => string[] | null> = {
+  sc_abutment_type: () => labelsOf(SC_ABUTMENT_TYPE_OPTIONS),
+  sc_retention_type: () => labelsOf(SC_RETENTION_TYPE_OPTIONS),
+  sc_crown_material: () => labelsOf(SC_CROWN_MATERIAL_OPTIONS),
+  ma_prosthesis_type: () => labelsOf(GROUP_A_PROSTHESIS_TYPE_OPTIONS),
+  ma_abutment_type: () => labelsOf(GROUP_A_ABUTMENT_TYPE_OPTIONS),
+  ma_retention_type: () => labelsOf(GROUP_A_RETENTION_OPTIONS),
+  ma_crown_material: () => labelsOf(GROUP_A_CROWN_MATERIAL_OPTIONS),
+  fa_prosthetic_plan: (p) => labelsOf(getGroupBPlanOptions(p?.implant_procedure_type)),
+  zp_prosthetic_plan: () => labelsOf(GROUP_C_PROSTHETIC_PLAN_OPTIONS),
+  type_of_provisional: (p) => {
+    const wf = getEffectiveWorkflow(p?.implant_procedure_type, p?.num_implants);
+    if (wf === "SC") return labelsOf(PROVISIONAL_GROUPED_OPTIONS);
+    const list = getProvisionalOptionsForProcType(p?.implant_procedure_type || "");
+    return list ? labelsOf(list) : labelsOf(PROVISIONAL_GROUPED_OPTIONS);
+  },
 };
 
 const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
@@ -246,6 +308,12 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
   },
   arch: { options: ["Maxillary", "Mandibular"] },
   loading_type: { options: LOADING_TYPES, multi: true },
+  // iter-387: surgical-approach cascade (Phase 1 plan).
+  procedure_surgery_type: { options: SURGERY_APPROACH_TYPES },
+  guided_surgery_type: { options: GUIDED_SURGERY_TYPES },
+  static_guide_type: { options: STATIC_GUIDE_TYPES },
+  sleeve_type: { options: SLEEVE_TYPES },
+  dynamic_nav_system: { options: DYNAMIC_NAV_SYSTEMS },
 
   // Clinical Examination
   arch_condition: { options: ARCH_CONDITION_OPTIONS },
@@ -296,6 +364,11 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
   "phase2_data.anesthesia_adequate": { options: ["Yes", "No"] },
   "phase2_data.flap_design": { options: FLAP_DESIGN_OPTIONS },
   "phase2_data.drilling_type": { options: DRILLING_TYPE_OPTIONS },
+  // iter-391: actual guided-drilling cascade (mirrors the Phase 1 plan).
+  "phase2_data.drilling_guided_surgery_type": { options: GUIDED_SURGERY_TYPES },
+  "phase2_data.drilling_static_guide_type": { options: STATIC_GUIDE_TYPES },
+  "phase2_data.drilling_sleeve_type": { options: SLEEVE_TYPES },
+  "phase2_data.drilling_dynamic_nav_system": { options: DYNAMIC_NAV_SYSTEMS },
   "phase2_data.implant_seated_correctly": {
     options: ["Yes", "No"],
     bool: true,
@@ -357,6 +430,12 @@ function resolveFieldOptions(
       return opts.length > 0 ? { options: opts } : null;
     }
     return null;
+  }
+  if (WORKFLOW_PLAN_FIELDS[fieldKey]) {
+    const opts = WORKFLOW_PLAN_FIELDS[fieldKey](procedure);
+    return opts && opts.length > 0
+      ? { options: opts, otherKey: `${fieldKey}_other` }
+      : null;
   }
   if (fieldKey.startsWith("aesthetic_risk.")) {
     const factorKey = fieldKey.split(".").pop() as string;
@@ -454,7 +533,9 @@ export default function ProcedureDetailScreen() {
   // Edit mode state
   const isEditMode =
     edit === "true" &&
-    (user?.role === "implant_incharge" || user?.role === "supervisor");
+    (user?.role === "implant_incharge" ||
+      user?.role === "supervisor" ||
+      user?.role === "administrator");
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
@@ -511,6 +592,29 @@ export default function ProcedureDetailScreen() {
 
   // Re-apply smart defaults whenever the procedure status changes (e.g. after load)
   const [phasesInitialized, setPhasesInitialized] = useState(false);
+
+  // Patient header strip → tap a risk pill to open Phase 1 and scroll to that
+  // section. Measured against the scroll content (not summed onLayout
+  // offsets), so nesting inside Phase 1 doesn't throw the position off.
+  const eraSectionRef = useRef<View | null>(null);
+  const medicalSectionRef = useRef<View | null>(null);
+  const jumpToPhase1Section = (target: React.RefObject<View | null>) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCollapsedPhases((prev) => ({ ...prev, p1: false }));
+    setTimeout(() => {
+      const scroll: any = mainScrollRef.current;
+      const inner = scroll?.getInnerViewRef?.() ?? scroll?.getInnerViewNode?.();
+      const node: any = target.current;
+      if (!scroll || !inner || !node?.measureLayout) return;
+      try {
+        node.measureLayout(
+          inner,
+          (_x: number, y: number) => scroll.scrollTo({ y: Math.max(0, y - 12), animated: true }),
+          () => {},
+        );
+      } catch {}
+    }, 350);
+  };
 
   const togglePhase = (key: "p1" | "p2" | "p3" | "p4") => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -692,6 +796,16 @@ export default function ProcedureDetailScreen() {
         else if (rawValue === "No") rawValue = false;
       }
       const fields: any = {};
+      if (cfg?.otherKey) {
+        const otherText = String(editValues[`${fieldKey}::other`] ?? "").trim();
+        if (rawValue === "Other" && !otherText) {
+          Alert.alert("Missing", "Please describe the option under 'Other'.");
+          return;
+        }
+        // Clear the old "Other" text when a listed option is chosen, so the
+        // case screen doesn't keep showing "Other — …".
+        fields[cfg.otherKey] = rawValue === "Other" ? otherText : "";
+      }
       // Support nested field paths like "phase2_data.torque_values" and deeper
       // ones like "aesthetic_risk.sites.11.infection_at_site" (deep-merged copy).
       if (fieldKey.includes(".")) {
@@ -1222,7 +1336,7 @@ export default function ProcedureDetailScreen() {
   const canEdit = () => {
     if (!procedure) return false;
     if (user?.role === "nurse") return false;
-    if (user?.role === "implant_incharge") return true;
+    if (user?.role === "implant_incharge" || user?.role === "administrator") return true;
     if (user?.role === "supervisor" && user?.id === procedure.supervisor_id)
       return true;
     if (
@@ -1275,10 +1389,14 @@ export default function ProcedureDetailScreen() {
 
   const renderApprovalActions = () => {
     if (!canApprove() || showRejectDialog) return null;
+    // In-Charge self-created case: their submission already approved both
+    // slots, so no buttons. Only when no DIFFERENT supervisor is assigned —
+    // otherwise the In-Charge still approves their own slot from here.
     if (
       user?.role === "implant_incharge" &&
       procedure.created_by_role === "implant_incharge" &&
-      user?.id === procedure.created_by_id
+      user?.id === procedure.created_by_id &&
+      (!supervisorId || supervisorId === user?.id)
     ) {
       return null;
     }
@@ -2387,8 +2505,14 @@ export default function ProcedureDetailScreen() {
               </View>
             )}
 
-        {/* iter-Jun-2026: prominent Aesthetic Risk / Medical Risk banner at case top */}
-        <CaseRiskPills procedure={procedure} variant="banner" prefix="case-detail" />
+
+        {/* Always-visible patient summary (outside the phase accordions) —
+            name, age/sex, registration and tappable risk pills. */}
+        <PatientHeaderStrip
+          procedure={procedure}
+          onAestheticPress={() => jumpToPhase1Section(eraSectionRef)}
+          onMedicalPress={() => jumpToPhase1Section(medicalSectionRef)}
+        />
 
             {/* ── Treatment Complete + Case Summary + Digital Sign-Off (rendered above timeline on completion) ── */}
             {procedure.status === "completed" && (
@@ -5087,6 +5211,7 @@ export default function ProcedureDetailScreen() {
                               icon="hand-left"
                               label="Procedure Type"
                               value={procedure.procedure_surgery_type}
+                              fieldKey="procedure_surgery_type"
                             />
                           )}
                           {procedure.guided_surgery_type && (
@@ -5094,6 +5219,7 @@ export default function ProcedureDetailScreen() {
                               icon="navigate"
                               label="Type of Guided Surgery"
                               value={procedure.guided_surgery_type}
+                              fieldKey="guided_surgery_type"
                             />
                           )}
                           {procedure.static_guide_type && (
@@ -5101,6 +5227,7 @@ export default function ProcedureDetailScreen() {
                               icon="grid"
                               label="Type of Static Guide"
                               value={procedure.static_guide_type}
+                              fieldKey="static_guide_type"
                             />
                           )}
                           {procedure.sleeve_type && (
@@ -5108,6 +5235,7 @@ export default function ProcedureDetailScreen() {
                               icon="ellipse"
                               label="Type of Sleeve"
                               value={procedure.sleeve_type}
+                              fieldKey="sleeve_type"
                             />
                           )}
                           {procedure.dynamic_nav_system && (
@@ -5115,6 +5243,7 @@ export default function ProcedureDetailScreen() {
                               icon="compass"
                               label="Dynamic Navigation System"
                               value={procedure.dynamic_nav_system}
+                              fieldKey="dynamic_nav_system"
                             />
                           )}
                           {/* iter-307: Echo the Number-of-Implants sub-choice (only set
@@ -6084,6 +6213,8 @@ export default function ProcedureDetailScreen() {
                               },
                             ]}
                             data-testid="aesthetic-risk-section"
+                            ref={eraSectionRef}
+                            collapsable={false}
                           >
                             <View
                               style={{
@@ -6237,6 +6368,8 @@ export default function ProcedureDetailScreen() {
                               },
                             ]}
                             data-testid="medical-assessment-section"
+                            ref={medicalSectionRef}
+                            collapsable={false}
                           >
                             <View
                               style={{
@@ -6967,109 +7100,6 @@ export default function ProcedureDetailScreen() {
                         </View>
                       )}
 
-                      {/* Torque Values Achieved - visible to supervisors during approval and to students after approval */}
-                      {user?.role !== "nurse" && (
-                        <ImplantTraceabilityCard
-                          traceability={
-                            procedure.phase2_data?.implant_traceability
-                          }
-                          labelFor={(pos) => `Implant ${pos}`}
-                        />
-                      )}
-
-                      {procedure.torque_values &&
-                        procedure.torque_values.length > 0 && (
-                          <View
-                            style={styles.section}
-                            data-testid="torque-values-section"
-                          >
-                            <View
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                gap: 8,
-                                marginBottom: 12,
-                              }}
-                            >
-                              <Ionicons
-                                name="speedometer"
-                                size={20}
-                                color="#FF6D00"
-                              />
-                              <Text
-                                style={[
-                                  styles.sectionTitle,
-                                  { marginBottom: 0, color: "#E65100" },
-                                ]}
-                              >
-                                Torque Values Achieved
-                              </Text>
-                            </View>
-                            {procedure.torque_values.map(
-                              (tv: number, idx: number) => {
-                                const toothLabel = procedure.implant_plans?.[
-                                  idx
-                                ]?.position
-                                  ? `Implant ${procedure.implant_plans[idx].position}`
-                                  : `Implant ${idx + 1}`;
-                                return (
-                                  <View
-                                    key={idx}
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      paddingVertical: 8,
-                                      borderBottomWidth:
-                                        idx < procedure.torque_values.length - 1
-                                          ? 1
-                                          : 0,
-                                      borderBottomColor: "#F0F0F0",
-                                    }}
-                                  >
-                                    <View
-                                      style={{
-                                        backgroundColor: "#FFF3E0",
-                                        borderRadius: 8,
-                                        paddingHorizontal: 10,
-                                        paddingVertical: 6,
-                                        marginRight: 12,
-                                      }}
-                                    >
-                                      <Text
-                                        style={{
-                                          fontSize: 13,
-                                          fontWeight: "600",
-                                          color: "#BF360C",
-                                        }}
-                                      >
-                                        {toothLabel}
-                                      </Text>
-                                    </View>
-                                    <Text
-                                      style={{
-                                        fontSize: 18,
-                                        fontWeight: "700",
-                                        color: "#E65100",
-                                      }}
-                                    >
-                                      {tv}
-                                    </Text>
-                                    <Text
-                                      style={{
-                                        fontSize: 13,
-                                        color: "#888",
-                                        marginLeft: 4,
-                                      }}
-                                    >
-                                      Ncm
-                                    </Text>
-                                  </View>
-                                );
-                              },
-                            )}
-                          </View>
-                        )}
-
                       {procedure.ios_file && (
                         <View
                           style={styles.section}
@@ -7284,102 +7314,10 @@ export default function ProcedureDetailScreen() {
                 supervisor, in-charge, administrator (same as CBCT). Renders
                 as a list with thumbnails. Slot labels come from the Phase-1
                 upload (Occlusal, Lateral/Frontal, or extras). */}
-                      {Array.isArray(procedure.intraoral_photos) &&
-                        procedure.intraoral_photos.length > 0 && (
-                          <View
-                            style={styles.section}
-                            data-testid="intraoral-photos-section"
-                          >
-                            <Text style={styles.sectionTitle}>
-                              Patient Intra-oral Photograph
-                            </Text>
-                            {procedure.intraoral_photos.map(
-                              (f: any, idx: number) => {
-                                const baseUrl = api.defaults.baseURL || "";
-                                const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
-                                return (
-                                  <View
-                                    key={idx}
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      marginBottom: 10,
-                                      gap: 10,
-                                      backgroundColor: "#FFF8E1",
-                                      padding: 8,
-                                      borderRadius: 10,
-                                    }}
-                                    data-testid={`intraoral-thumb-${idx}`}
-                                  >
-                                    <Image
-                                      source={{ uri: fileUrl }}
-                                      style={{
-                                        width: 50,
-                                        height: 50,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: "#FFD54F",
-                                      }}
-                                      resizeMode="cover"
-                                    />
-                                    <View style={{ flex: 1 }}>
-                                      <Text
-                                        style={{
-                                          fontSize: 13,
-                                          fontWeight: "700",
-                                          color: "#333",
-                                        }}
-                                      >
-                                        {f.label || `Photo ${idx + 1}`}
-                                      </Text>
-                                      <Text
-                                        style={{ fontSize: 11, color: "#888" }}
-                                        numberOfLines={1}
-                                      >
-                                        {f.original_name}
-                                      </Text>
-                                    </View>
-                                    <TouchableOpacity
-                                      style={{
-                                        backgroundColor: "#F57C00",
-                                        borderRadius: 8,
-                                        paddingVertical: 6,
-                                        paddingHorizontal: 12,
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        gap: 4,
-                                      }}
-                                      onPress={() =>
-                                        Linking.openURL(fileUrl).catch(() =>
-                                          Alert.alert(
-                                            "Error",
-                                            "Could not open file",
-                                          ),
-                                        )
-                                      }
-                                      data-testid={`view-intraoral-detail-${idx}`}
-                                    >
-                                      <Ionicons
-                                        name="open-outline"
-                                        size={14}
-                                        color="#FFF"
-                                      />
-                                      <Text
-                                        style={{
-                                          color: "#FFF",
-                                          fontSize: 12,
-                                          fontWeight: "700",
-                                        }}
-                                      >
-                                        View
-                                      </Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                );
-                              },
-                            )}
-                          </View>
-                        )}
+                      <IntraoralPhotoCard
+                        photos={procedure.intraoral_photos}
+                        authToken={authToken}
+                      />
 
                       {procedure.remark && (
                         <View style={styles.section}>
@@ -7588,6 +7526,127 @@ export default function ProcedureDetailScreen() {
                       />
                     </TouchableOpacity>
 
+                    {/* Prescription (Rx) — faculty review/correct & sign during Phase 2;
+                        creator/nurse can download the signed PDF once approved.
+                        Kept outside the accordion body so it stays visible. */}
+                    {(!!(procedure.prescription?.drugs?.length) || procedure.status === 'pending_phase2') && (
+                      <View style={{ marginHorizontal: 12 }}>
+                        <PrescriptionEditor procedure={procedure} onChanged={loadProcedure} />
+                      </View>
+                    )}
+
+                    {isOpen2 && (
+                      <>
+                        <IntraoralPhotoCard
+                          photos={procedure.phase2_data?.intraoral_photos}
+                          authToken={authToken}
+                          title="Patient Intra-oral Photograph — Phase 2"
+                          testPrefix="phase2-intraoral"
+                        />
+                        {/* Implant Traceability + Torque Values Achieved — Phase 2 data, shown
+                            inside the Phase 2 accordion (moved out of Phase 1). */}
+                        <ImplantTraceabilityCard
+                          traceability={
+                            procedure.phase2_data?.implant_traceability
+                          }
+                          labelFor={(pos) => `Implant ${pos}`}
+                        />
+
+                        {procedure.torque_values &&
+                          procedure.torque_values.length > 0 && (
+                            <View
+                              style={styles.section}
+                              data-testid="torque-values-section"
+                            >
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  marginBottom: 12,
+                                }}
+                              >
+                                <Ionicons
+                                  name="speedometer"
+                                  size={20}
+                                  color="#FF6D00"
+                                />
+                                <Text
+                                  style={[
+                                    styles.sectionTitle,
+                                    { marginBottom: 0, color: "#E65100" },
+                                  ]}
+                                >
+                                  Torque Values Achieved
+                                </Text>
+                              </View>
+                              {procedure.torque_values.map(
+                                (tv: number, idx: number) => {
+                                  const toothLabel = procedure.implant_plans?.[
+                                    idx
+                                  ]?.position
+                                    ? `Implant ${procedure.implant_plans[idx].position}`
+                                    : `Implant ${idx + 1}`;
+                                  return (
+                                    <View
+                                      key={idx}
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        paddingVertical: 8,
+                                        borderBottomWidth:
+                                          idx < procedure.torque_values.length - 1
+                                            ? 1
+                                            : 0,
+                                        borderBottomColor: "#F0F0F0",
+                                      }}
+                                    >
+                                      <View
+                                        style={{
+                                          backgroundColor: "#FFF3E0",
+                                          borderRadius: 8,
+                                          paddingHorizontal: 10,
+                                          paddingVertical: 6,
+                                          marginRight: 12,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 13,
+                                            fontWeight: "600",
+                                            color: "#BF360C",
+                                          }}
+                                        >
+                                          {toothLabel}
+                                        </Text>
+                                      </View>
+                                      <Text
+                                        style={{
+                                          fontSize: 18,
+                                          fontWeight: "700",
+                                          color: "#E65100",
+                                        }}
+                                      >
+                                        {tv}
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 13,
+                                          color: "#888",
+                                          marginLeft: 4,
+                                        }}
+                                      >
+                                        Ncm
+                                      </Text>
+                                    </View>
+                                  );
+                                },
+                              )}
+                            </View>
+                          )}
+                      </>
+                    )}
+
                     {/* Phase 2 Content */}
                     {isOpen2 && (
                       <View
@@ -7710,6 +7769,7 @@ export default function ProcedureDetailScreen() {
                               <InfoRow
                                 icon="navigate"
                                 label="Type of Guided Surgery (actual)"
+                                fieldKey="phase2_data.drilling_guided_surgery_type"
                                 value={
                                   procedure.phase2_data
                                     .drilling_guided_surgery_type
@@ -7724,6 +7784,7 @@ export default function ProcedureDetailScreen() {
                               <InfoRow
                                 icon="layers"
                                 label="Type of Static Guide (actual)"
+                                fieldKey="phase2_data.drilling_static_guide_type"
                                 value={
                                   procedure.phase2_data
                                     .drilling_static_guide_type
@@ -7737,6 +7798,7 @@ export default function ProcedureDetailScreen() {
                               <InfoRow
                                 icon="ellipse-outline"
                                 label="Type of Sleeve (actual)"
+                                fieldKey="phase2_data.drilling_sleeve_type"
                                 value={
                                   procedure.phase2_data.drilling_sleeve_type
                                 }
@@ -7750,6 +7812,7 @@ export default function ProcedureDetailScreen() {
                               <InfoRow
                                 icon="compass"
                                 label="Dynamic Navigation System (actual)"
+                                fieldKey="phase2_data.drilling_dynamic_nav_system"
                                 value={
                                   procedure.phase2_data
                                     .drilling_dynamic_nav_system
@@ -7911,14 +7974,15 @@ export default function ProcedureDetailScreen() {
                           )}
                           {/* iter-210: removed the duplicate Torque Values chips from the
                   Phase 2 readback. The dedicated orange "Torque Values
-                  Achieved" card (rendered above, near the Final Prosthetic
-                  Plan) is the single source of truth so the value isn't
-                  displayed twice on the case page. */}
+                  Achieved" card (rendered at the top of this Phase 2
+                  accordion, next to Implant Traceability) is the single source
+                  of truth so the value isn't displayed twice on the case page. */}
                           {procedure.phase2_data.augmentation ? (
                             <>
                               <InfoRow
                                 icon="fitness"
                                 label="Bone & Soft Tissue Augmentation"
+                                readOnly
                                 value="Yes"
                               />
                               {(
@@ -7928,6 +7992,7 @@ export default function ProcedureDetailScreen() {
                                 <InfoRow
                                   icon="construct"
                                   label="Augmentation Procedure"
+                                  readOnly
                                   value={procedure.phase2_data.augmentation.procedures_performed.join(
                                     ", ",
                                   )}
@@ -7950,6 +8015,7 @@ export default function ProcedureDetailScreen() {
                                   <InfoRow
                                     icon="flask"
                                     label="Graft Materials"
+                                    readOnly
                                     value={mats.join(", ")}
                                   />
                                 ) : null;
@@ -7959,6 +8025,7 @@ export default function ProcedureDetailScreen() {
                                 <InfoRow
                                   icon="layers"
                                   label="Membrane"
+                                  readOnly
                                   value={
                                     (
                                       procedure.phase2_data.augmentation
@@ -7974,6 +8041,7 @@ export default function ProcedureDetailScreen() {
                                 <InfoRow
                                   icon="hardware-chip"
                                   label="Fixation"
+                                  readOnly
                                   value={procedure.phase2_data.augmentation.fixation.join(
                                     ", ",
                                   )}
@@ -7984,6 +8052,7 @@ export default function ProcedureDetailScreen() {
                                 <InfoRow
                                   icon="leaf"
                                   label="Soft Tissue Graft"
+                                  readOnly
                                   value={
                                     (
                                       procedure.phase2_data.augmentation
@@ -7997,6 +8066,7 @@ export default function ProcedureDetailScreen() {
                                 <InfoRow
                                   icon="hourglass"
                                   label="Healing Protocol"
+                                  readOnly
                                   value={
                                     procedure.phase2_data.augmentation
                                       .healing_protocol === "Custom"
@@ -8015,6 +8085,7 @@ export default function ProcedureDetailScreen() {
                                 <InfoRow
                                   icon="fitness"
                                   label="Bone & Soft Tissue Augmentation"
+                                  fieldKey="phase2_data.bone_graft_used"
                                   value={
                                     procedure.phase2_data.bone_graft_used
                                       ? "Yes"
@@ -9345,6 +9416,14 @@ export default function ProcedureDetailScreen() {
                       />
                     </TouchableOpacity>
 
+                    {isOpen3 && (
+                      <IntraoralPhotoCard
+                        photos={procedure.phase3_data?.intraoral_photos}
+                        authToken={authToken}
+                        title="Patient Intra-oral Photograph — Phase 3"
+                        testPrefix="phase3-intraoral"
+                      />
+                    )}
                     {/* Phase 3 Content */}
                     {isOpen3 && (
                       <View
@@ -11128,6 +11207,14 @@ export default function ProcedureDetailScreen() {
                       />
                     </TouchableOpacity>
 
+                    {isOpen4 && (
+                      <IntraoralPhotoCard
+                        photos={procedure.phase4_step1_data?.intraoral_photos}
+                        authToken={authToken}
+                        title="Patient Intra-oral Photograph — Phase 4"
+                        testPrefix="phase4-intraoral"
+                      />
+                    )}
                     {/* Phase 4 Content */}
                     {isOpen4 && (
                       <>
@@ -13395,6 +13482,117 @@ export default function ProcedureDetailScreen() {
   );
 }
 
+// Patient Intra-oral Photograph card — the Phase 1 display, shared so Phase 2,
+// Phase 3 and Phase 4 render their photos with exactly the same UI.
+function IntraoralPhotoCard({
+  photos,
+  authToken,
+  title = "Patient Intra-oral Photograph",
+  testPrefix = "intraoral",
+}: {
+  photos: any[] | null | undefined;
+  authToken: string;
+  title?: string;
+  testPrefix?: string;
+}) {
+  if (!Array.isArray(photos) || photos.length === 0) return null;
+  return (
+<View
+                            style={styles.section}
+                            data-testid={`${testPrefix}-photos-section`}
+                          >
+                            <Text style={styles.sectionTitle}>
+                              {title}
+                            </Text>
+                            {photos.map(
+                              (f: any, idx: number) => {
+                                const baseUrl = api.defaults.baseURL || "";
+                                const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+                                return (
+                                  <View
+                                    key={idx}
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      marginBottom: 10,
+                                      gap: 10,
+                                      backgroundColor: "#FFF8E1",
+                                      padding: 8,
+                                      borderRadius: 10,
+                                    }}
+                                    data-testid={`${testPrefix}-thumb-${idx}`}
+                                  >
+                                    <Image
+                                      source={{ uri: fileUrl }}
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: "#FFD54F",
+                                      }}
+                                      resizeMode="cover"
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                      <Text
+                                        style={{
+                                          fontSize: 13,
+                                          fontWeight: "700",
+                                          color: "#333",
+                                        }}
+                                      >
+                                        {f.label || `Photo ${idx + 1}`}
+                                      </Text>
+                                      <Text
+                                        style={{ fontSize: 11, color: "#888" }}
+                                        numberOfLines={1}
+                                      >
+                                        {f.original_name}
+                                      </Text>
+                                    </View>
+                                    <TouchableOpacity
+                                      style={{
+                                        backgroundColor: "#F57C00",
+                                        borderRadius: 8,
+                                        paddingVertical: 6,
+                                        paddingHorizontal: 12,
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        gap: 4,
+                                      }}
+                                      onPress={() =>
+                                        Linking.openURL(fileUrl).catch(() =>
+                                          Alert.alert(
+                                            "Error",
+                                            "Could not open file",
+                                          ),
+                                        )
+                                      }
+                                      data-testid={`${testPrefix}-view-${idx}`}
+                                    >
+                                      <Ionicons
+                                        name="open-outline"
+                                        size={14}
+                                        color="#FFF"
+                                      />
+                                      <Text
+                                        style={{
+                                          color: "#FFF",
+                                          fontSize: 12,
+                                          fontWeight: "700",
+                                        }}
+                                      >
+                                        View
+                                      </Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                );
+                              },
+                            )}
+                          </View>
+  );
+}
+
 function InfoRow({
   icon,
   label,
@@ -13459,6 +13657,10 @@ function InfoRow({
         if (cfg.bool) seed = seed === true ? "Yes" : seed === false ? "No" : "";
         else if (cfg.multi) seed = Array.isArray(seed) ? seed : [];
         else seed = seed == null ? "" : String(seed);
+        if (cfg.otherKey) {
+          const otherSeed = editCtx.procedure?.[cfg.otherKey] ?? "";
+          editCtx.setEditValues((prev) => ({ ...prev, [`${key}::other`]: otherSeed }));
+        }
       } else {
         seed = value || "";
       }
@@ -13567,6 +13769,28 @@ function InfoRow({
                     );
                   })}
                 </View>
+                {pickerCfg.otherKey && editValue === "Other" && (
+                  <TextInput
+                    style={{
+                      marginTop: 8,
+                      borderWidth: 1,
+                      borderColor: "#1565C0",
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      fontSize: 13,
+                      backgroundColor: "#F0F7FF",
+                    }}
+                    value={String(editCtx?.editValues?.[`${key}::other`] ?? "")}
+                    onChangeText={(t) =>
+                      editCtx?.setEditValues((prev) => ({ ...prev, [`${key}::other`]: t }))
+                    }
+                    placeholder="Describe the option"
+                    placeholderTextColor="#999"
+                    multiline
+                    testID={`edit-${key}-other-input`}
+                  />
+                )}
                 <View
                   style={{
                     flexDirection: "row",

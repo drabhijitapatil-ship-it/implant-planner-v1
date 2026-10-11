@@ -1,8 +1,22 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Switch, Image, Linking, Animated, Modal,
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
+  Switch,
+  Image,
+  Linking,
+  Animated,
+  Modal,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
+import IntraoralPhotosSection, { IntraoralPhotoSlots, emptyIntraoralSlots, slotsFromSaved, photosPayload } from '@/components/IntraoralPhotosSection';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api, { getAuthFileUrl, getToken } from '../../../utils/api';
@@ -28,6 +42,7 @@ import {
 import { getCuffHeightsFor } from '../../../constants/attachmentCuffCatalogue';
 import AugStep2Form, { emptyAugStep2 } from '../../../components/AugStep2Form';
 import PhaseStep2TabbedView from '@/components/PhaseStep2TabbedView';
+import PrescriptionEditor from '@/components/PrescriptionEditor';
 import GroupedDescDropdown from '../../../components/GroupedDescDropdown';
 import { PROVISIONAL_GROUPED_OPTIONS } from '../../../constants/singleConventional';
 import {
@@ -108,6 +123,8 @@ export default function Phase2SubmissionScreen() {
   const [procedureType, setProcedureType] = useState('');
   const [createdById, setCreatedById] = useState<string | null>(null);
   const [createdByRole, setCreatedByRole] = useState<string | null>(null);
+  const [procedure, setProcedure] = useState<any>(null);
+  const [rxState, setRxState] = useState<{ hasDrugs: boolean; creatorSigned: boolean }>({ hasDrugs: false, creatorSigned: false });
   const [doneCompleted, setDoneCompleted] = useState(false);
   // iter-138: Phase-1 "Type of Attachment" (if any) so Phase 2 can auto-suggest
   // the manufacturer-recommended cuff-height variants instead of free text.
@@ -184,6 +201,8 @@ export default function Phase2SubmissionScreen() {
 
   // Notes
   const [studentNotes, setStudentNotes] = useState('');
+  // Patient intra-oral photographs for this phase (same UI as Phase 1).
+  const [intraoralPhotos, setIntraoralPhotos] = useState<IntraoralPhotoSlots>(emptyIntraoralSlots());
 
   // ── Local draft autosave (survives backgrounding / navigating away before
   // final Submit) — see utils/draftAutosave.ts. Only user-edited fields are
@@ -192,6 +211,7 @@ export default function Phase2SubmissionScreen() {
   const [screenLoaded, setScreenLoaded] = useState(false);
   const draftKey = draftStorageKey('phase2', String(id), user?.id);
   const getDraftSnapshot = () => ({
+    intraoralPhotos,
     phase2ActualDoneDate, preSurgeryChecklist, preopNotes,
     anesthesiaAdequate, anesthesiaDetails, flapDesign, drillingType,
     implantSeated, implantSeatedComment, torqueValues,
@@ -231,6 +251,7 @@ export default function Phase2SubmissionScreen() {
     if (d.opgFile !== undefined) setOpgFile(d.opgFile);
     if (d.extraIopaCount !== undefined) setExtraIopaCount(d.extraIopaCount);
     if (d.studentNotes !== undefined) setStudentNotes(d.studentNotes);
+    if (d.intraoralPhotos !== undefined) setIntraoralPhotos(d.intraoralPhotos);
     if (d.multiUnitPlaced !== undefined) setMultiUnitPlaced(d.multiUnitPlaced);
     if (d.muaAngulation !== undefined) setMuaAngulation(d.muaAngulation);
     if (d.muaCuffHeight !== undefined) setMuaCuffHeight(d.muaCuffHeight);
@@ -307,6 +328,11 @@ export default function Phase2SubmissionScreen() {
       }
       setCreatedById(procRes.data.created_by_id || null);
       setCreatedByRole(procRes.data.created_by_role || null);
+      setProcedure(procRes.data);
+      {
+        const saved = procRes.data?.phase2_data?.intraoral_photos;
+        if (Array.isArray(saved) && saved.length) setIntraoralPhotos(slotsFromSaved(saved));
+      }
       // Load the Phase-1 attachment choice so the cuff-height field below can
       // render a catalogue-constrained dropdown instead of free text.
       setAttachmentType(procRes.data.attachment_type || '');
@@ -619,6 +645,15 @@ export default function Phase2SubmissionScreen() {
       return;
     }
 
+    // Prescription (optional) — if the creator added drugs it must be signed.
+    if (rxState.hasDrugs && !rxState.creatorSigned) {
+      Alert.alert(
+        'Sign the prescription',
+        'You added medications to the prescription. Please sign it (Sign as Treating Clinician) before submitting Phase 2, or remove the medications.',
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       // iter-356: Compute payload for per-implant Prosthetic Component (Q4-b).
@@ -690,6 +725,7 @@ export default function Phase2SubmissionScreen() {
           .map((f, idx) => ({ filename: f.filename, original_name: f.original_name, tooth_label: f.tooth_label || `Extra ${idx + 1}` })),
         opg_file: opgFile ? { filename: opgFile.filename, original_name: opgFile.original_name } : null,
         post_op_checklist: postOpChecklist,
+        intraoral_photos: photosPayload(intraoralPhotos),
         student_notes: studentNotes || null,
         // iter-139: Multi-unit Abutment capture (full-arch Immediate Loading only).
         // Sent regardless of validity — user opted for non-blocking submit so
@@ -713,7 +749,10 @@ export default function Phase2SubmissionScreen() {
             : null,
       });
       await clearDraft(draftKey);
-      const isInchargeSelfCreated = user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById;
+      // Only when no DIFFERENT supervisor is assigned — otherwise the supervisor
+      // must approve separately (backend enforces the same rule).
+      const isInchargeSelfCreated = user?.role === 'implant_incharge' && createdByRole === 'implant_incharge' && user?.id === createdById
+        && (!procedure?.supervisor_id || procedure?.supervisor_id === user?.id);
       if (isInchargeSelfCreated) {
         try { await api.post(`/procedures/${id}/approve`, { action: 'approve', comment: '' }); } catch {}
         setDoneCompleted(true);
@@ -2095,6 +2134,20 @@ return [missPreop, missSurgery, missRadiographs, missPostOp, []];
               </View>
             ))}
           </View>
+
+          {/* ── Patient Intra-oral Photograph (Phase 2) — same UI as Phase 1 ── */}
+          <IntraoralPhotosSection
+            value={intraoralPhotos}
+            onChange={setIntraoralPhotos}
+            testIDPrefix="phase2-intraoral"
+          />
+
+          {/* ── Prescription (Rx) — optional, submitted & approved with Phase 2 ── */}
+          {procedure && (
+            <View style={{ paddingHorizontal: 16 }}>
+              <PrescriptionEditor procedure={procedure} onChanged={loadImplantPlan} onStateChange={setRxState} />
+            </View>
+          )}
 
           {/* ── Notes ── */}
           <View style={s.section} onLayout={onStepLayout(4)}>

@@ -7,8 +7,14 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, AccessibilityInfo,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  SafeAreaView,
+  AccessibilityInfo,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { router } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, {
@@ -36,7 +42,9 @@ export default function OnboardingScreen() {
   }, []);
 
   const role = (user?.role || 'student').toLowerCase();
-  const firstName = useMemo(() => (user?.name || '').split(' ')[0] || '', [user?.name]);
+  // Full name as entered (e.g. "Dr. Priya Sharma"). Taking only the first
+  // word showed just "Dr." for titled names.
+  const fullName = useMemo(() => (user?.name || '').trim().replace(/\s+/g, ' ').replace(/\.+$/, ''), [user?.name]);
   const hero = heroFor(role);
   const recap = recapFor(role);
   const activeGate = activeGateFor(role);
@@ -60,7 +68,7 @@ export default function OnboardingScreen() {
       </View>
 
       <SlideContainer key={idx} reduceMotion={reduceMotion} testID={`onboarding-slide-${idx}`}>
-        {idx === 0 && <SlideWelcome firstName={firstName} hero={hero} />}
+        {idx === 0 && <SlideWelcome fullName={fullName} hero={hero} />}
         {idx === 1 && <SlidePhases footer={phaseFooterFor(role)} />}
         {idx === 2 && <SlideApproval activeGate={activeGate} />}
         {idx === 3 && <SlideDatabase />}
@@ -115,7 +123,7 @@ function SlideContainer({
 }
 
 // ── Slide 1 — Welcome ────────────────────────────────────────────────────────
-function SlideWelcome({ firstName, hero }: { firstName: string; hero: ReturnType<typeof heroFor> }) {
+function SlideWelcome({ fullName, hero }: { fullName: string; hero: ReturnType<typeof heroFor> }) {
   return (
     <View style={styles.welcomeWrap}>
       <View style={styles.heroLogo}>
@@ -126,7 +134,7 @@ function SlideWelcome({ firstName, hero }: { firstName: string; hero: ReturnType
         <Text style={styles.roleChipText}>{hero.chipLabel}</Text>
       </View>
       <Text style={styles.welcomeH1}>
-        {hero.greeting}{firstName ? `, ${firstName}` : ''}.
+        {hero.greeting}{fullName ? `, ${fullName}` : ''}.
       </Text>
       <Text style={styles.welcomeBody}>{hero.subhead}</Text>
       <Text style={styles.welcomeHint}>Six quick slides walk you through what you can do here.</Text>

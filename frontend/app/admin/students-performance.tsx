@@ -5,9 +5,15 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
-  ActivityIndicator, RefreshControl,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +27,8 @@ type StudentRow = {
   total: number;
   completed: number;
   active: number;
+  /** Supervisors only: this student's cases supervised by the viewer. */
+  under_me?: number;
   department_name?: string | null;
   department_color?: string | null;
   departments?: DepartmentItem[];
@@ -223,6 +231,9 @@ export default function StudentsPerformanceScreen() {
                   <View style={s.chip}><Text style={[s.chipT, { color: '#1A73E8' }]}>{st.total} total</Text></View>
                   <View style={s.chip}><Text style={[s.chipT, { color: '#4CAF50' }]}>{st.completed} done</Text></View>
                   <View style={s.chip}><Text style={[s.chipT, { color: '#FF9800' }]}>{st.active} active</Text></View>
+                  {typeof st.under_me === 'number' && (
+                    <View style={s.chip}><Text style={[s.chipT, { color: '#6A1B9A' }]}>{st.under_me} under you</Text></View>
+                  )}
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#B0BEC5" />

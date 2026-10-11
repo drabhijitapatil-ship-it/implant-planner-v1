@@ -30,6 +30,7 @@ from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
 import aesthetic_risk as _era
+import prescription as _rx
 from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -504,6 +505,28 @@ def _fpdf_org_letterhead(pdf, branding: dict, safe) -> None:
         pdf.ln(2)
 
 
+_LAST_ACTIVE_EVERY = timedelta(minutes=5)
+
+
+async def _touch_last_active(user: dict) -> None:
+    """Record real app activity for "Last seen" in User Management.
+    last_login_at only changes on a password login, but sessions persist for
+    days (cached auth + refresh tokens), so it went stale for daily users.
+    Throttled to one write per user per 5 minutes; never blocks the request."""
+    try:
+        prev = user.get("last_active_at")
+        now = datetime.now(timezone.utc)
+        if isinstance(prev, datetime):
+            if prev.tzinfo is None:
+                prev = prev.replace(tzinfo=timezone.utc)
+            if now - prev < _LAST_ACTIVE_EVERY:
+                return
+        await db.users.update_one({"_id": user["_id"]}, {"$set": {"last_active_at": now}})
+        user["last_active_at"] = now
+    except Exception as exc:  # pragma: no cover — activity stamp is best-effort
+        logging.debug("last_active_at update skipped: %s", exc)
+
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         token = credentials.credentials
@@ -522,6 +545,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
+        await _touch_last_active(user)
         user["_id"] = str(user["_id"])
         user["_original_role"] = user.get("role", "")
         # super_admin is a platform-wide role with no org_id of its own. It is never
@@ -1103,6 +1127,9 @@ class Phase2Submit(BaseModel):
     hemostasis_achieved: Optional[bool] = True
     # Post-surgical radiograph uploads
     iopa_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, tooth_label}]
+    # Patient intra-oral photographs for this phase — same shape as Phase 1
+    # `intraoral_photos`: [{filename, original_name, content_type, label}].
+    intraoral_photos: Optional[List[Dict[str, str]]] = None
     opg_file: Optional[Dict[str, str]] = None  # {filename, original_name} — full arch only
     # Post-operative checklist
     post_op_checklist: Optional[Dict[str, bool]] = None
@@ -1140,6 +1167,9 @@ class Stage2SurgicalSubmit(BaseModel):
     phase3_healing_abutment_config: Optional[List[Dict[str, Any]]] = None
     # Post-surgical radiograph uploads
     iopa_files: Optional[List[Dict[str, str]]] = None  # [{filename, original_name, tooth_label}]
+    # Patient intra-oral photographs for this phase — same shape as Phase 1
+    # `intraoral_photos`: [{filename, original_name, content_type, label}].
+    intraoral_photos: Optional[List[Dict[str, str]]] = None
     # Notes
     student_notes: Optional[str] = Field(None, max_length=2000)
     supervisor_notes: Optional[str] = Field(None, max_length=2000)
@@ -1151,6 +1181,9 @@ class Stage2SurgicalSubmit(BaseModel):
     done_date: Optional[str] = Field(None, max_length=10)
 
 class Stage2ProstheticSubmit(BaseModel):
+    # Patient intra-oral photographs for this phase — same shape as Phase 1
+    # `intraoral_photos`: [{filename, original_name, content_type, label}].
+    intraoral_photos: Optional[List[Dict[str, str]]] = None
     # Step 1: Final Prosthesis + Impressions
     final_prosthetic_plan: Optional[str] = Field(None, max_length=500)
     prosthetic_material: Optional[str] = Field(None, max_length=200)
@@ -2331,10 +2364,21 @@ async def get_users(role: Optional[str] = None, is_admin: Optional[bool] = None,
         # with.
         query["is_admin"] = is_admin
 
-    users = await db.users.find(query, {"password_hash": 0}).to_list(100)
+    # Was capped at 100 — larger organisations silently lost users from
+    # User Management and every user picker. 5000 is a safety ceiling only.
+    users = await db.users.find(query, {"password_hash": 0}).sort("name", 1).to_list(5000)
     for user in users:
         user["_id"] = str(user["_id"])
         user["id"] = user["_id"]
+        # Mongo returns naive UTC datetimes; serialised as-is they carry no
+        # timezone and the app read them as local time (5h30m off in IST).
+        # Send explicit UTC ("…Z") so clients convert correctly.
+        for _k in ("last_active_at", "last_login_at", "first_login_at", "created_at", "updated_at"):
+            _v = user.get(_k)
+            if isinstance(_v, datetime):
+                if _v.tzinfo is None:
+                    _v = _v.replace(tzinfo=timezone.utc)
+                user[_k] = _v.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         dids = user.get("department_ids")
         if not isinstance(dids, list):
             user["department_ids"] = [user["department_id"]] if user.get("department_id") else []
@@ -2504,6 +2548,9 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
 
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=100)
+    # Login email. Normalised to trimmed lower-case; must not collide with
+    # another account (checked case-insensitively in update_user).
+    email: Optional[EmailStr] = Field(None, max_length=255)
     role: Optional[str] = Field(None, max_length=30)
     password: Optional[str] = Field(None, max_length=128)
     department_id: Optional[str] = Field(None, max_length=64)
@@ -2538,7 +2585,7 @@ async def _assert_dept_incharge_cap(org_id: str, department_id: str, role: str, 
 
 
 @api_router.put("/users/{user_id}")
-async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depends(get_current_user)):
+async def update_user(user_id: str, user: UserUpdate, request: Request, current_user: dict = Depends(get_current_user)):
     if current_user["role"] not in ["administrator", "implant_incharge"]:
         raise HTTPException(status_code=403, detail="Only administrators and implant incharge can update users")
 
@@ -2550,6 +2597,18 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
     update_fields = {}
     if user.name and user.name.strip():
         update_fields["name"] = user.name.strip()
+    if user.email:
+        new_email = str(user.email).strip().lower()
+        if new_email != (existing.get("email") or "").strip().lower():
+            # Case-insensitive, like login's fallback lookup — "A@x.com" and
+            # "a@x.com" must not end up as two accounts.
+            clash = await db.users.find_one({
+                "_id": {"$ne": existing["_id"]},
+                "email": {"$regex": f"^{re.escape(new_email)}$", "$options": "i"},
+            }, {"_id": 1})
+            if clash:
+                raise HTTPException(status_code=400, detail="Another user already uses this email")
+            update_fields["email"] = new_email
     if user.role:
         if user.role not in VALID_ROLES:
             raise HTTPException(status_code=400, detail="Invalid role")
@@ -2629,6 +2688,12 @@ async def update_user(user_id: str, user: UserUpdate, current_user: dict = Depen
         raise HTTPException(status_code=400, detail="No fields to update")
 
     await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update_fields})
+    if "email" in update_fields:
+        await log_access(
+            action="user_email_changed", resource_type="user", resource_id=user_id,
+            user=current_user, request=request,
+            extra={"from": existing.get("email"), "to": update_fields["email"]},
+        )
 
     return {"message": "User updated successfully"}
 
@@ -3152,6 +3217,140 @@ async def list_departments(current_user: dict = Depends(get_current_user)):
             "color": d.get("color") or DEPARTMENT_COLOR_PALETTE[0],
         })
     return {"departments": departments}
+
+
+# ── Org-admin Department / Unit statistics ─────────────────────────────────
+# Units are departments whose name contains the word "Unit" (same collection,
+# same convention as admin/departments.tsx).
+_DEPT_STATS_ROLES = ("student", "supervisor", "implant_incharge", "nurse", "administrator")
+# Role → procedure field that links a member to a case.
+_DEPT_STATS_CASE_FIELD = {"student": "student_id", "supervisor": "supervisor_id", "implant_incharge": "implant_incharge_id"}
+
+
+def _case_bucket(status: str) -> str:
+    s = status or ""
+    if s == "draft":
+        return "draft"
+    if s in ("completed", "treatment_ended"):
+        return "completed"
+    if s in ("cancelled", "permanently_rejected"):
+        return "terminated"
+    if s.startswith("pending_"):
+        return "pending_approval"
+    return "in_progress"
+
+
+def _empty_case_stats() -> Dict[str, int]:
+    return {"total": 0, "in_progress": 0, "pending_approval": 0, "completed": 0,
+            "terminated": 0, "draft": 0, "new_last_30_days": 0}
+
+
+def _add_case(stats: Dict[str, int], proc: dict, since: datetime) -> None:
+    b = _case_bucket(proc.get("status"))
+    stats[b] += 1
+    if b != "draft":
+        stats["total"] += 1
+    created = proc.get("created_at")
+    if isinstance(created, datetime) and created >= since and b != "draft":
+        stats["new_last_30_days"] += 1
+
+
+@api_router.get("/org/department-stats")
+async def org_department_stats(current_user: dict = Depends(get_current_user)):
+    """Org admin only: per-department/unit statistics — members per role, case
+    outcomes, and a per-role breakdown with each member's caseload. Users and
+    cases with no department are grouped under "Unassigned"."""
+    org_id = _require_org_admin(current_user)
+    since = datetime.utcnow() - timedelta(days=30)
+
+    depts = [d async for d in db.departments.find({"org_id": org_id}).sort("name", 1)]
+    dept_ids = [str(d["_id"]) for d in depts]
+    UNASSIGNED = "__unassigned__"
+
+    def blank(dept_id: str, name: str, color: str, is_unit: bool) -> dict:
+        return {
+            "id": dept_id, "name": name, "color": color, "is_unit": is_unit,
+            "members_total": 0,
+            "members_by_role": {r: 0 for r in _DEPT_STATS_ROLES},
+            "cases": _empty_case_stats(),
+            "roles": {r: [] for r in _DEPT_STATS_ROLES},
+        }
+
+    out: Dict[str, dict] = {
+        str(d["_id"]): blank(str(d["_id"]), d["name"], d.get("color") or DEPARTMENT_COLOR_PALETTE[0],
+                             bool(re.search(r"\bunit\b", d["name"], re.I)))
+        for d in depts
+    }
+    out[UNASSIGNED] = blank(UNASSIGNED, "Unassigned", "#90A4AE", False)
+
+    # Members — an In-Charge can belong to up to 2 departments.
+    users = [u async for u in db.users.find(
+        {"org_id": org_id},
+        {"name": 1, "username": 1, "role": 1, "department_id": 1, "department_ids": 1, "first_login_at": 1},
+    )]
+    # Rows are per (department, user): a member's caseload inside a department
+    # counts only that department's cases.
+    people: Dict[str, dict] = {}
+    rows: Dict[tuple, dict] = {}
+
+    def _row(did: str, uid: str, guest: bool) -> dict:
+        u = people[uid]
+        r = {"id": uid, "name": u["name"], "role": u["role"], "onboarded": u["onboarded"],
+             "guest": guest, **_empty_case_stats()}
+        rows[(did, uid)] = r
+        out[did]["roles"][u["role"]].append(r)
+        return r
+
+    for u in users:
+        role = u.get("role")
+        if role not in _DEPT_STATS_ROLES:
+            continue
+        uid = str(u["_id"])
+        people[uid] = {"name": u.get("name") or u.get("username") or "—", "role": role,
+                       "onboarded": bool(u.get("first_login_at"))}
+        ids = [i for i in (u.get("department_ids") or []) if i in out] or (
+            [u["department_id"]] if u.get("department_id") in out else [])
+        for did in (ids or [UNASSIGNED]):
+            out[did]["members_total"] += 1
+            out[did]["members_by_role"][role] += 1
+            _row(did, uid, guest=False)
+
+    # Cases — department comes from the case (stamped from its creator).
+    async for p in db.procedures.find(
+        {"org_id": org_id, "archived": {"$ne": True}},
+        {"status": 1, "department_id": 1, "created_at": 1,
+         "student_id": 1, "supervisor_id": 1, "implant_incharge_id": 1},
+    ):
+        did = p.get("department_id") if p.get("department_id") in out else UNASSIGNED
+        _add_case(out[did]["cases"], p, since)
+        # Each person's caseload within THIS department. Someone working on
+        # the department's cases without belonging to it (e.g. a supervisor
+        # from another department) is listed as a guest, not a member.
+        for role, field in _DEPT_STATS_CASE_FIELD.items():
+            uid = str(p.get(field) or "")
+            if uid not in people or people[uid]["role"] != role:
+                continue
+            row = rows.get((did, uid)) or _row(did, uid, guest=True)
+            _add_case(row, p, since)
+
+    for d in out.values():
+        for role in d["roles"]:
+            d["roles"][role].sort(key=lambda r: (r["guest"], -r["total"], r["name"].lower()))
+
+    result = [out[i] for i in dept_ids]
+    if out[UNASSIGNED]["members_total"] or out[UNASSIGNED]["cases"]["total"] or out[UNASSIGNED]["cases"]["draft"]:
+        result.append(out[UNASSIGNED])
+    org_cases = _empty_case_stats()
+    for d in result:
+        for k in org_cases:
+            org_cases[k] += d["cases"][k]
+    return {
+        "generated_at": datetime.utcnow().isoformat(),
+        "org_totals": {"departments": sum(1 for d in result if d["id"] != UNASSIGNED and not d["is_unit"]),
+                       "units": sum(1 for d in result if d["is_unit"]),
+                       "members": len(people), "cases": org_cases},
+        "departments": result,
+    }
 
 
 @api_router.put("/departments/{department_id}")
@@ -6078,17 +6277,39 @@ _HEALED_EDENTULOUS = {
 _EXTRACT_AND_PLACE = {"Immediate Implant", "Partial Extraction Therapy"}
 
 
-def _validate_missing_teeth(proc_type: Optional[str], missing_teeth: Optional[List[str]]):
+# Procedure types that ask "Number of Implants" (Single / Multiple) — mirrors
+# PROCEDURES_WITH_NUM_IMPLANTS_QUESTION in frontend/constants/checklist.ts.
+_NUM_IMPLANTS_QUESTION_TYPES = {
+    "Immediate Implant", "Partial Extraction Therapy",
+    "Implant Placement with Guided Bone Regeneration", "Guided Surgery", "Sinus Lift",
+}
+
+
+def _validate_missing_teeth(proc_type: Optional[str], missing_teeth: Optional[List[str]],
+                            num_implants: Optional[str] = None, final: bool = False):
     """Enforce teeth-count rules based on implant procedure type.
-    Single -> exactly 1. Multiple -> >=2. GBR/Guided/Immediate/PET -> >=1.
-    Full-arch (All on 4/6/X) types skip this check (no FDI chart used)."""
+    Single (Single Conventional Implant, or a Number-of-Implants type answered
+    "Single Implant") -> exactly 1. Multiple -> >=2. GBR/Guided/Immediate/PET -> >=1.
+    `final=False` (draft saves) only rejects impossible states (2+ teeth on a
+    single case) so a half-filled chart can still be saved; `final=True`
+    (submission for Phase 1 approval) enforces the full rule.
+    Full-arch (All on 4/6/X) types skip this check (no FDI chart used).
+    (The old check used the wrong name "Conventional Single Implant" and
+    never ran.)"""
     if not proc_type:
         return
     teeth = [t for t in (missing_teeth or []) if t in ALL_FDI_TEETH]
-    if proc_type == "Conventional Single Implant" and len(teeth) != 1:
-        raise HTTPException(status_code=400, detail="Conventional Single Implant requires exactly 1 missing tooth to be marked.")
-    if proc_type == "Multiple Conventional Implants" and len(teeth) < 2:
-        raise HTTPException(status_code=400, detail="Multiple Conventional Implants requires at least 2 missing teeth to be marked.")
+    asks_num = proc_type in _NUM_IMPLANTS_QUESTION_TYPES
+    single = proc_type == "Single Conventional Implant" or (asks_num and num_implants == "Single Implant")
+    multiple = proc_type == "Multiple Conventional Implants" or (asks_num and num_implants == "Multiple Implants")
+    if single and len(teeth) > 1:
+        raise HTTPException(status_code=400, detail=f"Single implant selected — only 1 tooth can be marked on the FDI chart ({len(teeth)} marked).")
+    if final and single and len(teeth) != 1:
+        raise HTTPException(status_code=400, detail="Single implant selected — mark exactly 1 tooth on the FDI chart.")
+    # Multiple Conventional keeps its always-on rule; the Number-of-Implants
+    # types are checked at submission (their answer may still be changing).
+    if multiple and len(teeth) < 2 and (final or proc_type == "Multiple Conventional Implants"):
+        raise HTTPException(status_code=400, detail=f"Multiple implants selected — mark at least 2 teeth on the FDI chart ({len(teeth)} marked).")
     if proc_type in (_HEALED_EDENTULOUS | _EXTRACT_AND_PLACE) and len(teeth) < 1:
         raise HTTPException(status_code=400, detail=f"{proc_type} requires at least 1 tooth to be marked on the FDI chart.")
 
@@ -6524,7 +6745,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     
     # FDI chart: when the new `missing_teeth` field is supplied, enforce the
     # per-procedure-type count rules and derive `teeth_present` for back-compat.
-    _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
+    _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth, procedure.num_implants)
     _apply_missing_teeth_derive(procedure_dict)
     procedure_dict["aesthetic_risk"] = _era.sanitize_aesthetic_risk(procedure.aesthetic_risk, procedure_dict.get("missing_teeth"))
     _era.stamp_overall(procedure_dict)
@@ -6752,12 +6973,14 @@ async def get_procedures(
              "transfer_request.status": "pending_recipient"},
         ]
     elif current_user["role"] == "supervisor":
+        # Every case scheduled under this supervisor — including ones an
+        # In-Charge created and assigned to them (those used to be hidden by a
+        # created_by_role exclusion) — plus cases they created themselves.
         query["$and"] = [
             {"$or": [
                 {"supervisor_id": current_user["_id"]},
                 {"created_by_id": current_user["_id"]},
             ]},
-            {"created_by_role": {"$nin": ["implant_incharge", "chief_dentist"]}},
         ]
     elif current_user["role"] == "nurse":
         # Nurses can only see fully approved/completed procedures, within their own org
@@ -7844,8 +8067,17 @@ async def get_student_summary(student_id: str, current_user: dict = Depends(get_
 
     # Aggregations across this student's procedures
     base_match: Dict[str, Any] = {"student_id": student_id, "archived": {"$ne": True}}
-    # Supervisor scope: only count cases they supervise / created
-    if role == "supervisor":
+    # Supervisor scope: a student in the supervisor's own department (or org,
+    # when the supervisor has no department) → full patient summary. Anyone
+    # else → only the cases this supervisor supervises / created.
+    sup_dept = current_user.get("department_id")
+    stu_dept_ids = set((u or {}).get("department_ids") or []) | ({(u or {}).get("department_id")} - {None})
+    same_dept_student = bool(
+        role == "supervisor" and u and u.get("role") == "student"
+        and u.get("org_id") == current_user.get("org_id")
+        and (not sup_dept or sup_dept in stu_dept_ids)
+    )
+    if role == "supervisor" and not same_dept_student:
         base_match["$or"] = [
             {"supervisor_id": current_user["_id"]},
             {"created_by_id": current_user["_id"]},
@@ -8713,7 +8945,8 @@ async def update_procedure(
     # `teeth_present` so back-compat fields stay in sync with reality.
     if "missing_teeth" in update_data:
         effective_proc_type = update_data.get("implant_procedure_type") or procedure.get("implant_procedure_type")
-        _validate_missing_teeth(effective_proc_type, update_data.get("missing_teeth"))
+        effective_num = update_data.get("num_implants") if "num_implants" in update_data else procedure.get("num_implants")
+        _validate_missing_teeth(effective_proc_type, update_data.get("missing_teeth"), effective_num)
         _apply_missing_teeth_derive(update_data)
     
     # Validate status transitions
@@ -8726,6 +8959,15 @@ async def update_procedure(
         allowed = valid_transitions.get(current_status, set())
         if new_status not in allowed:
             raise HTTPException(status_code=400, detail=f"Cannot change status from '{current_status}' to '{new_status}'")
+        # Submitting for Phase 1 approval: full tooth-count rule on the final
+        # values (this call usually carries only the status change).
+        if new_status == "pending_phase1":
+            _validate_missing_teeth(
+                update_data.get("implant_procedure_type") or procedure.get("implant_procedure_type"),
+                update_data.get("missing_teeth") if "missing_teeth" in update_data else procedure.get("missing_teeth"),
+                update_data.get("num_implants") if "num_implants" in update_data else procedure.get("num_implants"),
+                final=True,
+            )
     
     update_data["updated_at"] = datetime.utcnow()
     
@@ -17273,6 +17515,7 @@ def _check_user_approval_rights(procedure: dict, current_user: dict):
     inc_id = str(procedure.get("implant_incharge_id")) if procedure.get("implant_incharge_id") else ""
     created_by_id = str(procedure.get("created_by_id")) if procedure.get("created_by_id") else ""
 
+    # Assignment-based: which approval slot(s) this user holds on THIS case.
     is_supervisor = bool(cur_user_id and sup_id and cur_user_id == sup_id)
     is_implant_incharge = bool(cur_user_id and inc_id and cur_user_id == inc_id)
 
@@ -17282,23 +17525,38 @@ def _check_user_approval_rights(procedure: dict, current_user: dict):
         bool(current_user.get("is_admin"))
     )
 
+    # An unassigned faculty member may still approve, but only in the ONE slot
+    # matching their role — never both. (Regression b67f6a43, Jul-2026, made
+    # every faculty approval count as supervisor AND in-charge, so an
+    # In-Charge approving first approved the whole phase and their comment
+    # showed as the supervisor's too.)
+    if is_faculty_or_admin and not (is_supervisor or is_implant_incharge):
+        if current_user.get("role") == "supervisor":
+            is_supervisor = True
+        else:
+            is_implant_incharge = True
+
+    # In-Charge self-created shortcut (one click approves both slots) applies
+    # only when no DIFFERENT supervisor is assigned. If the In-Charge picked
+    # another supervisor, that supervisor must still approve separately.
     is_incharge_self_created = (
         procedure.get("created_by_role") in ("implant_incharge", "chief_dentist") and
-        bool(cur_user_id and created_by_id and cur_user_id == created_by_id)
+        bool(cur_user_id and created_by_id and cur_user_id == created_by_id) and
+        (not sup_id or sup_id == cur_user_id)
     )
 
+    # "Same person" ONLY when one user really holds both slots on this case.
     same_person = bool(
         (sup_id and inc_id and sup_id == inc_id) or
-        (is_supervisor and is_implant_incharge) or
-        is_faculty_or_admin
+        (is_supervisor and is_implant_incharge)
     )
 
     return {
-        "is_supervisor": is_supervisor or is_faculty_or_admin,
-        "is_implant_incharge": is_implant_incharge or is_faculty_or_admin,
+        "is_supervisor": is_supervisor,
+        "is_implant_incharge": is_implant_incharge,
         "is_incharge_self_created": is_incharge_self_created,
         "same_person": same_person,
-        "can_approve": is_faculty_or_admin,
+        "can_approve": is_supervisor or is_implant_incharge or is_incharge_self_created,
     }
 
 
@@ -17540,7 +17798,11 @@ async def approve_procedure(
                 update_fields["implant_incharge_phase2_approved_at"] = datetime.utcnow()
                 update_fields["status"] = "phase2_approved"
                 update_fields["phase2_completed_at"] = datetime.utcnow()
-                
+                if _rx.has_drugs(procedure.get("prescription")):
+                    update_fields["prescription"] = _rx.rx_mark_approved(
+                        procedure.get("prescription"),
+                        {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")})
+
                 await db.procedures.update_one(
                     {"_id": ObjectId(procedure_id)},
                     {"$set": update_fields}
@@ -17575,7 +17837,11 @@ async def approve_procedure(
                 update_fields["status"] = "phase2_approved"
                 update_fields["phase2_completed_at"] = datetime.utcnow()
                 update_fields["fully_completed_at"] = datetime.utcnow()
-                
+                if _rx.has_drugs(procedure.get("prescription")):
+                    update_fields["prescription"] = _rx.rx_mark_approved(
+                        procedure.get("prescription"),
+                        {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")})
+
                 # Notify student of completion
                 await db.notifications.insert_one({
                     "user_id": procedure["student_id"],
@@ -17745,6 +18011,211 @@ async def request_phase1_approval(
     return updated
 
 
+# ─── Prescription (Rx) — optional, created with Phase 2, approved with it ───
+class PrescriptionEditBody(BaseModel):
+    diagnosis: str = Field("", max_length=600)
+    allergies: str = Field("", max_length=600)
+    advice: str = Field("", max_length=2500)
+    drugs: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PrescriptionSignBody(BaseModel):
+    strokes: List[List[List[float]]]
+    pad_width: float = Field(..., gt=0, le=2000)
+    pad_height: float = Field(..., gt=0, le=1000)
+
+
+def _rx_roles(procedure: dict, user: dict):
+    """(is_creator, is_faculty) for the current user on this case."""
+    uid = user.get("_id")
+    role = user.get("role")
+    is_creator = procedure.get("created_by_id") == uid or procedure.get("student_id") == uid
+    is_faculty = (
+        role in ("implant_incharge", "administrator")
+        or (role == "supervisor" and procedure.get("supervisor_id") == uid)
+    )
+    return is_creator, is_faculty
+
+
+def _rx_can_view(procedure: dict, user: dict) -> bool:
+    is_creator, is_faculty = _rx_roles(procedure, user)
+    return is_creator or is_faculty or user.get("role") in ("nurse",) and procedure.get("status") in (
+        "phase2_approved", "stage2_surgical_approved", "completed")
+
+
+async def _get_proc_or_404(procedure_id: str) -> dict:
+    try:
+        proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    except Exception:
+        proc = None
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    return proc
+
+
+@api_router.put("/procedures/{procedure_id}/prescription")
+async def save_prescription(procedure_id: str, body: PrescriptionEditBody,
+                            current_user: dict = Depends(get_current_user)):
+    """Create / edit the prescription drug list + text. Creator edits before
+    Phase 2 submission; faculty edit during Phase 2 review. Every change is
+    audit-logged. Locked once approved."""
+    procedure = await _get_proc_or_404(procedure_id)
+    is_creator, is_faculty = _rx_roles(procedure, current_user)
+    existing = procedure.get("prescription") or {}
+    if existing.get("status") == "approved":
+        raise HTTPException(status_code=400, detail="Prescription is approved and locked. Ask faculty to reopen it first.")
+    case_status = procedure.get("status")
+    creator_window = is_creator and case_status in ("phase1_approved",)
+    faculty_window = is_faculty and existing.get("status") != "approved"
+    if not (creator_window or faculty_window):
+        raise HTTPException(status_code=403, detail="You cannot edit this prescription at this stage.")
+
+    clean = _rx.sanitize_prescription_edit(body.model_dump())
+    now = _rx.now_iso()
+    rx = dict(existing)
+    if not rx:
+        rx["status"] = "draft"
+        rx["created_by_id"] = current_user.get("_id")
+        rx["created_by_name"] = current_user.get("name", "")
+        rx["created_by_role"] = current_user.get("role", "")
+        rx["created_at"] = now
+        rx["signatures"] = {}
+    rx.update(clean)
+    rx["updated_at"] = now
+    audit = list(rx.get("audit_log") or [])
+    audit.append({
+        "action": "edit", "by_id": current_user.get("_id"),
+        "by_name": current_user.get("name", ""), "by_role": current_user.get("role", ""),
+        "at": now, "detail": f"{len(clean['drugs'])} drug(s)",
+    })
+    rx["audit_log"] = audit[-100:]
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": now}})
+    return rx
+
+
+@api_router.post("/procedures/{procedure_id}/prescription/sign")
+async def sign_prescription(procedure_id: str, body: PrescriptionSignBody,
+                            current_user: dict = Depends(get_current_user)):
+    """Capture the creator's or supervisor's e-signature on the prescription.
+    Reuses the server-side PNG rasteriser + SHA-256 tamper evidence."""
+    procedure = await _get_proc_or_404(procedure_id)
+    is_creator, is_faculty = _rx_roles(procedure, current_user)
+    rx = procedure.get("prescription") or {}
+    if not _rx.has_drugs(rx):
+        raise HTTPException(status_code=400, detail="Add at least one medication before signing.")
+    if rx.get("status") == "approved":
+        raise HTTPException(status_code=400, detail="Prescription is approved and locked.")
+    if is_faculty and not is_creator:
+        slot = "supervisor"
+    elif is_creator:
+        slot = "creator"
+    else:
+        raise HTTPException(status_code=403, detail="You are not allowed to sign this prescription.")
+
+    total_pts = sum(len(s) for s in body.strokes)
+    if not body.strokes or total_pts < 8:
+        raise HTTPException(status_code=400, detail="Signature required")
+    if total_pts > 20000:
+        raise HTTPException(status_code=400, detail="Signature data too large")
+
+    png = _render_signature_png(body.strokes, body.pad_width, body.pad_height)
+    if len(png) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Signature image exceeds 2MB")
+    sha256 = hashlib.sha256(png).hexdigest()
+    unique_name = f"rx_sign_{slot}_{uuid.uuid4().hex}.png"
+    with open(UPLOADS_DIR / unique_name, "wb") as f:
+        f.write(png)
+
+    now = _rx.now_iso()
+    sig = {
+        "filename": unique_name, "signed_at": now,
+        "signed_by_id": current_user.get("_id"),
+        "signed_by_name": current_user.get("name", ""),
+        "signed_by_role": current_user.get("role", ""),
+        "sha256": sha256,
+    }
+    sigs = dict(rx.get("signatures") or {})
+    sigs[slot] = sig
+    rx = dict(rx)
+    rx["signatures"] = sigs
+    rx["updated_at"] = now
+    audit = list(rx.get("audit_log") or [])
+    audit.append({"action": f"sign:{slot}", "by_id": current_user.get("_id"),
+                  "by_name": current_user.get("name", ""), "by_role": current_user.get("role", ""), "at": now})
+    rx["audit_log"] = audit[-100:]
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": now}})
+    return rx
+
+
+@api_router.post("/procedures/{procedure_id}/prescription/approve")
+async def approve_prescription(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Faculty manual approve (used after a reopen). Requires a supervisor
+    signature. The normal path auto-approves with Phase 2."""
+    procedure = await _get_proc_or_404(procedure_id)
+    _, is_faculty = _rx_roles(procedure, current_user)
+    if not is_faculty:
+        raise HTTPException(status_code=403, detail="Only faculty can approve the prescription.")
+    rx = procedure.get("prescription") or {}
+    if not _rx.has_drugs(rx):
+        raise HTTPException(status_code=400, detail="Nothing to approve — no medications.")
+    if rx.get("status") == "approved":
+        return rx
+    if not (rx.get("signatures") or {}).get("supervisor"):
+        raise HTTPException(status_code=400, detail="Supervisor signature required before approval.")
+    approver = {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")}
+    rx = _rx.rx_mark_approved(rx, approver)
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": _rx.now_iso()}})
+    return rx
+
+
+@api_router.post("/procedures/{procedure_id}/prescription/reopen")
+async def reopen_prescription(procedure_id: str, current_user: dict = Depends(get_current_user)):
+    """Faculty reopens an approved prescription for corrections."""
+    procedure = await _get_proc_or_404(procedure_id)
+    _, is_faculty = _rx_roles(procedure, current_user)
+    if not is_faculty:
+        raise HTTPException(status_code=403, detail="Only faculty can reopen the prescription.")
+    rx = procedure.get("prescription") or {}
+    if rx.get("status") != "approved":
+        return {"ok": True, "already_open": True, "prescription": rx}
+    now = _rx.now_iso()
+    rx = dict(rx)
+    reopen_log = list(rx.get("reopen_log") or [])
+    reopen_log.append({"from_status": "approved", "by_name": current_user.get("name", ""),
+                       "by_role": current_user.get("role", ""), "at": now})
+    rx["reopen_log"] = reopen_log
+    rx["status"] = "draft"
+    rx.pop("approved_at", None)
+    rx.pop("approved_by", None)
+    rx["updated_at"] = now
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"prescription": rx, "updated_at": now}})
+    return {"ok": True, "prescription": rx}
+
+
+@api_router.get("/procedures/{procedure_id}/prescription/pdf")
+async def prescription_pdf(procedure_id: str, request: Request,
+                           current_user: dict = Depends(get_current_user)):
+    """Download the signed prescription PDF."""
+    procedure = await _get_proc_or_404(procedure_id)
+    is_creator, is_faculty = _rx_roles(procedure, current_user)
+    if not (is_creator or is_faculty or current_user.get("role") == "nurse"):
+        raise HTTPException(status_code=403, detail="Not allowed to view this prescription.")
+    rx = procedure.get("prescription") or {}
+    if not _rx.has_drugs(rx):
+        raise HTTPException(status_code=400, detail="No prescription to export for this case.")
+    await log_access(action="pdf_export", resource_type="prescription", resource_id=procedure_id,
+                     user=current_user, request=request,
+                     extra={"patient_name": procedure.get("patient_name")})
+    buf = _rx.build_prescription_pdf(procedure, UPLOADS_DIR)
+    filename = f"Prescription_{(procedure.get('patient_name') or 'Patient').replace(' ', '_')}.pdf"
+    return StreamingResponse(buf, media_type="application/pdf",
+                             headers={"Content-Disposition": f'inline; filename="{filename}"'})
+
+
 # Phase 2 Submission Route
 @api_router.post("/procedures/{procedure_id}/submit-phase2")
 async def submit_phase2(
@@ -17791,6 +18262,7 @@ async def submit_phase2(
     
     # Store full Phase 2 surgical data
     phase2_surgical_data = {
+        "intraoral_photos": phase2_data.intraoral_photos or [],
         "pre_surgery_checklist": phase2_data.pre_surgery_checklist or {},
         "anesthesia_adequate": phase2_data.anesthesia_adequate,
         "anesthesia_details": phase2_data.anesthesia_details,
@@ -17869,7 +18341,22 @@ async def submit_phase2(
         "phase2_submitted_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     }
-    
+
+    # Prescription (Rx) rides along with Phase 2. If the creator drafted one it
+    # MUST be signed before submission; it then moves to 'pending' (or straight
+    # to 'approved' when an In-Charge submission auto-approves Phase 2).
+    _rx_doc = procedure.get("prescription")
+    if _rx.has_drugs(_rx_doc):
+        if not (_rx_doc.get("signatures") or {}).get("creator"):
+            raise HTTPException(status_code=400,
+                detail="Please sign the prescription before submitting Phase 2, or remove its medications.")
+        if update_data["status"] == "phase2_approved":
+            update_data["prescription"] = _rx.rx_mark_approved(
+                _rx.rx_mark_pending(_rx_doc),
+                {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")})
+        else:
+            update_data["prescription"] = _rx.rx_mark_pending(_rx_doc)
+
     if phase2_data.student_notes:
         update_data["phase2_student_notes"] = phase2_data.student_notes
     if phase2_data.remark:
@@ -18079,6 +18566,7 @@ async def submit_stage2_surgical(
     
     # Store Phase 3 data
     phase3_data = {
+        "intraoral_photos": data.intraoral_photos or [],
         "checklist_items": data.checklist_items or {},
         "isq_value": data.isq_value,
         "healing_abutment_height": data.healing_abutment_height,
@@ -18236,6 +18724,7 @@ async def submit_stage2_prosthetic(
         # iter-Jun-2026: learn "Other" scanners as pending suggestions for In-Charge review.
         await _suggest_scanner_if_other(data, procedure_id, current_user)
     phase4_step1_data = {
+        "intraoral_photos": data.intraoral_photos or [],
         "final_prosthetic_plan": data.final_prosthetic_plan,
         "prosthetic_material": data.prosthetic_material,
         "custom_abutment": data.custom_abutment,
@@ -19342,7 +19831,7 @@ async def complete_phase1_after_augmentation(
             status_code=409,
             detail=f"That slot on {procedure.procedure_date} is already booked for patient {existing.get('patient_name', 'Unknown')} (scheduled by {booked_by}).",
         )
-    _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth)
+    _validate_missing_teeth(procedure.implant_procedure_type, procedure.missing_teeth, getattr(procedure, "num_implants", None), final=True)
     procedure_dict = procedure.model_dump()
     _apply_missing_teeth_derive(procedure_dict)
     procedure_dict["aesthetic_risk"] = _era.sanitize_aesthetic_risk(procedure.aesthetic_risk, procedure_dict.get("missing_teeth"))
@@ -19920,7 +20409,13 @@ async def submit_followup(
         raise HTTPException(status_code=400, detail="Maximum of four follow-up appointments (First–Fourth) allowed.")
 
     now_iso = datetime.now(timezone.utc).isoformat()
-    is_incharge_self_created = proc.get("created_by_role") == "implant_incharge" and proc.get("created_by_id") == current_user["_id"]
+    # Auto-approve only when no DIFFERENT supervisor is assigned (same rule as
+    # _check_user_approval_rights) — otherwise the supervisor must review it.
+    is_incharge_self_created = (
+        proc.get("created_by_role") == "implant_incharge"
+        and proc.get("created_by_id") == current_user["_id"]
+        and (not proc.get("supervisor_id") or proc.get("supervisor_id") == current_user["_id"])
+    )
     entry = {
         "number": number,
         "label": _followup_label(number),
@@ -20713,7 +21208,27 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
                 for r in student_stats:
                     if not r["student_name"]:
                         r["student_name"] = _name_by_id.get(r["student_id"]) or "Unknown"
-            student_stats.sort(key=lambda x: x["completed"], reverse=True)
+            # Every student in scope, even with no cases yet (a new PG student
+            # must still show up for their department's faculty).
+            _seen = {r["student_id"] for r in student_stats}
+            _student_q: Dict[str, Any] = {"role": "student"}
+            if not current_user.get("is_super_admin"):
+                _student_q.update(_dept_scope_query(current_user))
+            async for u in db.users.find(_student_q, {"name": 1, "username": 1}):
+                sid = str(u["_id"])
+                if sid not in _seen:
+                    student_stats.append({"student_id": sid, "student_name": u.get("name") or u.get("username") or "Unknown",
+                                          "total": 0, "completed": 0, "rejected": 0, "active": 0})
+            if role == "supervisor":
+                _mine: Dict[str, int] = {}
+                async for d in db.procedures.aggregate([
+                    {"$match": {"supervisor_id": user_id, "archived": {"$ne": True}}},
+                    {"$group": {"_id": "$student_id", "n": {"$sum": 1}}},
+                ]):
+                    _mine[str(d["_id"])] = d["n"]
+                for r in student_stats:
+                    r["under_me"] = _mine.get(r["student_id"], 0)
+            student_stats.sort(key=lambda x: (-x["completed"], -x["total"], (x["student_name"] or "").lower()))
             result["student_stats"] = student_stats
 
             # Supervisor stats — aggregate cases per supervisor with review-load metrics

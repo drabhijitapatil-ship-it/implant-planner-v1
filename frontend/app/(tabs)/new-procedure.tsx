@@ -9,7 +9,6 @@ import {
   View,
   Text,
   TextInput,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -23,6 +22,7 @@ import {
   useWindowDimensions,
   Pressable,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useRouter,
@@ -2296,6 +2296,25 @@ export default function NewProcedureScreen() {
     // iter-307: when the procedure type requires the Number-of-Implants
     // sub-question, block submission until it's answered and enforce the
     // expected tooth-count on the FDI chart for the chosen sub-option.
+    // Single / Multiple Conventional Implants — tooth count must match.
+    {
+      const n = (sanitized.missing_teeth || []).length;
+      if (sanitized.implant_procedure_type === "Single Conventional Implant" && n !== 1) {
+        Alert.alert(
+          "Tooth Count Mismatch",
+          `Single Conventional Implant needs exactly 1 tooth on the FDI chart, but ${n} ${n === 1 ? "is" : "are"} marked.`,
+        );
+        return;
+      }
+      if (sanitized.implant_procedure_type === "Multiple Conventional Implants" && n < 2) {
+        Alert.alert(
+          "Multiple implants selected",
+          `Multiple Conventional Implants needs at least 2 teeth on the FDI chart, but ${n} ${n === 1 ? "is" : "are"} marked. ` +
+            'Mark the remaining teeth or change the procedure to Single Conventional Implant.',
+        );
+        return;
+      }
+    }
     if (
       PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(
         sanitized.implant_procedure_type,
@@ -2319,7 +2338,7 @@ export default function NewProcedureScreen() {
       }
       if (sanitized.num_implants === "Multiple Implants" && missingCount < 2) {
         Alert.alert(
-          "Tooth Count Mismatch",
+          "Multiple implants selected",
           `"Multiple Implants" requires at least 2 teeth on the FDI chart, but ${missingCount} ${missingCount === 1 ? "is" : "are"} marked. ` +
             'Please mark the remaining teeth or switch the sub-question to "Single Implant".',
         );
@@ -3139,6 +3158,12 @@ export default function NewProcedureScreen() {
   // affordance back to Step 2, before the actual submit fires.
   if (step === "review" && createdProcedureId) {
     const isInchargeUser = user?.role === "implant_incharge";
+    // One-click "approve both" only when the In-Charge is also the supervisor
+    // (or none is assigned). With a different supervisor, the In-Charge's
+    // approval is recorded but the supervisor must still approve separately.
+    const isInchargeSelfApproving =
+      isInchargeUser &&
+      (!formData.supervisor_id || formData.supervisor_id === user?.id);
     const row = (label: string, value?: string | number | null) => {
       if (value === undefined || value === null || value === "") return null;
       return (
@@ -3199,8 +3224,16 @@ export default function NewProcedureScreen() {
               comment: "",
             });
           } catch {}
+        }
+        if (isInchargeSelfApproving) {
           setPhase1Done(true);
           setStep("implants");
+        } else if (isInchargeUser) {
+          Alert.alert(
+            "Submitted",
+            "Your In-Charge approval is recorded. The case now needs the supervisor's approval.",
+          );
+          router.replace("/(tabs)/dashboard");
         } else {
           Alert.alert("Success", "Case submitted for approval.");
           router.replace("/(tabs)/dashboard");
@@ -3237,7 +3270,7 @@ export default function NewProcedureScreen() {
             }}
           >
             <Text style={{ fontSize: 12, color: "#0D47A1" }}>
-              {isInchargeUser
+              {isInchargeSelfApproving
                 ? "Submitting will auto-approve Phase 1 for both Supervisor and Implant In-Charge — check everything below before confirming."
                 : "Your Phase 1 approval is auto-recorded on submit. Check everything below before confirming."}
             </Text>
@@ -3362,7 +3395,7 @@ export default function NewProcedureScreen() {
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#FFF" />
                 <Text style={styles.submitBtnText}>
-                  {isInchargeUser ? "Confirm & Mark Done" : "Confirm & Submit"}
+                  {isInchargeSelfApproving ? "Confirm & Mark Done" : "Confirm & Submit"}
                 </Text>
               </>
             )}
@@ -5994,21 +6027,23 @@ export default function NewProcedureScreen() {
                           : "Mark tooth/teeth for Partial Extraction Therapy"
                         : "Select missing tooth/teeth";
                       const missing = formData.missing_teeth || [];
-                      // Client-side count validation (matched server-side)
+                      // Single vs Multiple — from the procedure type itself or,
+                      // for GBR / Immediate / PET / Guided / Sinus Lift, from
+                      // the "Number of Implants" answer. (The old check used
+                      // the wrong name "Conventional Single Implant" and never ran.)
+                      const askedNum = PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(ptype);
+                      const singleMode =
+                        ptype === "Single Conventional Implant" ||
+                        (askedNum && formData.num_implants === "Single Implant");
+                      const multipleMode =
+                        ptype === "Multiple Conventional Implants" ||
+                        (askedNum && formData.num_implants === "Multiple Implants");
                       let countError: string | null = null;
-                      if (
-                        ptype === "Conventional Single Implant" &&
-                        missing.length !== 1 &&
-                        missing.length > 0
-                      ) {
+                      if (singleMode && missing.length > 1) {
+                        countError = `Single implant selected — ${missing.length} teeth are marked. Tap one tooth to keep only that one.`;
+                      } else if (multipleMode && missing.length === 1) {
                         countError =
-                          "Conventional Single Implant requires exactly 1 tooth.";
-                      } else if (
-                        ptype === "Multiple Conventional Implants" &&
-                        missing.length === 1
-                      ) {
-                        countError =
-                          "Multiple Conventional Implants requires at least 2 teeth.";
+                          "Multiple implants selected — only 1 tooth is marked. Mark at least 2 teeth, or change the selection to Single Implant.";
                       }
                       return (
                         <View style={styles.section}>
@@ -6024,11 +6059,21 @@ export default function NewProcedureScreen() {
                           >
                             {subLabel}
                           </Text>
+                          {singleMode && (
+                            <Text style={{ fontSize: 12, color: "#1565C0", fontWeight: "600", marginBottom: 4 }}>
+                              Single implant — only one tooth can be selected.
+                            </Text>
+                          )}
                           <FdiAnatomicalChart
-                            mode="multi"
-                            value={missing}
+                            mode={singleMode ? "single" : "multi"}
+                            value={singleMode ? (missing.length === 1 ? missing[0] : "") : missing}
                             onChange={(next) =>
-                              updateForm("missing_teeth", next as string[])
+                              updateForm(
+                                "missing_teeth",
+                                singleMode
+                                  ? (next ? [next as string] : [])
+                                  : (next as string[]),
+                              )
                             }
                             selectedLabel={
                               isExtractFlow

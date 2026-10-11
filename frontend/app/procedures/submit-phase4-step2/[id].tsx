@@ -1,8 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api, { getAuthFileUrl } from '../../../utils/api';
@@ -185,7 +193,10 @@ export default function Phase4Step2Screen() {
   const isInchargeSelfCreated =
     user?.role === 'implant_incharge'
     && procedure?.created_by_role === 'implant_incharge'
-    && user?.id === procedure?.created_by_id;
+    && user?.id === procedure?.created_by_id
+    // Only when no DIFFERENT supervisor is assigned — otherwise the
+    // supervisor must approve separately (backend enforces the same rule).
+    && (!procedure?.supervisor_id || procedure?.supervisor_id === user?.id);
 
   const submitLabel = isInchargeSelfCreated ? 'Done' : 'Submit for Final Approval';
 

@@ -9,7 +9,8 @@
  * amber accent so the change is immediately visible.
  */
 import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Pressable, Platform } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 
 export type ComparisonRevision = {

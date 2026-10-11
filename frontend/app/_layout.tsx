@@ -19,8 +19,8 @@ SplashScreen.hideAsync().catch(() => {});
  * iter-169: Touch/responder capture on the outer View doesn't fire when inner
  * ScrollView / TextInput consume the gesture, which caused mid-session
  * logouts. We now also record activity on every authenticated API call
- * (via `setOnActivity` in utils/api.ts) so the 15-min idle timer only fires
- * when the user has genuinely stopped interacting.
+ * (via `setOnActivity` in utils/api.ts). The inactivity auto-logout has since
+ * been removed; recordActivity is kept as a harmless hook.
  */
 function ActivityTracker({ children }: { children: React.ReactNode }) {
   const { recordActivity, user, loading } = useAuth();
@@ -77,6 +77,7 @@ export default function RootLayout() {
               <Stack.Screen name="whatsnew" options={{ headerShown: false }} />
               <Stack.Screen name="admin/audit-log" options={{ headerShown: false }} />
               <Stack.Screen name="admin/departments" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/department-stats" options={{ headerShown: false }} />
               <Stack.Screen name="subscription" options={{ headerShown: false }} />
               <Stack.Screen name="referrals" options={{ headerShown: false }} />
               <Stack.Screen name="admin/implant-catalog" options={{ headerShown: false }} />

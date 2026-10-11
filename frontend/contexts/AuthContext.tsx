@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { Alert, AppState } from 'react-native';
+import { Alert } from 'react-native';
 import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
 import { router } from 'expo-router';
 
@@ -51,10 +51,9 @@ interface AuthContextType {
   ackWorkflow: (version?: number) => Promise<void>;
 }
 
-// Auto-logout after 15 minutes of inactivity. Clinic devices are often shared,
-// so a session timeout protects patient data when a user walks away.
-// 15 min aligns with HIPAA best-practice recommendations for workstation timeout.
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+// No inactivity auto-logout (removed by request). A session now ends only on
+// manual logout or when the server rejects it (refresh token expired/revoked),
+// which still shows the "Session Expired" prompt below.
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -62,7 +61,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const lastActivityRef = useRef<number>(Date.now());
-  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionExpiryPromptRef = useRef(false);
   // Mirror of `user` readable from long-lived closures (auth-failure callback).
   const userRef = useRef<User | null>(null);
@@ -120,19 +118,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const storedAccessToken = await getToken('access_token');
       if (storedAccessToken) {
-        // Enforce the 15-minute inactivity rule across app restarts too:
-        // without this, killing and reopening the app silently re-logs the
-        // user in via the 7-day refresh token — a hole on shared clinic
-        // devices. `last_activity_at` is persisted on app background.
-        const lastActivity = Number(await getToken('last_activity_at')) || 0;
-        if (lastActivity && Date.now() - lastActivity > SESSION_TIMEOUT_MS) {
-          promptSessionExpired(
-            'You have been logged out after 15 minutes of inactivity. Please log in again.',
-            true
-          );
-          return;
-        }
-
         // Restore cached user immediately so UI and dashboard render without waiting for network!
         const cachedUserStr = await getToken('user');
         if (cachedUserStr) {
@@ -190,58 +175,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, [clearSession, loadStoredAuth, promptSessionExpired]);
 
-  // "Kicked out after 15 min of inactivity" flow — used by the in-app
-  // interval only. Clears auth immediately so the route guard can send the
-  // user back to sign-in without waiting on any confirmation UI.
-  const expireSession = useCallback(() => {
-    promptSessionExpired('You have been logged out after 15 minutes of inactivity. Please log in again.');
-  }, [promptSessionExpired]);
-
-  // Session inactivity timer — auto-logout when no activity for SESSION_TIMEOUT_MS.
-  useEffect(() => {
-    if (!user) {
-      if (sessionTimerRef.current) {
-        clearInterval(sessionTimerRef.current);
-        sessionTimerRef.current = null;
-      }
-      return;
-    }
-    lastActivityRef.current = Date.now();
-    sessionTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - lastActivityRef.current;
-      if (elapsed > SESSION_TIMEOUT_MS) {
-        if (sessionTimerRef.current) {
-          clearInterval(sessionTimerRef.current);
-          sessionTimerRef.current = null;
-        }
-        expireSession();
-      }
-    }, 30000); // check every 30 seconds
-    return () => {
-      if (sessionTimerRef.current) {
-        clearInterval(sessionTimerRef.current);
-        sessionTimerRef.current = null;
-      }
-    };
-  }, [user, expireSession]);
-
-  // Persist the in-memory activity timestamp when the app backgrounds — the
-  // restart check in loadStoredAuth() below reads this from storage, but
-  // until now nothing ever wrote it after login. That left it pinned to the
-  // login time, so any resume more than 15 minutes after login (regardless
-  // of how recently the user was actually active) wiped the session and
-  // left the current screen stranded with no token instead of a clean
-  // logout — the "screen goes black" symptom.
-  useEffect(() => {
-    if (!user) return;
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'background' || next === 'inactive') {
-        setToken('last_activity_at', String(lastActivityRef.current)).catch(() => {});
-      }
-    });
-    return () => sub.remove();
-  }, [user]);
-
   const login = async (identifier: string, password: string) => {
     const response = await api.post('/auth/login', { identifier, password });
 
@@ -250,7 +183,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await setToken('access_token', access_token);
     await setToken('refresh_token', refresh_token);
     await setToken('user', JSON.stringify(newUser));
-    await setToken('last_activity_at', String(Date.now()));
 
     setUser(newUser);
   };

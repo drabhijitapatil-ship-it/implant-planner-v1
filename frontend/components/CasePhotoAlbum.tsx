@@ -7,8 +7,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  ScrollView,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../utils/api';

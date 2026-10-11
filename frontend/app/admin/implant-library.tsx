@@ -10,10 +10,10 @@ import {
   Alert,
   TextInput,
   Modal,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../utils/api';

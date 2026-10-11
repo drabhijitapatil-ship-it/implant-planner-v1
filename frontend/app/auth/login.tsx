@@ -10,9 +10,9 @@ import {
   ActivityIndicator,
   Animated,
   Pressable,
-  ScrollView,
   Image,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "expo-router";

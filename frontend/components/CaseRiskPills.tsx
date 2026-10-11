@@ -21,12 +21,21 @@ const SEVERITY: Record<RiskLevel, number> = { Low: 0, Medium: 1, High: 2 };
  *   • variant="banner" → prominent tinted banner for the case detail top
  * Renders nothing when neither risk applies.
  */
+/** Risk grades shown as pills (shared with PatientHeaderStrip). */
+export function caseRiskLevels(procedure: any): {
+  eraLevel: RiskLevel | null;
+  med: { level: RiskLevel; text: string } | null;
+} {
+  const era = computeEra(procedure);
+  const eraLevel: RiskLevel | null = isAnteriorMaxillaCase(procedure?.missing_teeth) ? era.overall : null;
+  const med = MED_MAP[String(procedure?.medical_risk_level || '')] || null;
+  return { eraLevel, med };
+}
+
 export default function CaseRiskPills({
   procedure, variant = 'card', prefix = 'case',
 }: { procedure: any; variant?: 'card' | 'banner'; prefix?: string }) {
-  const era = computeEra(procedure);
-  const eraLevel: RiskLevel | null = isAnteriorMaxillaCase(procedure.missing_teeth) ? era.overall : null;
-  const med = MED_MAP[String(procedure.medical_risk_level || '')] || null;
+  const { eraLevel, med } = caseRiskLevels(procedure);
   if (!eraLevel && !med) return null;
 
   const compact = variant === 'card';

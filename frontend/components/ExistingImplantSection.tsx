@@ -16,9 +16,19 @@
 
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
-  View, Text, TouchableOpacity, TextInput, ScrollView, Alert,
-  StyleSheet, Modal, Pressable, ActivityIndicator, Platform, Image,
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  StyleSheet,
+  Modal,
+  Pressable,
+  ActivityIndicator,
+  Platform,
+  Image,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';

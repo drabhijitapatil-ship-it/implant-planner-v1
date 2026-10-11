@@ -66,7 +66,8 @@ export default function FdiAnatomicalChart({
 
   const handleTap = (t: string) => {
     if (mode === 'single') {
-      onChange(t);
+      // Tap the selected tooth again to clear it; tap another to move it.
+      onChange(selected.includes(t) ? '' : t);
       return;
     }
     const cur = selected;

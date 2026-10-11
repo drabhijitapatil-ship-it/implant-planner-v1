@@ -7,9 +7,18 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, TextInput,
-  Modal, Pressable, ScrollView, Platform, ActivityIndicator, Alert,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  Modal,
+  Pressable,
+  Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';

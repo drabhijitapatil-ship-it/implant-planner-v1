@@ -10,9 +10,12 @@ import {
   Alert,
   TextInput,
   Modal,
-  ScrollView,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import ScrollView from "@/components/KeyboardAwareScrollView";
+import { formatISTRelative, formatISTTime } from "../../utils/istTime";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -465,6 +468,7 @@ export default function UserManagementScreen() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [editForm, setEditForm] = useState({
     name: "",
+    email: "",
     role: "",
     password: "",
     departmentId: "" as string | null,
@@ -583,6 +587,7 @@ export default function UserManagementScreen() {
     setEditingUser(u);
     setEditForm({
       name: u.name,
+      email: u.email || "",
       role: u.role,
       password: "",
       departmentId: u.department_id || null,
@@ -595,6 +600,14 @@ export default function UserManagementScreen() {
     const payload: any = {};
     if (editForm.name.trim() && editForm.name.trim() !== editingUser.name) {
       payload.name = editForm.name.trim();
+    }
+    const newEmail = editForm.email.trim().toLowerCase();
+    if (newEmail && newEmail !== (editingUser.email || "").trim().toLowerCase()) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        Alert.alert("Invalid Email", "Please enter a valid email address.");
+        return;
+      }
+      payload.email = newEmail;
     }
     if (editForm.role && editForm.role !== editingUser.role) {
       payload.role = editForm.role;
@@ -674,29 +687,11 @@ export default function UserManagementScreen() {
     );
   }
 
-  const formatRelative = (iso?: string | null) => {
-    if (!iso) return "";
-    const then = new Date(iso).getTime();
-    if (isNaN(then)) return "";
-    const days = Math.floor((Date.now() - then) / 86_400_000);
-    if (days <= 0) return "today";
-    if (days === 1) return "yesterday";
-    if (days < 30) return `${days} days ago`;
-    const months = Math.floor(days / 30);
-    return `${months} months ago`;
-  };
-
+  // "Last seen" — server stores UTC; always shown in IST (see utils/istTime).
+  const formatRelative = (iso?: string | null) => formatISTRelative(iso);
   const formatTime = (iso?: string | null) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    let hours = d.getHours();
-    const minutes = d.getMinutes();
-    const ampm = hours >= 12 ? "PM" : "AM";
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    const minutesStr = minutes < 10 ? "0" + minutes : minutes;
-    return `${hours}:${minutesStr} ${ampm}`;
+    const t = formatISTTime(iso);
+    return t ? `${t} IST` : "";
   };
 
   const renderUser = ({ item }: any) => {
@@ -739,8 +734,11 @@ export default function UserManagementScreen() {
     const badgeStyles = getRoleBadgeStyles(item.role);
     const roleIconName = getRoleIcon(item.role);
 
-    const relativeTime = formatRelative(item.last_login_at);
-    const timeOfDay = formatTime(item.last_login_at);
+    // Last real activity (stamped on any signed-in request); falls back to the
+    // last password login for users who haven't opened the app since.
+    const lastSeen = item.last_active_at || item.last_login_at;
+    const relativeTime = formatRelative(lastSeen);
+    const timeOfDay = formatTime(lastSeen);
 
     return (
       <TouchableOpacity
@@ -1471,9 +1469,14 @@ export default function UserManagementScreen() {
 
       {/* Create User Modal */}
       <Modal visible={showCreateModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        {/* Keyboard-aware sheet: on Android edge-to-edge (SDK 54) the window
+            no longer resizes, so the keyboard would cover the lower inputs. */}
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent} data-testid="create-user-modal">
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Create New User</Text>
                 <TouchableOpacity
@@ -1997,7 +2000,7 @@ export default function UserManagementScreen() {
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Organization Picker (super_admin only) */}
@@ -2253,9 +2256,14 @@ export default function UserManagementScreen() {
 
       {/* Edit User Modal */}
       <Modal visible={showEditModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+        {/* Keyboard-aware sheet: on Android edge-to-edge (SDK 54) the window
+            no longer resizes, so the keyboard would cover the lower inputs. */}
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent} data-testid="edit-user-modal">
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Edit User</Text>
                 <TouchableOpacity
@@ -2303,6 +2311,24 @@ export default function UserManagementScreen() {
                   setEditForm({ ...editForm, name: text })
                 }
                 data-testid="edit-input-name"
+              />
+
+              <Text style={styles.inputLabel}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#999"
+                value={editForm.email}
+                onChangeText={(text) =>
+                  setEditForm({ ...editForm, email: text })
+                }
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="emailAddress"
+                data-testid="edit-input-email"
+                testID="edit-input-email"
               />
 
               <Text style={styles.inputLabel}>Change Role</Text>
@@ -2363,7 +2389,7 @@ export default function UserManagementScreen() {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

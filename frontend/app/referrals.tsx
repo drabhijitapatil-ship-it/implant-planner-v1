@@ -9,11 +9,11 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
-  ScrollView,
   TextInput,
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
