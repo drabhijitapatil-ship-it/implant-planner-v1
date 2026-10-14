@@ -128,8 +128,17 @@ def build_router(db, get_current_user, user_from_token=None):
                 out[k] = s(body.get(k), n)
         if "study_type" in body:
             out["study_type"] = body["study_type"] if body["study_type"] in R.STUDY_TYPES else "prospective_cohort"
-        if "primary_unit" in body:
+        if "primary_units" in body and isinstance(body["primary_units"], list):
+            units = []
+            for x in body["primary_units"]:
+                x = s(x, 30).lower()
+                if x and x not in units:
+                    units.append(x)
+            out["primary_units"] = units[:5]
+            out["primary_unit"] = (units[0] if units and units[0] in R.LEVELS else next((x for x in units if x in R.LEVELS), "implant"))
+        elif "primary_unit" in body:
             out["primary_unit"] = body["primary_unit"] if body["primary_unit"] in R.LEVELS else "implant"
+            out["primary_units"] = [out["primary_unit"]]
         if "target_n" in body:
             out["target_n"] = max(1, int(R._num(body.get("target_n")) or 1))
         if "is_dissertation" in body:
@@ -203,7 +212,10 @@ def build_router(db, get_current_user, user_from_token=None):
         if await db.research_studies.find_one({"code": base["code"]}):
             raise HTTPException(status_code=400, detail=f"Study code {base['code']} already exists")
         now = R.now_iso()
+        base.setdefault("primary_units", [base.get("primary_unit", "implant")])
         doc = {**base, "status": "draft", "protocol_version": "1.0",
+               "created_by_role": user.get("role", ""),
+               "guide_review": {"status": "auto_approved" if user.get("role") != "student" else "not_submitted", "history": []},
                "pi_user_id": user["_id"], "pi_name": user.get("name", ""),
                "members": [{"user_id": user["_id"], "name": user.get("name", ""), "role": "pi", "added_at": now}],
                "created_by_id": user["_id"], "created_by_name": user.get("name", ""), "created_at": now, "updated_at": now,
@@ -218,6 +230,10 @@ def build_router(db, get_current_user, user_from_token=None):
         _deny_nurse(user)
         st = await _get_study(study_id, user)
         st["my_roles"] = sorted(_member_roles(st, user))
+        st["needs_guide_approval"] = R.needs_guide_approval(st)
+        st["can_view_iec_letter"] = _can_see_iec_letter(st, user)
+        if not st["can_view_iec_letter"]:
+            st["iec_letter"] = {"present": True} if st.get("iec_letter") else None
         st["activation_checklist"] = R.activation_checklist(st)
         st["protocol_errors"] = R.validate_protocol(st)
         counts = await _form_counts([st["_id"]])
@@ -247,6 +263,12 @@ def build_router(db, get_current_user, user_from_token=None):
                         raise HTTPException(status_code=400, detail=f"Active protocol: cannot remove {coll} {', '.join(sorted(missing))}. Add new ones instead.")
         update: dict = {"$set": {**upd, "updated_at": R.now_iso()}}
         changed = ", ".join(sorted(upd.keys()))
+        gr = st.get("guide_review") or {}
+        if R.needs_guide_approval(st) and st.get("status") == "draft" and gr.get("status") in ("pending", "approved") \
+                and any(k in upd and upd[k] != st.get(k) for k in R.PROTOCOL_KEYS):
+            update["$set"]["guide_review"] = {**gr, "status": "not_submitted", "reset_reason": f"Protocol edited ({changed})", "reset_at": R.now_iso(),
+                                              "history": (gr.get("history") or []) + [{"action": "reset_after_edit", "by": user.get("name", ""), "at": R.now_iso(), "detail": changed}]}
+            update["$set"]["guide_approved_at"] = None
         _audit(update, user, "protocol_updated", changed)
         await db.research_studies.update_one({"_id": st["_id"]}, update)
         if st.get("status") != "draft" and "timepoints" in upd:
@@ -266,6 +288,8 @@ def build_router(db, get_current_user, user_from_token=None):
             u = await db.users.find_one({"_id": _oid(uid)}, {"name": 1, "role": 1})
             if not u or u.get("role") == "nurse":
                 continue
+            if role == "guide" and u.get("role") not in ("supervisor", "implant_incharge", "administrator"):
+                raise HTTPException(status_code=400, detail=f"{u.get('name')} cannot be a guide — choose a Supervisor or Implant In-charge.")
             seen.add((uid, role))
             members.append({"user_id": uid, "name": u.get("name", ""), "user_role": u.get("role"), "role": role, "added_at": R.now_iso()})
         if not any(m["user_id"] == st["pi_user_id"] and m["role"] == "pi" for m in members):
@@ -273,6 +297,10 @@ def build_router(db, get_current_user, user_from_token=None):
         guide = next((m for m in members if m["role"] == "guide"), None)
         update = {"$set": {"members": members, "guide_user_id": guide["user_id"] if guide else None,
                            "guide_name": guide["name"] if guide else None, "updated_at": R.now_iso()}}
+        gr = st.get("guide_review") or {}
+        if R.needs_guide_approval(st) and (guide["user_id"] if guide else None) != st.get("guide_user_id") and gr.get("status") in ("pending", "approved", "changes_requested"):
+            update["$set"]["guide_review"] = {**gr, "status": "not_submitted", "history": (gr.get("history") or []) + [{"action": "guide_changed", "by": user.get("name", ""), "at": R.now_iso()}]}
+            update["$set"]["guide_approved_at"] = None
         _audit(update, user, "members_updated", f"{len(members)} members")
         await db.research_studies.update_one({"_id": st["_id"]}, update)
         return await get_study(study_id, user)
@@ -285,15 +313,119 @@ def build_router(db, get_current_user, user_from_token=None):
             out.append({"id": str(u["_id"]), "name": u.get("name", ""), "role": u.get("role", "")})
         return out
 
-    @router.post("/studies/{study_id}/guide-approve")
-    async def guide_approve(study_id: str, user: dict = Depends(get_current_user)):
+    async def _notify(uid: str, message: str, study_id: str):
+        if not uid:
+            return
+        await db.notifications.insert_one({"user_id": uid, "message": message[:200], "type": "research_study", "read": False,
+                                           "created_at": datetime.now(timezone.utc), "research_study_id": study_id})
+
+    @router.post("/studies/{study_id}/submit-to-guide")
+    async def submit_to_guide(study_id: str, user: dict = Depends(get_current_user)):
         _deny_nurse(user)
         st = await _get_study(study_id, user)
-        _require(st, user, ("guide",), "Only the guide can approve the protocol.")
-        update = {"$set": {"guide_approved_at": R.now_iso(), "guide_approved_by": user.get("name", ""), "updated_at": R.now_iso()}}
-        _audit(update, user, "guide_approved")
+        _require(st, user, ("pi",), "Only the PI can submit the protocol to the guide.")
+        if not R.needs_guide_approval(st):
+            raise HTTPException(status_code=400, detail="Faculty-created studies do not need guide approval.")
+        if not st.get("guide_user_id"):
+            raise HTTPException(status_code=400, detail="Choose a guide in Team first.")
+        if st.get("status") != "draft":
+            raise HTTPException(status_code=400, detail="Only draft protocols are submitted for guide approval.")
+        pending = [i["label"] for i in R.activation_checklist(st) if not i["ok"] and i["label"] != "Guide approval recorded"]
+        if pending:
+            raise HTTPException(status_code=400, detail="Complete the checklist first: " + "; ".join(pending))
+        gr = st.get("guide_review") or {}
+        now = R.now_iso()
+        update = {"$set": {"guide_review": {**gr, "status": "pending", "submitted_at": now, "submitted_by": user.get("name", ""), "comments": gr.get("comments", ""),
+                                            "history": (gr.get("history") or []) + [{"action": "submitted", "by": user.get("name", ""), "at": now}]}, "updated_at": now}}
+        _audit(update, user, "submitted_to_guide", st.get("guide_name", ""))
         await db.research_studies.update_one({"_id": st["_id"]}, update)
+        await _notify(st["guide_user_id"], f"Research protocol {st['code']} ({st['title'][:40]}) submitted for your approval by {user.get('name', '')}", study_id)
         return await get_study(study_id, user)
+
+    @router.post("/studies/{study_id}/guide-review")
+    async def guide_review(study_id: str, body: dict, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        if st.get("guide_user_id") != user["_id"] and user.get("role") != "administrator":
+            raise HTTPException(status_code=403, detail="Only the assigned guide can review this protocol.")
+        action, comments = body.get("action"), R._s(body.get("comments"), 2000)
+        gr = st.get("guide_review") or {}
+        if gr.get("status") != "pending":
+            raise HTTPException(status_code=400, detail="Protocol is not awaiting guide review.")
+        if action not in ("approve", "request_changes"):
+            raise HTTPException(status_code=400, detail="action must be approve or request_changes")
+        if action == "request_changes" and not comments:
+            raise HTTPException(status_code=400, detail="Please tell the student what to change.")
+        now = R.now_iso()
+        new_status = "approved" if action == "approve" else "changes_requested"
+        setv = {"guide_review": {**gr, "status": new_status, "reviewed_at": now, "reviewer_name": user.get("name", ""), "comments": comments,
+                                 "history": (gr.get("history") or []) + [{"action": action, "by": user.get("name", ""), "at": now, "comments": comments}]},
+                "guide_approved_at": now if action == "approve" else None, "guide_approved_by": user.get("name", "") if action == "approve" else None, "updated_at": now}
+        update = {"$set": setv}
+        _audit(update, user, f"guide_{action}", comments)
+        await db.research_studies.update_one({"_id": st["_id"]}, update)
+        msg = f"Guide approved research protocol {st['code']}" if action == "approve" else f"Guide requested changes on {st['code']}: {comments[:80]}"
+        await _notify(st["pi_user_id"], msg, study_id)
+        return await get_study(study_id, user)
+
+    def _can_see_iec_letter(st: dict, user: dict) -> bool:
+        roles = _member_roles(st, user)
+        return bool(roles & {"pi", "guide", "admin"})
+
+    @router.post("/studies/{study_id}/iec-letter")
+    async def upload_iec_letter(study_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        _require(st, user, ("pi",), "Only the PI can upload the IEC approval letter.")
+        ctype = (file.content_type or "").lower()
+        if ctype not in ("application/pdf", "image/jpeg", "image/png", "image/webp"):
+            raise HTTPException(status_code=400, detail="Upload a PDF, JPG or PNG of the IEC approval letter.")
+        data = await file.read()
+        if not data or len(data) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File must be under 15 MB")
+        from object_storage import put_object, APP_NAME
+        ext = {"application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[ctype]
+        path = f"{APP_NAME}/research/{study_id}/iec_letter_{uuid.uuid4()}.{ext}"
+        try:
+            put_object(path, data, ctype)
+        except Exception as ex:
+            raise HTTPException(status_code=502, detail=f"Object storage upload failed: {ex}")
+        letter = {"storage_path": path, "content_type": ctype, "filename": R._s(file.filename, 120) or f"iec_letter.{ext}",
+                  "size": len(data), "uploaded_by": user.get("name", ""), "uploaded_at": R.now_iso()}
+        update = {"$set": {"iec_letter": letter, "updated_at": R.now_iso()}}
+        _audit(update, user, "iec_letter_uploaded", letter["filename"])
+        await db.research_studies.update_one({"_id": st["_id"]}, update)
+        return letter
+
+    @router.delete("/studies/{study_id}/iec-letter")
+    async def delete_iec_letter(study_id: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        _require(st, user, ("pi",), "Only the PI can remove the IEC approval letter.")
+        update = {"$set": {"iec_letter": None, "updated_at": R.now_iso()}}
+        _audit(update, user, "iec_letter_removed")
+        await db.research_studies.update_one({"_id": st["_id"]}, update)
+        return {"ok": True}
+
+    @router.get("/studies/{study_id}/iec-letter")
+    async def get_iec_letter(study_id: str, token: str = ""):
+        user = await user_from_token(token) if user_from_token else None
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        if not _can_see_iec_letter(st, user):
+            raise HTTPException(status_code=403, detail="The IEC letter is visible to the PI and guide only.")
+        letter = st.get("iec_letter")
+        if not letter:
+            raise HTTPException(status_code=404, detail="No IEC letter uploaded")
+        from object_storage import get_object
+        try:
+            data, ctype = get_object(letter["storage_path"])
+        except Exception as ex:
+            raise HTTPException(status_code=502, detail=f"Object storage fetch failed: {ex}")
+        return StreamingResponse(iter([data]), media_type=ctype or letter["content_type"],
+                                 headers={"Content-Disposition": f'inline; filename="{letter["filename"]}"', "Cache-Control": "private, max-age=600"})
 
     @router.post("/studies/{study_id}/status")
     async def set_status(study_id: str, body: dict, user: dict = Depends(get_current_user)):
@@ -307,8 +439,7 @@ def build_router(db, get_current_user, user_from_token=None):
             missing = [i["label"] for i in R.activation_checklist(st) if not i["ok"]]
             if missing:
                 raise HTTPException(status_code=400, detail="Cannot activate — missing: " + "; ".join(missing))
-        if target == "data_locked" and st.get("is_dissertation") and not st.get("guide_approved_at"):
-            raise HTTPException(status_code=400, detail="Dissertation studies need guide sign-off before data lock.")
+
         setv = {"status": target, "updated_at": R.now_iso()}
         if target == "active" and not st.get("activated_at"):
             setv["activated_at"] = R.now_iso()

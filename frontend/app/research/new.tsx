@@ -8,7 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import api from '../../utils/api';
-import { RC, Card, Field, PillSelect, PrimaryButton, ScreenHeader, SectionTitle, STUDY_TYPE_LABEL, errText, u } from '../../components/research/ResearchUI';
+import { RC, Card, Field, PrimaryButton, ScreenHeader, SectionTitle, STUDY_TYPE_LABEL, errText, u } from '../../components/research/ResearchUI';
+import { StudyDesignPicker, UnitPicker } from '../../components/research/StudyDesignPicker';
 
 export default function NewStudy() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export default function NewStudy() {
   const [title, setTitle] = useState('');
   const [question, setQuestion] = useState('');
   const [studyType, setStudyType] = useState('prospective_cohort');
-  const [unit, setUnit] = useState('implant');
+  const [units, setUnits] = useState<string[]>(['implant']);
   const [targetN, setTargetN] = useState('30');
   const [dissertation, setDissertation] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,15 +29,16 @@ export default function NewStudy() {
 
   const pickTemplate = (t: any | null) => {
     if (!t) { setTemplateId('blank'); return; }
-    setTemplateId(t.id); setCode(t.code_suggestion); setTitle(t.name); setStudyType(t.study_type); setUnit(t.primary_unit);
+    setTemplateId(t.id); setCode(t.code_suggestion); setTitle(t.name); setStudyType(t.study_type); setUnits([t.primary_unit]);
   };
 
   const create = async () => {
     if (!title.trim() || !code.trim()) { Alert.alert('Missing', 'Study code and title are required.'); return; }
+    if (units.length === 0) { Alert.alert('Missing', 'Choose at least one unit of analysis.'); return; }
     setSaving(true);
     try {
       const body: any = { code: code.trim().toUpperCase(), title: title.trim(), research_question: question, study_type: studyType,
-        primary_unit: unit, target_n: Number(targetN) || 1, is_dissertation: dissertation };
+        primary_units: units, target_n: Number(targetN) || 1, is_dissertation: dissertation };
       if (clone_from) body.clone_from = clone_from;
       else if (templateId && templateId !== 'blank') body.template_id = templateId;
       const r = await api.post('/research/studies', body);
@@ -45,7 +47,7 @@ export default function NewStudy() {
   };
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="New study" subtitle={clone_from ? 'Cloning protocol from an existing study' : 'Step 1 · Start from'} testID="new-study-title" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
@@ -77,12 +79,10 @@ export default function NewStudy() {
             <Field label="Study code" value={code} onChangeText={t => setCode(t.toUpperCase())} placeholder="e.g. CBL-IMM-MXA" hint="3–20 chars, A–Z 0–9 hyphen. Used as the prefix of every subject code." testID="study-code" />
             <Field label="Title" value={title} onChangeText={setTitle} placeholder="Short study title" testID="study-title" />
             <Field label="Research question" value={question} onChangeText={setQuestion} multiline placeholder="What is the mean crestal bone loss at 12 months around…" testID="study-question" />
-            <Text style={u.label}>Study design</Text>
-            <PillSelect value={studyType} onChange={setStudyType} testID="study-type"
-              options={Object.entries(STUDY_TYPE_LABEL).map(([key, label]) => ({ key, label }))} />
-            <Text style={[u.label, { marginTop: 12 }]}>Primary unit of analysis</Text>
-            <PillSelect value={unit} onChange={setUnit} testID="study-unit"
-              options={[{ key: 'patient', label: 'Patient' }, { key: 'implant', label: 'Implant' }, { key: 'site', label: 'Site' }]} />
+            <Text style={u.label}>Study design <Text style={{ textTransform: 'none', fontWeight: '500' }}>— tap ⓘ for a primer</Text></Text>
+            <StudyDesignPicker value={studyType} onChange={setStudyType} />
+            <Text style={[u.label, { marginTop: 12 }]}>Unit(s) of analysis</Text>
+            <UnitPicker value={units} onChange={setUnits} />
             <View style={{ height: 12 }} />
             <Field label="Target sample size (n)" value={targetN} onChangeText={setTargetN} keyboardType="number-pad" testID="study-target" />
             <View style={[u.row, { justifyContent: 'space-between', marginTop: 4 }]}>

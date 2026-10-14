@@ -47,7 +47,7 @@ export default function SynopsisEditor() {
   };
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Synopsis / dissertation" subtitle={`${study.code} · university format DOCX & PDF`} testID="synopsis-title" />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="handled">

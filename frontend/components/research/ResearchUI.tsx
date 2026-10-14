@@ -2,8 +2,8 @@
  * Research Module — shared types, labels and small UI atoms.
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator, Platform, StatusBar } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 
@@ -30,6 +30,10 @@ export type Study = {
   research_question: string; pi_user_id: string; pi_name: string; is_dissertation: boolean; members: any[];
   eligibility: Rule[]; variables: Variable[]; timepoints: Timepoint[]; iec_ref?: string; iec_approval_date?: string;
   ctri_number?: string; consent_form_version?: string; guide_approved_at?: string | null; my_roles: string[];
+  primary_units?: string[]; guide_user_id?: string | null; guide_name?: string | null; needs_guide_approval?: boolean;
+  guide_review?: { status: string; comments?: string; reset_reason?: string; reviewer_name?: string; submitted_at?: string };
+  iec_letter?: { filename?: string; content_type?: string; uploaded_by?: string; uploaded_at?: string; present?: boolean } | null;
+  can_view_iec_letter?: boolean;
   activation_checklist: { label: string; ok: boolean }[]; protocol_errors: string[]; counts: any; audit_log?: any[];
   notes?: string;
 };
@@ -95,8 +99,11 @@ export function ScreenHeader({ title, subtitle, right, onBack, testID }: {
   title: string; subtitle?: string; right?: React.ReactNode; onBack?: () => void; testID?: string;
 }) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  // Header owns the top inset (screens use edges={['bottom']}). Android Modals report 0 insets → status-bar fallback.
+  const top = Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0);
   return (
-    <View style={u.header}>
+    <View style={[u.header, { paddingTop: top + 10 }]}>
       <TouchableOpacity onPress={onBack || (() => (router.canGoBack() ? router.back() : router.replace('/research')))}
         style={u.headerIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} testID="research-back">
         <Ionicons name="chevron-back" size={22} color={RC.text} />

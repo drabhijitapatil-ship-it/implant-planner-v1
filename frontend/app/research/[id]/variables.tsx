@@ -72,7 +72,7 @@ export default function VariablesEditor() {
   const regList = registry.filter(f => !search || f.label.toLowerCase().includes(search.toLowerCase()) || f.path.includes(search.toLowerCase()));
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Variables" subtitle={`${vars.length} defined · keys appear as export columns`} testID="variables-title" />
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={{ marginHorizontal: 14, marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -107,7 +107,7 @@ export default function VariablesEditor() {
       {/* Variable editor sheet */}
       <Modal visible={!!editing && !pickReg} animationType="slide" onRequestClose={() => setEditing(null)}>
         {editing && (
-          <SafeAreaView style={u.container}>
+          <SafeAreaView style={u.container} edges={['bottom']}>
             <ScreenHeader title={editing.idx < 0 ? 'New variable' : 'Edit variable'} subtitle={`${editing.v.source} variable`} onBack={() => setEditing(null)}
               right={<PrimaryButton label="Done" onPress={commit} loading={saving} testID="var-done" style={{ paddingVertical: 8, minHeight: 36 }} />} />
             <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
@@ -174,7 +174,7 @@ export default function VariablesEditor() {
 
       {/* Registry picker */}
       <Modal visible={pickReg} animationType="slide" onRequestClose={() => setPickReg(false)}>
-        <SafeAreaView style={u.container}>
+        <SafeAreaView style={u.container} edges={['bottom']}>
           <ScreenHeader title="Case Field Registry" subtitle="Linked variables read these live" onBack={() => { setPickReg(false); if (editing && editing.idx < 0 && !editing.v.case_field_path) setEditing(null); }} />
           <View style={{ padding: 12 }}><TextInput value={search} onChangeText={setSearch} placeholder="Search fields…" placeholderTextColor={RC.muted} style={u.input} autoFocus testID="var-registry-search" /></View>
           <FlatList data={regList} keyExtractor={f => f.path} renderItem={({ item: f }) => (

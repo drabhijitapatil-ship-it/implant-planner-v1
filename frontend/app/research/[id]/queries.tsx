@@ -31,7 +31,7 @@ export default function StudyQueries() {
   const count = (st: string) => queries.filter(q => q.status === st).length;
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Data queries" subtitle={`${study.code} · ${count('open')} open · ${count('answered')} answered`} testID="queries-title" />
       <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
         <Segmented value={filter} onChange={setFilter} testID="queries-filter" options={[{ key: 'open', label: `Open ${count('open')}` }, { key: 'answered', label: `Answered ${count('answered')}` }, { key: 'closed', label: `Closed ${count('closed')}` }, { key: 'all', label: 'All' }]} />

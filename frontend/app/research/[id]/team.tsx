@@ -38,7 +38,7 @@ export default function TeamEditor() {
   const roleOpts = Object.entries(MEMBER_ROLE_LABEL).filter(([k]) => k !== 'pi').map(([key, label]) => ({ key, label }));
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Study team" subtitle="Per-study roles on top of app roles" testID="team-title"
         right={<PrimaryButton label="Save" onPress={save} loading={saving} testID="save-team" style={{ paddingVertical: 8, minHeight: 36 }} />} />
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
@@ -57,7 +57,9 @@ export default function TeamEditor() {
             </View>
             {!(m.user_id === piId && m.role === 'pi') && (
               <View style={{ marginTop: 10 }}>
-                <PillSelect value={m.role} onChange={r => setMembers(ms => ms!.map((x, j) => (j === i ? { ...x, role: r } : x)))} options={roleOpts} testID={`member-${i}-role`} />
+                <PillSelect value={m.role} onChange={r => setMembers(ms => ms!.map((x, j) => (j === i ? { ...x, role: r } : x)))} testID={`member-${i}-role`}
+                  options={roleOpts.filter(o => o.key !== 'guide' || ['supervisor', 'implant_incharge', 'administrator'].includes(m.user_role || ''))} />
+                {['supervisor', 'implant_incharge'].includes(m.user_role || '') && <Text style={u.hint}>Supervisors and Implant In-charges can be chosen as Guide.</Text>}
               </View>
             )}
           </Card>
@@ -65,11 +67,11 @@ export default function TeamEditor() {
         <View style={{ marginHorizontal: 14, marginTop: 14 }}>
           <PrimaryButton label="Add member" icon="person-add-outline" variant="outline" onPress={() => { setSearch(''); setPicking(true); }} testID="add-member" />
         </View>
-        <Text style={s.help}>Guide: approves dissertation protocols, may export. Co-investigator / data collector: screen, enrol, enter data. Statistician: export only. Nurses cannot be added.</Text>
+        <Text style={s.help}>Guide (Supervisor / Implant In-charge only): reviews and approves student protocols, may export. Co-investigator / data collector: screen, enrol, enter data. Statistician: export only. Nurses cannot be added.</Text>
       </ScrollView>
 
       <Modal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
-        <SafeAreaView style={u.container}>
+        <SafeAreaView style={u.container} edges={['bottom']}>
           <ScreenHeader title="Add member" onBack={() => setPicking(false)} />
           <View style={{ padding: 12 }}><TextInput value={search} onChangeText={setSearch} placeholder="Search users…" placeholderTextColor={RC.muted} style={u.input} autoFocus testID="member-search" /></View>
           <FlatList data={list} keyExtractor={x => x.id} renderItem={({ item }) => (

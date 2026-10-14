@@ -87,7 +87,7 @@ export default function RadiographMeasure({ visible, onClose, enrolmentId, tpKey
   const activePts = mode === 'calibrate' ? calPts : (pts[varKey] || []);
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={u.container}>
+      <SafeAreaView style={u.container} edges={['bottom']}>
         <ScreenHeader title="Radiograph measurement" subtitle={asset ? `Grade ${asset.quality_grade}${asset.calibration ? ` · ${asset.calibration.px_per_mm} px/mm` : ' · uncalibrated'}` : 'Upload a photo of the IOPA'} onBack={onClose}
           right={editable ? <PrimaryButton label={asset ? 'Replace' : 'Upload'} variant="outline" icon="cloud-upload-outline" onPress={upload} loading={busy} testID="rx-upload" style={{ paddingVertical: 8, minHeight: 36 }} /> : null} />
         <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">

@@ -109,7 +109,7 @@ export default function Screening() {
   };
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Screen & enrol" subtitle={`${study.code} · ${data.summary.cases_scanned} cases scanned`} testID="screening-title" />
       <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
         <TextInput value={search} onChangeText={setSearch} placeholder="Search patient name…" placeholderTextColor={RC.muted} style={u.input} testID="screening-search" />

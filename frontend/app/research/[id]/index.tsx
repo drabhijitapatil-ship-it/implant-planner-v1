@@ -3,11 +3,12 @@
  * enrolled cases, team. Deeper editors live on sibling routes.
  */
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import api from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
 import {
   RC, Card, Chip, Empty, Loading, PrimaryButton, ScreenHeader, SectionTitle, Segmented, Study,
   studyStatusStyle, STATUS_LABEL, STUDY_TYPE_LABEL, FORM_STATUS, ANCHOR_LABEL, MEMBER_ROLE_LABEL, errText, u,
@@ -18,11 +19,13 @@ type Tab = 'overview' | 'protocol' | 'cases' | 'team';
 export default function StudyDetail() {
   const { id, tab: tabParam } = useLocalSearchParams<{ id: string; tab?: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const [study, setStudy] = useState<Study | null>(null);
   const [enrolments, setEnrolments] = useState<any[]>([]);
   const [tab, setTab] = useState<Tab>((tabParam as Tab) || 'overview');
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [guideComments, setGuideComments] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -57,10 +60,20 @@ export default function StudyDetail() {
     } },
   ]);
 
-  const guideApprove = async () => {
-    try { const r = await api.post(`/research/studies/${id}/guide-approve`); setStudy(r.data); Alert.alert('Approved', 'Protocol approved as guide.'); }
-    catch (e) { Alert.alert('Error', errText(e)); }
+  const submitToGuide = async () => {
+    setBusy(true);
+    try { const r = await api.post(`/research/studies/${id}/submit-to-guide`); setStudy(r.data); Alert.alert('Sent', `Protocol sent to ${r.data.guide_name} for approval.`); }
+    catch (e) { Alert.alert('Cannot submit', errText(e)); } finally { setBusy(false); }
   };
+  const guideReview = async (action: 'approve' | 'request_changes') => {
+    setBusy(true);
+    try { const r = await api.post(`/research/studies/${id}/guide-review`, { action, comments: guideComments }); setStudy(r.data); setGuideComments(''); }
+    catch (e) { Alert.alert('Error', errText(e)); } finally { setBusy(false); }
+  };
+  const gr: any = (study as any).guide_review || {};
+  const isGuide = (study as any).guide_user_id === user?.id;
+  const needsGuide = (study as any).needs_guide_approval;
+  const otherChecklistOk = study.activation_checklist.filter(i => i.label !== 'Guide approval recorded').every(i => i.ok);
 
   const NavRow = ({ icon, label, sub, route, count }: { icon: IoniconsIconName; label: string; sub: string; route: string; count?: number }) => (
     <TouchableOpacity style={s.navRow} onPress={() => router.push(route as any)} testID={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}>
@@ -74,7 +87,7 @@ export default function StudyDetail() {
   );
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title={study.code} subtitle={study.title} testID="study-detail-title"
         onBack={() => (router.canGoBack() ? router.back() : router.replace('/research'))}
         right={<Chip label={STATUS_LABEL[study.status] || study.status} color={st.color} bg={st.bg} testID="study-status-chip" />} />
@@ -89,7 +102,7 @@ export default function StudyDetail() {
               <Text style={s.question}>{study.research_question || 'No research question written yet.'}</Text>
               <View style={[u.row, { flexWrap: 'wrap', gap: 6, marginTop: 10 }]}>
                 <Chip label={STUDY_TYPE_LABEL[study.study_type] || study.study_type} color={RC.sub} bg={RC.greySoft} small />
-                <Chip label={`Unit: ${study.primary_unit}`} color={RC.sub} bg={RC.greySoft} small />
+                <Chip label={`Unit: ${((study as any).primary_units || [study.primary_unit]).join(', ')}`} color={RC.sub} bg={RC.greySoft} small />
                 <Chip label={`PI: ${study.pi_name}`} color={RC.sub} bg={RC.greySoft} small />
                 {study.is_dissertation && <Chip label="Dissertation" color={RC.purple} bg={RC.purpleSoft} small />}
               </View>
@@ -113,8 +126,33 @@ export default function StudyDetail() {
                 {study.protocol_errors.length > 0 && (
                   <View style={s.errBox}>{study.protocol_errors.map((e, i) => <Text key={i} style={s.errTxt}>• {e}</Text>)}</View>
                 )}
-                {study.is_dissertation && study.my_roles.includes('guide') && !study.guide_approved_at && (
-                  <PrimaryButton label="Approve protocol as guide" variant="outline" icon="ribbon-outline" onPress={guideApprove} style={{ marginTop: 10 }} testID="guide-approve-btn" />
+                {needsGuide && (
+                  <View style={s.guideBox} testID="guide-review-box">
+                    <View style={u.row}>
+                      <Ionicons name="ribbon-outline" size={16} color={RC.purple} />
+                      <Text style={[u.strong, { marginLeft: 6, flex: 1 }]}>Guide approval{(study as any).guide_name ? ` · ${(study as any).guide_name}` : ''}</Text>
+                      <Chip label={({ not_submitted: 'Not submitted', pending: 'Awaiting guide', changes_requested: 'Changes requested', approved: 'Approved' } as any)[gr.status] || gr.status}
+                        color={gr.status === 'approved' ? RC.green : gr.status === 'changes_requested' ? RC.red : gr.status === 'pending' ? RC.amber : RC.grey}
+                        bg={gr.status === 'approved' ? RC.greenSoft : gr.status === 'changes_requested' ? RC.redSoft : gr.status === 'pending' ? RC.amberSoft : RC.greySoft} small testID="guide-status-chip" />
+                    </View>
+                    {!!gr.comments && gr.status !== 'approved' && <Text style={s.guideComment}>Guide: “{gr.comments}”</Text>}
+                    {!!gr.reset_reason && gr.status === 'not_submitted' && <Text style={u.kv}>{gr.reset_reason} — resubmit when ready.</Text>}
+                    {isPI && !(study as any).guide_user_id && <Text style={[u.kv, { marginTop: 4 }]}>Choose a Supervisor or Implant In-charge as Guide in the Team tab.</Text>}
+                    {isPI && (study as any).guide_user_id && ['not_submitted', 'changes_requested'].includes(gr.status) && (
+                      <PrimaryButton label={gr.status === 'changes_requested' ? 'Resubmit to guide' : 'Submit to guide for approval'} icon="send-outline" variant="outline"
+                        onPress={submitToGuide} loading={busy} disabled={!otherChecklistOk} style={{ marginTop: 8 }} testID="submit-to-guide-btn" />
+                    )}
+                    {isPI && !otherChecklistOk && gr.status !== 'approved' && <Text style={u.hint}>Complete the other checklist items first.</Text>}
+                    {isGuide && gr.status === 'pending' && (
+                      <View style={{ marginTop: 8 }}>
+                        <TextInput value={guideComments} onChangeText={setGuideComments} placeholder="Comments for the student (required when requesting changes)" placeholderTextColor={RC.muted} style={[u.input, { minHeight: 70 }]} multiline testID="guide-comments" />
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                          <PrimaryButton label="Request changes" variant="danger" onPress={() => guideReview('request_changes')} loading={busy} style={{ flex: 1 }} testID="guide-request-changes" />
+                          <PrimaryButton label="Approve protocol" icon="checkmark" onPress={() => guideReview('approve')} loading={busy} style={{ flex: 1 }} testID="guide-approve-btn" />
+                        </View>
+                      </View>
+                    )}
+                  </View>
                 )}
                 {isPI && (
                   <PrimaryButton label="Activate study" icon="rocket-outline" loading={busy} style={{ marginTop: 12 }} testID="activate-btn"
@@ -286,6 +324,8 @@ export function describeQuery(q: any, study?: { variables: any[] }, registry?: R
 }
 
 const s = StyleSheet.create({
+  guideBox: { backgroundColor: '#FAF5FC', borderRadius: 10, padding: 10, marginTop: 10, borderWidth: 1, borderColor: '#E1BEE7' },
+  guideComment: { fontSize: 12, color: RC.red, marginTop: 6, fontStyle: 'italic' },
   question: { fontSize: 14, color: RC.text, lineHeight: 20, fontStyle: 'italic' },
   kpiRow: { flexDirection: 'row', marginTop: 14, gap: 8 },
   kpi: { flex: 1, backgroundColor: '#F7F9FC', borderRadius: 10, paddingVertical: 10, alignItems: 'center' },

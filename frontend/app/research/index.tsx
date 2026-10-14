@@ -65,7 +65,7 @@ export default function ResearchHome() {
   };
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader
         title="Research" subtitle="Studies, enrolment & data capture" testID="research-title"
         onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/dashboard'))}

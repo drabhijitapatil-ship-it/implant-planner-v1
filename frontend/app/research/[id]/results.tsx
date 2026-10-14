@@ -40,7 +40,7 @@ export default function Results() {
   };
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Results & export" subtitle={`${study.code} · descriptive, de-identified`} testID="results-title" />
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
         <Card testID="flow-card">

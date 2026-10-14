@@ -135,7 +135,7 @@ export default function FormEntry() {
   const derivedKeys = keys.filter(k => vars[k]?.source === 'derived');
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title={enr.subject_code} subtitle={`${study.code} · tooth ${enr.tooth_number}${enr.patient_name ? ` · ${enr.patient_name}` : ''}`} testID="form-title"
         right={enr.case_accessible ? (
           <TouchableOpacity onPress={() => router.push(`/procedures/${enr.procedure_id}`)} style={s.caseBtn} testID="open-case-btn">

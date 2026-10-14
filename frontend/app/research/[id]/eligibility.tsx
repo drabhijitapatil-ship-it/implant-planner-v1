@@ -59,7 +59,7 @@ export default function EligibilityEditor() {
   const pickerList = registry.filter(f => !search || f.label.toLowerCase().includes(search.toLowerCase()) || f.path.includes(search.toLowerCase()));
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Eligibility rules" subtitle="Include / exclude · query or checklist" testID="eligibility-title"
         right={<PrimaryButton label="Save" onPress={save} loading={saving} testID="save-eligibility" style={{ paddingVertical: 8, minHeight: 36 }} />} />
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
@@ -159,7 +159,7 @@ export default function EligibilityEditor() {
       </ScrollView>
 
       <Modal visible={!!picker} animationType="slide" onRequestClose={() => setPicker(null)}>
-        <SafeAreaView style={u.container}>
+        <SafeAreaView style={u.container} edges={['bottom']}>
           <ScreenHeader title="Pick a case field" subtitle="Case Field Registry — Phase 1–5" onBack={() => setPicker(null)} />
           <View style={{ padding: 12 }}>
             <TextInput value={search} onChangeText={setSearch} placeholder="Search fields…" placeholderTextColor={RC.muted} style={u.input} autoFocus testID="registry-search" />

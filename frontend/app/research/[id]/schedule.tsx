@@ -58,7 +58,7 @@ export default function ScheduleEditor() {
   const dateVars = vars.filter(v => v.data_type === 'date');
 
   return (
-    <SafeAreaView style={u.container} edges={['top']}>
+    <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Schedule" subtitle="Timepoints anchored to clinical events" testID="schedule-title"
         right={<PrimaryButton label="+ Timepoint" onPress={() => setEditing({ idx: -1, t: blankTp() })} testID="add-timepoint" style={{ paddingVertical: 8, minHeight: 36 }} />} />
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
@@ -86,7 +86,7 @@ export default function ScheduleEditor() {
 
       <Modal visible={!!editing} animationType="slide" onRequestClose={() => setEditing(null)}>
         {editing && (
-          <SafeAreaView style={u.container}>
+          <SafeAreaView style={u.container} edges={['bottom']}>
             <ScreenHeader title={editing.idx < 0 ? 'New timepoint' : 'Edit timepoint'} onBack={() => setEditing(null)}
               right={<PrimaryButton label="Done" onPress={commit} loading={saving} testID="tp-done" style={{ paddingVertical: 8, minHeight: 36 }} />} />
             <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">

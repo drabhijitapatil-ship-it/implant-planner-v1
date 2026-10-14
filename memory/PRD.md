@@ -7810,3 +7810,10 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - Data queries (S17): research_queries collection; raise (PI/guide/statistician) from a flag icon on any study field, reply/answer/close/reopen threads, in-app notifications to collectors; study inbox screen `/research/[id]/queries`.
 - Synopsis (S19/S20): per-study `synopsis` free-text sections + title page; GET /research/studies/{id}/synopsis.docx|pdf generates university-format document (title page, investigators, intro, question, aims, generated methods, inclusion/exclusion, sample size, stats, ethics, status, references, Annexure A CRF table). Screen `/research/[id]/synopsis`.
 - Tests: backend/tests/test_research_module.py 6/6 (incl. new test_phase1_fields_queries_images_synopsis). UI smoke verified on preview for form flags, queries inbox, radiograph calibrate+measure (bl_mesial auto-filled), synopsis editor, Phase 1 bisphosphonate row.
+
+## Iteration 446 (Jun 2026) — Research Module refinements
+- Study design ⓘ primers: curated offline content (`constants/studyDesigns.ts`: definition, implant use-cases, strengths/limitations, OCEBM 2011 level, STROBE/CONSORT/CARE/PROCESS reporting guideline, references) via `StudyDesignPicker`.
+- Unit of analysis is multi-select + custom (`primary_units[]`; first = `primary_unit` for coding/feasibility).
+- Guide approval workflow: `created_by_role` stored; faculty-created studies auto-approved; student studies need a Guide (Supervisor/Implant In-charge only, enforced), PI clicks "Submit to guide" once rest of checklist is green → guide gets notification → Approve / Request changes (comments) → protocol edits or guide change reset approval. Endpoints: POST /research/studies/{id}/submit-to-guide, POST …/guide-review. Activation blocked until approved.
+- IEC approval letter: POST/GET/DELETE /research/studies/{id}/iec-letter (PDF/JPG/PNG → object storage); visible to PI + guide (+admin) only; others see only "present".
+- Safe-area fix: `ScreenHeader` owns the top inset (useSafeAreaInsets + Android StatusBar fallback for Modals); all research screens/modals use edges={['bottom']}.

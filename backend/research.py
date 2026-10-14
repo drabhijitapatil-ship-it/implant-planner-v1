@@ -659,15 +659,25 @@ def activation_checklist(study: dict) -> list[dict]:
         ("At least one variable", bool(study.get("variables"))),
         ("Exactly one baseline timepoint", sum(1 for t in tps if t.get("is_baseline")) == 1),
         ("Principal investigator set", bool(study.get("pi_user_id"))),
+        ("Primary unit of analysis chosen", bool(study.get("primary_units") or study.get("primary_unit"))),
         ("IEC reference and approval date", bool(study.get("iec_ref")) and bool(study.get("iec_approval_date"))),
         ("Consent form version recorded", bool(study.get("consent_form_version"))),
         ("Protocol has no structural errors", not validate_protocol(study)),
     ]
     if study.get("study_type") == "rct":
         items.append(("CTRI number (RCT)", bool(study.get("ctri_number"))))
-    if study.get("is_dissertation"):
-        items.append(("Guide approval recorded", bool(study.get("guide_approved_at"))))
+    if needs_guide_approval(study):
+        items.append(("Guide chosen (Supervisor / Implant In-charge)", bool(study.get("guide_user_id"))))
+        items.append(("Guide approval recorded", (study.get("guide_review") or {}).get("status") == "approved"))
     return [{"label": l, "ok": ok} for l, ok in items]
+
+
+def needs_guide_approval(study: dict) -> bool:
+    """Student-created studies need a single guide approval; faculty-created studies are auto-approved."""
+    return (study.get("created_by_role") or "student") == "student"
+
+
+PROTOCOL_KEYS = ("eligibility", "variables", "timepoints", "research_question", "target_n", "primary_units", "study_type", "title")
 
 
 # --------------------------------------------------------------------------
