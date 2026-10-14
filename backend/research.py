@@ -12,6 +12,7 @@ Studies live in db.research_studies, enrolments in db.research_enrolments
 """
 from __future__ import annotations
 
+import io
 import math
 import re
 import statistics
@@ -120,11 +121,16 @@ def _i(k, conv=_str):
 _REG: list[tuple] = [
     ("patient.age_years", "Patient age", "patient", "integer", "years", None, 1, _p("age", _num)),
     ("patient.sex", "Sex", "patient", "single_select", None, _opts(["Male", "Female", "Other"]), 1, _p("sex")),
-    ("patient.medical.diabetes", "Diabetes", "patient", "single_select", None, YES_NO, 1, _med("diabetes")),
-    ("patient.medical.smoking", "Smoking", "patient", "single_select", None, YES_NO, 1, _med("smoking")),
+    ("patient.medical.diabetes", "Diabetes", "patient", "single_select", None, _opts(["No", "Controlled", "Uncontrolled"]), 1, _med("diabetes")),
+    ("patient.medical.smoking", "Smoking status", "patient", "single_select", None, _opts(["No", "Light (<10/day)", "Heavy (>10/day)"]), 1, _med("smoking")),
     ("patient.medical.anticoagulant", "On anticoagulants", "patient", "single_select", None, YES_NO, 1, _med("anticoagulant")),
     ("patient.medical.osteoporosis", "Osteoporosis / bisphosphonates", "patient", "single_select", None, YES_NO, 1, _med("osteoporosis")),
     ("patient.medical.radiation", "Head & neck radiation", "patient", "single_select", None, YES_NO, 1, _med("radiation")),
+    ("patient.medical.hba1c_pct", "HbA1c", "patient", "decimal", "%", None, 1, lambda p, i: _num((p.get("medical_assessment") or {}).get("hba1c"))),
+    ("patient.medical.cigarettes_per_day", "Cigarettes per day", "patient", "integer", "/day", None, 1,
+     lambda p, i: _num((p.get("medical_assessment") or {}).get("cigarettes_per_day"))),
+    ("patient.medical.bisphosphonate_history", "Bisphosphonate history", "patient", "single_select", None,
+     _opts(["No", "Oral", "IV"]), 1, _med("bisphosphonate")),
     ("patient.medical_risk_level", "Medical risk level", "patient", "single_select", None,
      _opts(["Low Risk", "Moderate Risk", "High Risk"]), 1, _p("medical_risk_level")),
     ("case.procedure_type", "Procedure type", "patient", "single_select", None, _opts(_PROC_TYPES), 1, _p("implant_procedure_type")),
@@ -162,6 +168,8 @@ _REG: list[tuple] = [
     ("implant.insertion_torque_ncm", "Insertion torque", "implant", "integer", "Ncm", None, 2, _i("insertion_torque_ncm", _num)),
     ("implant.placement_date", "Placement date", "implant", "date", None, None, 2, _i("placement_date")),
     # site level
+    ("site.socket_type", "Extraction socket type (Elian)", "site", "single_select", None, _opts(["Type I", "Type II", "Type III"]), 1,
+     lambda p, i: _str((p.get("socket_types") or {}).get(_tooth_key(i)))),
     ("site.baseline_pd_mesial", "Baseline PD mesial", "site", "decimal", "mm", None, 4, lambda p, i: _pd(p, i, "mesial")),
     ("site.baseline_pd_distal", "Baseline PD distal", "site", "decimal", "mm", None, 4, lambda p, i: _pd(p, i, "distal")),
     ("site.baseline_pd_vestibular", "Baseline PD vestibular", "site", "decimal", "mm", None, 4, lambda p, i: _pd(p, i, "vestibular")),
@@ -852,17 +860,18 @@ CBL_TEMPLATE = {
             {"field": "case.procedure_type", "op": "eq", "value": "Immediate Implant"},
             {"field": "patient.age_years", "op": "gte", "value": 18}]}},
         {"kind": "include", "mode": "query", "query": {"all": [{"field": "implant.insertion_torque_ncm", "op": "gte", "value": 35}]}},
-        {"kind": "include", "mode": "checklist", "checklist_text": "Elian socket Type I or II confirmed clinically"},
+        {"kind": "include", "mode": "query", "query": {"all": [{"field": "site.socket_type", "op": "in", "value": ["Type I", "Type II"]}]}},
         {"kind": "include", "mode": "checklist", "checklist_text": "Patient willing to attend recall up to 24 months"},
         {"kind": "exclude", "mode": "query", "query": {"any": [
-            {"field": "patient.medical.smoking", "op": "eq", "value": "Yes"},
-            {"field": "patient.medical.osteoporosis", "op": "eq", "value": "Yes"},
+            {"field": "patient.medical.cigarettes_per_day", "op": "gt", "value": 10},
+            {"field": "patient.medical.hba1c_pct", "op": "gt", "value": 7},
+            {"field": "patient.medical.bisphosphonate_history", "op": "in", "value": ["Oral", "IV"]},
             {"field": "patient.medical.radiation", "op": "eq", "value": "Yes"}]}},
         {"kind": "exclude", "mode": "checklist", "checklist_text": "Active periodontitis at the site"},
     ],
     "variables": [
-        {"key": "diabetes", "label": "Diabetes", "level": "patient", "source": "linked", "case_field_path": "patient.medical.diabetes"},
-        {"key": "smoking", "label": "Smoking", "level": "patient", "source": "linked", "case_field_path": "patient.medical.smoking"},
+        {"key": "hba1c", "label": "HbA1c", "level": "patient", "source": "linked", "case_field_path": "patient.medical.hba1c_pct"},
+        {"key": "smoker_cigs_day", "label": "Cigarettes per day", "level": "patient", "source": "linked", "case_field_path": "patient.medical.cigarettes_per_day"},
         {"key": "age", "label": "Age", "level": "patient", "source": "linked", "case_field_path": "patient.age_years"},
         {"key": "sex", "label": "Sex", "level": "patient", "source": "linked", "case_field_path": "patient.sex"},
         {"key": "implant_system", "label": "Implant system", "level": "implant", "source": "linked", "case_field_path": "implant.system"},
@@ -871,8 +880,7 @@ CBL_TEMPLATE = {
         {"key": "insertion_torque", "label": "Insertion torque", "level": "implant", "source": "linked", "case_field_path": "implant.insertion_torque_ncm"},
         {"key": "bone_type", "label": "Bone type", "level": "implant", "source": "linked", "case_field_path": "implant.bone_type"},
         {"key": "isq", "label": "ISQ", "level": "implant", "source": "study", "data_type": "integer", "unit": "ISQ", "min": 0, "max": 100},
-        {"key": "socket_type", "label": "Elian socket type", "level": "site", "source": "study", "data_type": "single_select", "required": True,
-         "options": [{"code": "1", "label": "Elian Type I"}, {"code": "2", "label": "Elian Type II"}]},
+        {"key": "socket_type", "label": "Elian socket type", "level": "site", "source": "linked", "case_field_path": "site.socket_type"},
         {"key": "buccal_plate_mm", "label": "Buccal plate thickness", "level": "site", "source": "study", "data_type": "decimal", "unit": "mm", "min": 0, "max": 5, "decimals": 1,
          "method_note": "CBCT, at crest level, perpendicular to implant axis"},
         {"key": "jump_gap_mm", "label": "Jump gap", "level": "site", "source": "study", "data_type": "decimal", "unit": "mm", "min": 0, "max": 6, "decimals": 1,
@@ -901,7 +909,7 @@ CBL_TEMPLATE = {
     ],
     "timepoints": [
         {"key": "baseline", "label": "Baseline (placement)", "anchor_event": "placement_date", "offset_days": 0, "window_before_days": 0, "window_after_days": 7, "is_baseline": True,
-         "variables": ["diabetes", "smoking", "age", "sex", "implant_system", "implant_diameter", "implant_length", "insertion_torque", "bone_type", "isq", "socket_type", "buccal_plate_mm", "jump_gap_mm", "gap_graft", "phenotype", "bl_mesial", "bl_distal"]},
+         "variables": ["hba1c", "smoker_cigs_day", "age", "sex", "implant_system", "implant_diameter", "implant_length", "insertion_torque", "bone_type", "isq", "socket_type", "buccal_plate_mm", "jump_gap_mm", "gap_graft", "phenotype", "bl_mesial", "bl_distal"]},
         {"key": "loading", "label": "Loading", "anchor_event": "prosthesis_delivery_date", "offset_days": 0, "window_before_days": 0, "window_after_days": 14,
          "variables": ["isq", "bl_mesial", "bl_distal", "cbl_mesial", "cbl_distal", "cbl_mean", "midfacial_change_mm", "pes", "complication"]},
         {"key": "m6", "label": "6 months", "anchor_event": "prosthesis_delivery_date", "offset_days": 182, "window_before_days": 15, "window_after_days": 15,
@@ -976,3 +984,185 @@ PES_WES_TEMPLATE = {
 }
 
 TEMPLATES = [CBL_TEMPLATE, ISQ_TEMPLATE, PES_WES_TEMPLATE]
+
+
+# --------------------------------------------------------------------------
+# Synopsis / dissertation document (D3). Section order follows the common
+# Indian university synopsis format; free-text sections are editable per study.
+# --------------------------------------------------------------------------
+SYNOPSIS_FREE_SECTIONS = [
+    ("introduction", "Introduction"),
+    ("review_of_literature", "Review of Literature"),
+    ("aims_objectives", "Aims and Objectives"),
+    ("materials_methods_extra", "Materials and Methods — additional details"),
+    ("statistical_analysis", "Statistical Analysis"),
+    ("ethical_considerations", "Ethical Considerations"),
+    ("references", "References"),
+]
+
+
+def sanitize_synopsis(body: dict) -> dict:
+    body = body or {}
+    out = {k: _s(body.get(k), 12000) for k, _ in SYNOPSIS_FREE_SECTIONS}
+    for k, n in (("university_name", 160), ("college_name", 160), ("department_name", 120), ("degree", 80), ("academic_year", 20),
+                 ("student_name", 100), ("guide_name", 100), ("co_guide_name", 100), ("hod_name", 100), ("sample_size_text", 2000)):
+        out[k] = _s(body.get(k), n)
+    return out
+
+
+def _eligibility_lines(st: dict, kind: str) -> list[str]:
+    return [describe_condition(r["query"]) if r["mode"] == "query" else r.get("checklist_text", "")
+            for r in st.get("eligibility", []) if r["kind"] == kind]
+
+
+def _methods_paragraphs(st: dict) -> list[str]:
+    tps = st.get("timepoints", [])
+    unit = st.get("primary_unit", "implant")
+    outcome_vars = [v for v in st.get("variables", []) if v["source"] != "linked"]
+    linked = [v for v in st.get("variables", []) if v["source"] == "linked"]
+    design = st.get("study_type", "").replace("_", " ")
+    p = [
+        f"Study design: This is a {design} with the {unit} as the primary unit of analysis. "
+        f"The study will be conducted in the Department of Implantology using the Implanr clinical record system; "
+        f"a target of {st.get('target_n')} {unit}s will be enrolled.",
+        "Participants will be screened against the inclusion and exclusion criteria listed above. Eligibility against coded "
+        "case fields is evaluated automatically; items requiring clinical confirmation are verified at enrolment. Written "
+        f"informed consent (form version {st.get('consent_form_version') or '—'}) will be obtained in the participant's language.",
+    ]
+    if tps:
+        sched = "; ".join(f"{t['label']} ({t['anchor_event'].replace('_', ' ')}{' + ' + str(t['offset_days']) + ' days' if t['offset_days'] else ''}, "
+                          f"window −{t['window_before_days']}/+{t['window_after_days']} days)" for t in tps)
+        p.append(f"Assessment schedule: Data will be collected at {len(tps)} timepoints — {sched}. Visits outside the protocol window are recorded as deviations.")
+    if linked:
+        p.append("Baseline characteristics extracted from the clinical record: " + ", ".join(v["label"] for v in linked) + ".")
+    if outcome_vars:
+        lines = []
+        for v in outcome_vars:
+            s = v["label"] + (f" ({v['unit']})" if v.get("unit") else "")
+            if v["source"] == "derived":
+                s += f" — derived: {v.get('formula')}"
+            if v.get("method_note"):
+                s += f". Method: {v['method_note']}"
+            lines.append(s)
+        p.append("Study variables and measurement methods: " + " | ".join(lines) + ".")
+    p.append("Data management: Data are captured in structured electronic forms with range checks, mandatory-field rules and an "
+             "immutable audit trail. Linked clinical values are read-only and snapshotted at form lock. Exports are de-identified "
+             "(subject codes; dates expressed as days from the anchor event).")
+    return p
+
+
+def _default_stats(st: dict) -> str:
+    return ("Descriptive statistics (mean ± SD, median [IQR] for continuous variables; counts and percentages for categorical variables) "
+            "will be computed per timepoint. Change from baseline will be analysed with paired tests or repeated-measures models as "
+            "appropriate. Where multiple implants are clustered within patients, mixed-effects models / GEE will be used. "
+            "Statistical significance will be set at p < 0.05.")
+
+
+def _synopsis_sections(st: dict, dash: Optional[dict]) -> list[tuple[str, list[str]]]:
+    syn = st.get("synopsis") or {}
+    inc, exc = _eligibility_lines(st, "include"), _eligibility_lines(st, "exclude")
+    sections: list[tuple[str, list[str]]] = [("Title", [st.get("title", "")])]
+    investigators = [f"Principal investigator: {st.get('pi_name', '')}"]
+    if st.get("is_dissertation"):
+        investigators += [f"Candidate: {syn.get('student_name') or st.get('pi_name', '')}", f"Guide: {syn.get('guide_name') or st.get('guide_name') or '—'}"]
+        if syn.get("co_guide_name"):
+            investigators.append(f"Co-guide: {syn['co_guide_name']}")
+    sections.append(("Investigators", investigators))
+    sections.append(("Introduction", [syn.get("introduction") or "(to be written)"]))
+    if syn.get("review_of_literature"):
+        sections.append(("Review of Literature", [syn["review_of_literature"]]))
+    sections.append(("Research Question", [st.get("research_question", "")]))
+    sections.append(("Aims and Objectives", [syn.get("aims_objectives") or f"To determine: {st.get('research_question', '')}"]))
+    sections.append(("Materials and Methods", _methods_paragraphs(st) + ([syn["materials_methods_extra"]] if syn.get("materials_methods_extra") else [])))
+    sections.append(("Inclusion Criteria", [f"{i + 1}. {x}" for i, x in enumerate(inc)] or ["—"]))
+    sections.append(("Exclusion Criteria", [f"{i + 1}. {x}" for i, x in enumerate(exc)] or ["—"]))
+    sections.append(("Sample Size", [syn.get("sample_size_text") or f"A total of {st.get('target_n')} {st.get('primary_unit')}s will be enrolled."]))
+    sections.append(("Statistical Analysis", [syn.get("statistical_analysis") or _default_stats(st)]))
+    ethics = [f"IEC reference: {st.get('iec_ref') or '—'}; approval date: {st.get('iec_approval_date') or '—'}."]
+    if st.get("ctri_number"):
+        ethics.append(f"CTRI registration: {st['ctri_number']}.")
+    ethics.append(syn.get("ethical_considerations") or "Written informed consent will be obtained from every participant; participants may withdraw at any time without affecting their clinical care. Data are held de-identified and access is audit-logged.")
+    sections.append(("Ethical Considerations", ethics))
+    if dash:
+        flow = dash.get("flow", {})
+        sections.append(("Current Status", [f"Enrolled {flow.get('enrolled', 0)} of {st.get('target_n')} ({flow.get('patients', 0)} patients); completed forms: {dash.get('completed_forms', 0)}."]))
+    sections.append(("References", [syn.get("references") or "(to be added)"]))
+    return sections
+
+
+def _crf_rows(st: dict) -> list[list[str]]:
+    tps = st.get("timepoints", [])
+    rows = [["Variable", "Level", "Source", "Type / unit"] + [t["label"] for t in tps]]
+    for v in st.get("variables", []):
+        rows.append([v["label"], v["level"], v["source"], (v["data_type"] + (f" ({v['unit']})" if v.get("unit") else ""))] +
+                    ["✓" if v["key"] in t["variables"] else "" for t in tps])
+    return rows
+
+
+def _title_block(st: dict) -> list[str]:
+    syn = st.get("synopsis") or {}
+    lines = [x for x in (syn.get("university_name"), syn.get("college_name"), syn.get("department_name")) if x]
+    if syn.get("degree"):
+        lines.append(f"Synopsis for {syn['degree']}" + (f" — {syn['academic_year']}" if syn.get("academic_year") else ""))
+    return lines
+
+
+def build_synopsis_docx(st: dict, dash: Optional[dict] = None) -> bytes:
+    from docx import Document
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    doc = Document()
+    style = doc.styles["Normal"]; style.font.name = "Times New Roman"; style.font.size = Pt(12)
+    for line in _title_block(st):
+        p = doc.add_paragraph(); r = p.add_run(line.upper()); r.bold = True; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p = doc.add_paragraph(); r = p.add_run(st.get("title", "")); r.bold = True; r.font.size = Pt(16); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p = doc.add_paragraph(f"Study code: {st.get('code')} · Protocol v{st.get('protocol_version', '1.0')} · Generated {today().isoformat()}"); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for heading, paras in _synopsis_sections(st, dash):
+        doc.add_heading(heading, level=1)
+        for text in paras:
+            for chunk in str(text).split("\n"):
+                if chunk.strip():
+                    doc.add_paragraph(chunk.strip())
+    doc.add_page_break()
+    doc.add_heading("Annexure A — Case Record Form (variables × timepoints)", level=1)
+    rows = _crf_rows(st)
+    table = doc.add_table(rows=len(rows), cols=len(rows[0])); table.style = "Table Grid"
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            c = table.cell(i, j); c.text = str(cell)
+            for par in c.paragraphs:
+                for run in par.runs:
+                    run.font.size = Pt(8); run.bold = i == 0
+    buf = io.BytesIO(); doc.save(buf)
+    return buf.getvalue()
+
+
+def build_synopsis_pdf(st: dict, dash: Optional[dict] = None) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from xml.sax.saxutils import escape
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=25 * mm, rightMargin=25 * mm, topMargin=20 * mm, bottomMargin=20 * mm)
+    ss = getSampleStyleSheet()
+    body = ParagraphStyle("body", parent=ss["Normal"], fontName="Times-Roman", fontSize=11, leading=15, spaceAfter=6)
+    h1 = ParagraphStyle("h1", parent=ss["Heading1"], fontName="Times-Bold", fontSize=13, spaceBefore=10, spaceAfter=4)
+    center = ParagraphStyle("c", parent=body, alignment=1, fontName="Times-Bold")
+    story = [Paragraph(escape(x.upper()), center) for x in _title_block(st)]
+    story += [Spacer(1, 6), Paragraph(f"<font size=15>{escape(st.get('title', ''))}</font>", center),
+              Paragraph(escape(f"Study code: {st.get('code')} · Protocol v{st.get('protocol_version', '1.0')} · Generated {today().isoformat()}"), ParagraphStyle("s", parent=body, alignment=1, fontSize=9))]
+    for heading, paras in _synopsis_sections(st, dash):
+        story.append(Paragraph(escape(heading), h1))
+        for text in paras:
+            for chunk in str(text).split("\n"):
+                if chunk.strip():
+                    story.append(Paragraph(escape(chunk.strip()), body))
+    story.append(PageBreak()); story.append(Paragraph("Annexure A — Case Record Form (variables × timepoints)", h1))
+    rows = [[Paragraph(escape(str(c)), ParagraphStyle("t", parent=body, fontSize=7, leading=9)) for c in r] for r in _crf_rows(st)]
+    t = Table(rows, repeatRows=1)
+    t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.grey), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E3F2FD")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(t)
+    doc.build(story)
+    return buf.getvalue()

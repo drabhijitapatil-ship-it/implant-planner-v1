@@ -454,6 +454,8 @@ class ProcedureCreate(BaseModel):
     # Per-tooth Edentulous-site measurements (keyed by FDI code) — used when 2+ teeth
     # are marked missing. Structure: { "16": { "oc": 7.5, "md": 9.0 }, "17": {...} }.
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
+    # Research Module: Elian extraction-socket classification per site (FDI → 'Type I'|'Type II'|'Type III')
+    socket_types: Optional[Dict[str, str]] = None
     arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
@@ -604,6 +606,7 @@ class ProcedureUpdate(BaseModel):
     teeth_present: Optional[List[str]] = None
     missing_teeth: Optional[List[str]] = None
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
+    socket_types: Optional[Dict[str, str]] = None
     supervisor_id: Optional[str] = Field(None, max_length=50)
     supervisor_name: Optional[str] = Field(None, max_length=100)
     implant_incharge_id: Optional[str] = Field(None, max_length=50)
@@ -25101,7 +25104,23 @@ setup_lab_files(
 # Research Module (studies / enrolment / data capture / export) — lives in
 # research.py (engines) + research_routes.py (endpoints), mounted under /api/research.
 import research_routes as _research_routes
-api_router.include_router(_research_routes.build_router(db, get_current_user))
+
+
+async def _research_user_from_token(token: str):
+    """Resolve a user from a raw JWT (query-param auth for <Image> downloads)."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("jti") in token_blocklist or payload.get("type") not in ("access", None):
+            return None
+        user = await db.users.find_one({"_id": ObjectId(payload.get("user_id"))}, {"password_hash": 0})
+        if user:
+            user["_id"] = str(user["_id"])
+        return user
+    except Exception:
+        return None
+
+
+api_router.include_router(_research_routes.build_router(db, get_current_user, _research_user_from_token))
 
 app.include_router(api_router)
 

@@ -11,6 +11,8 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import api from '../../../utils/api';
 import CalendarPicker from '../../../components/CalendarPicker';
 import { RC, Card, Chip, Field, Loading, PillSelect, PrimaryButton, ScreenHeader, SectionTitle, FORM_STATUS, Variable, errText, u } from '../../../components/research/ResearchUI';
+import RadiographMeasure from '../../../components/research/RadiographMeasure';
+import { QueryThread } from '../../../components/research/QueryThread';
 
 export default function FormEntry() {
   const { eid, tp } = useLocalSearchParams<{ eid: string; tp?: string }>();
@@ -23,11 +25,16 @@ export default function FormEntry() {
   const [devReason, setDevReason] = useState('');
   const [editReason, setEditReason] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [rxOpen, setRxOpen] = useState(false);
+  const [queries, setQueries] = useState<any[]>([]);
+  const [flagVar, setFlagVar] = useState<string | null>(null);
+  const [flagText, setFlagText] = useState('');
 
   const load = useCallback(async () => {
     try {
       const r = await api.get(`/research/enrolments/${eid}`);
       setEnr(r.data);
+      api.get(`/research/enrolments/${eid}/queries`).then(q => setQueries(q.data)).catch(() => {});
       if (!tpKey) {
         const first = r.data.forms.find((f: any) => ['in_window', 'overdue', 'missed'].includes(f.status)) || r.data.forms.find((f: any) => !f.completed_at) || r.data.forms[0];
         setTpKey(first?.timepoint_key || '');
@@ -51,6 +58,16 @@ export default function FormEntry() {
   const isPI = study.my_roles.includes('pi') || study.my_roles.includes('admin');
   const canEdit = ['pi', 'admin', 'co_investigator', 'data_collector'].some(r => study.my_roles.includes(r)) && study.status !== 'data_locked' && ['enrolled', 'active', 'completed'].includes(enr.status);
   const locked = !!form.locked_at;
+  const canRaise = ['pi', 'admin', 'guide', 'statistician'].some(r => study.my_roles.includes(r));
+  const formQueries = queries.filter(q => q.timepoint_key === tpKey);
+  const hasMmVars = keys.some(k => vars[k]?.source === 'study' && (vars[k].unit || '').toLowerCase() === 'mm');
+  const raiseQuery = async () => {
+    if (!flagVar || !flagText.trim()) { Alert.alert('Message required', 'Describe what looks wrong.'); return; }
+    try {
+      const r = await api.post(`/research/enrolments/${eid}/queries`, { text: flagText, timepoint_key: tpKey, variable_key: flagVar, value_at_raise: values[flagVar] ?? null });
+      setQueries(qs => [r.data, ...qs]); setFlagVar(null); setFlagText('');
+    } catch (e) { Alert.alert('Error', errText(e)); }
+  };
   const editable = canEdit && !locked;
   const fs = FORM_STATUS[form.status] || FORM_STATUS.not_due;
   const inWindow = visitDate && form.window_start && form.window_end ? visitDate >= form.window_start && visitDate <= form.window_end : true;
@@ -180,7 +197,13 @@ export default function FormEntry() {
                   <View style={u.row}>
                     <Text style={s.lbl}>{v.label}{v.unit ? ` (${v.unit})` : ''}{v.required ? ' *' : ''}</Text>
                     {v.level === 'patient' && <View style={{ marginLeft: 6 }}><Chip label="patient-level" color={RC.purple} bg={RC.purpleSoft} small /></View>}
+                    {formQueries.some(q => q.variable_key === k && q.status !== 'closed') && <View style={{ marginLeft: 6 }}><Chip label="query open" color={RC.red} bg={RC.redSoft} small /></View>}
                     <View style={{ flex: 1 }} />
+                    {canRaise && (
+                      <TouchableOpacity onPress={() => { setFlagVar(k); setFlagText(''); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 8 }} testID={`flag-${k}`}>
+                        <Ionicons name="flag-outline" size={16} color={RC.amber} />
+                      </TouchableOpacity>
+                    )}
                     {editable && (
                       <TouchableOpacity onPress={() => setNotDone(s => { const n = { ...s }; if (nd) delete n[k]; else { n[k] = ''; setValues(vv => ({ ...vv, [k]: null })); } return n; })} style={u.row} testID={`nd-toggle-${k}`}>
                         <Text style={{ fontSize: 11, color: nd ? RC.amber : RC.muted, marginRight: 4 }}>not done</Text>
@@ -192,6 +215,28 @@ export default function FormEntry() {
                   <View style={{ marginTop: 6 }}>{renderInput(v)}</View>
                 </View>); })}
               {(() => { const pk = studyKeys.filter(k => vars[k].level === 'patient'); return pk.length ? <Text style={u.kv}>Patient-level values are stored once per patient per timepoint and shared across this patient{"'"}s other implants in the study (D2).</Text> : null; })()}
+            </Card>
+          )}
+
+          {hasMmVars && (
+            <View style={{ marginHorizontal: 14, marginTop: 12 }}>
+              <PrimaryButton label={form.images?.iopa ? `Radiograph · grade ${form.images.iopa.quality_grade} · measure` : 'Upload radiograph & measure bone levels'} variant="outline" icon="scan-outline" onPress={() => setRxOpen(true)} testID="open-radiograph" />
+            </View>
+          )}
+
+          {(formQueries.length > 0 || flagVar) && (
+            <Card>
+              <SectionTitle title={`Data queries (${formQueries.filter(q => q.status !== 'closed').length} open)`} icon="flag-outline" />
+              {flagVar && (
+                <View style={{ marginBottom: 8 }}>
+                  <Field label={`Flag "${vars[flagVar]?.label}" — what looks wrong?`} value={flagText} onChangeText={setFlagText} multiline placeholder="e.g. 4.2 mm at 6 months but 0.8 mm at 12 months — please re-check the IOPA" testID="flag-text" />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <PrimaryButton label="Raise query" onPress={raiseQuery} style={{ flex: 1 }} testID="raise-query" />
+                    <PrimaryButton label="Cancel" variant="ghost" onPress={() => setFlagVar(null)} />
+                  </View>
+                </View>
+              )}
+              {formQueries.map(q => <QueryThread key={q.id} q={q} compact canClose={isPI || q.raised_by_id === study.pi_user_id} canReopen={canRaise} onChanged={nq => setQueries(qs => qs.map(x => (x.id === nq.id ? nq : x)))} />)}
             </Card>
           )}
 
@@ -235,6 +280,9 @@ export default function FormEntry() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <RadiographMeasure visible={rxOpen} onClose={() => setRxOpen(false)} enrolmentId={String(eid)} tpKey={tpKey} form={form}
+        variables={keys.map(k => vars[k]).filter(Boolean)} implantLength={enr.implant?.length ? Number(enr.implant.length) : null} editable={editable}
+        onUpdated={nenr => { setEnr(nenr); }} />
     </SafeAreaView>
   );
 }

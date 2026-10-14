@@ -129,6 +129,8 @@ export default function StudyDetail() {
               {study.status === 'active' && canEnterData && (
                 <NavRow icon="search-outline" label="Screen & enrol cases" sub="Retrospective pull of your cases with per-rule pass / fail / needs-review." route={`/research/${id}/screening`} />
               )}
+              <NavRow icon="flag-outline" label="Data queries" sub="Flagged values and their resolution threads." route={`/research/${id}/queries`} />
+              <NavRow icon="school-outline" label="Synopsis / dissertation" sub="University-format DOCX & PDF with methods and criteria generated from the protocol." route={`/research/${id}/synopsis`} />
               <NavRow icon="stats-chart-outline" label="Results & export" sub="Recruitment flow, follow-up compliance, descriptive statistics, de-identified CSV." route={`/research/${id}/results`} />
               {isPI && (
                 <NavRow icon="shield-checkmark-outline" label="Ethics & consent" sub={study.iec_ref ? `IEC ${study.iec_ref} · consent ${study.consent_form_version || '—'}` : 'IEC reference, approval date, consent form version, CTRI.'} route={`/research/${id}/ethics`} />

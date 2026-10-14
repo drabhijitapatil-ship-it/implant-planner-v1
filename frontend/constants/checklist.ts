@@ -429,6 +429,7 @@ export const MEDICAL_RISK_FACTORS = [
   { id: 'smoking', label: 'Smoking Status', options: ['No', 'Light (<10/day)', 'Heavy (>10/day)'] },
   { id: 'anticoagulant', label: 'Anticoagulant Therapy', options: ['No', 'Yes'] },
   { id: 'osteoporosis', label: 'Osteoporosis Medication (Bisphosphonates)', options: ['No', 'Yes'] },
+  { id: 'bisphosphonate', label: 'Bisphosphonate History', options: ['No', 'Oral', 'IV'] },
   { id: 'radiation', label: 'Radiation Therapy (Head & Neck)', options: ['No', 'Yes'] },
 ];
 

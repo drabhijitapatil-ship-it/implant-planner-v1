@@ -200,6 +200,7 @@ const FIELD_OPTIONS: Record<string, FieldOptionsConfig> = {
   'medical_assessment.smoking': { options: ['No', 'Light (<10/day)', 'Heavy (>10/day)'] },
   'medical_assessment.anticoagulant': { options: ['No', 'Yes'] },
   'medical_assessment.osteoporosis': { options: ['No', 'Yes'] },
+  'medical_assessment.bisphosphonate': { options: ['No', 'Oral', 'IV'] },
   'medical_assessment.radiation': { options: ['No', 'Yes'] },
 
   // Phase 2 — Surgical
@@ -2757,7 +2758,7 @@ export default function ProcedureDetailScreen() {
                 </View>
               )}
             </View>
-            {Object.entries(procedure.medical_assessment).filter(([key]) => !['hb','tlc','bleeding_time','clotting_time','prothrombin_time','inr','hba1c'].includes(key)).map(([key, value]) => {
+            {Object.entries(procedure.medical_assessment).filter(([key]) => !['hb','tlc','bleeding_time','clotting_time','prothrombin_time','inr','hba1c','cigarettes_per_day'].includes(key)).map(([key, value]) => {
               const isNoRisk = (value as string) === 'No';
               const isHighRisk = ['Uncontrolled', 'Heavy (>10/day)'].some(h => (value as string).includes?.(h)) || 
                 (['osteoporosis', 'radiation'].includes(key) && (value as string) === 'Yes');
@@ -2854,6 +2855,7 @@ export default function ProcedureDetailScreen() {
               const ma: any = procedure.medical_assessment || {};
               const labRows: { id: string; label: string; suffix?: string }[] = [
                 { id: 'hba1c', label: 'HbA1c', suffix: '%' },
+                { id: 'cigarettes_per_day', label: 'Cigarettes per day', suffix: '/day' },
                 { id: 'hb', label: 'Haemoglobin (Hb)', suffix: 'g/dL' },
                 { id: 'tlc', label: 'Total Leucocyte Count', suffix: '/cumm' },
                 { id: 'bleeding_time', label: 'Bleeding Time', suffix: 'min' },

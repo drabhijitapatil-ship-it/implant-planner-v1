@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import csv
 import io
+import math
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 
 import research as R
@@ -35,7 +37,7 @@ def _pub(doc: dict) -> dict:
     return doc
 
 
-def build_router(db, get_current_user):
+def build_router(db, get_current_user, user_from_token=None):
     router = APIRouter(prefix="/research", tags=["research"])
 
     # ------------------------------------------------------------ helpers
@@ -918,6 +920,224 @@ def build_router(db, get_current_user):
                 f"Baseline demographic and implant characteristics were extracted from the Implanr clinical record (read-only linked variables). "
                 f"Derived variables were computed automatically from recorded measurements. Exports are de-identified: subject codes replace identifiers "
                 f"and dates are expressed as days from the timepoint anchor.\n")
+
+    # ------------------------------------------------------------ radiographs (S13 image slots, §11 manual measurement)
+    async def _load_form_ctx(enrolment_id: str, tp_key: str, user: dict):
+        e = await db.research_enrolments.find_one({"_id": _oid(enrolment_id)})
+        if not e:
+            raise HTTPException(status_code=404, detail="Enrolment not found")
+        st = await _get_study(e["study_id"], user)
+        form = next((f for f in e.get("forms", []) if f["timepoint_key"] == tp_key), None)
+        if not form:
+            raise HTTPException(status_code=404, detail="Timepoint not found")
+        return st, e, form
+
+    @router.post("/enrolments/{enrolment_id}/forms/{tp_key}/image")
+    async def upload_form_image(enrolment_id: str, tp_key: str, file: UploadFile = File(...), slot: str = Form("iopa"),
+                                acquisition_date: str = Form(""), user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st, e, form = await _load_form_ctx(enrolment_id, tp_key, user)
+        _require(st, user, DATA_ROLES, "Not allowed to upload images for this study.")
+        if form.get("locked_at"):
+            raise HTTPException(status_code=400, detail="Form is locked.")
+        ctype = (file.content_type or "").lower()
+        if ctype not in ("image/jpeg", "image/png", "image/webp"):
+            raise HTTPException(status_code=400, detail="Upload a JPEG/PNG/WEBP photo of the radiograph (DICOM import is a later phase).")
+        data = await file.read()
+        if not data or len(data) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image must be 1 byte – 15 MB")
+        from object_storage import put_object, APP_NAME
+        from PIL import Image as _PIL
+        try:
+            im = _PIL.open(io.BytesIO(data)); width, height = im.size
+        except Exception:
+            raise HTTPException(status_code=400, detail="Could not read image")
+        image_id = str(uuid.uuid4())
+        ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[ctype]
+        path = f"{APP_NAME}/research/{e['study_id']}/{enrolment_id}/{tp_key}_{slot}_{image_id}.{ext}"
+        try:
+            put_object(path, data, ctype)
+        except Exception as ex:
+            raise HTTPException(status_code=502, detail=f"Object storage upload failed: {ex}")
+        asset = {"image_id": image_id, "slot": R._s(slot, 40) or "iopa", "storage_path": path, "content_type": ctype,
+                 "width": width, "height": height, "source": "photo", "quality_grade": "C",
+                 "acquisition_date": R._s(acquisition_date, 10) or None, "calibration": None, "measurements": {},
+                 "uploaded_by": user.get("name", ""), "uploaded_at": R.now_iso()}
+        form.setdefault("images", {})[asset["slot"]] = asset
+        return await _persist_form(st, e, form, user, "image_uploaded", f"{slot}")
+
+    @router.get("/images/{enrolment_id}/{tp_key}/{slot}")
+    async def get_form_image(enrolment_id: str, tp_key: str, slot: str, token: str = ""):
+        user = await user_from_token(token) if user_from_token else None
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        _deny_nurse(user)
+        st, e, form = await _load_form_ctx(enrolment_id, tp_key, user)
+        asset = (form.get("images") or {}).get(slot)
+        if not asset:
+            raise HTTPException(status_code=404, detail="Image not found")
+        from object_storage import get_object
+        try:
+            data, ctype = get_object(asset["storage_path"])
+        except Exception as ex:
+            raise HTTPException(status_code=502, detail=f"Object storage fetch failed: {ex}")
+        return StreamingResponse(iter([data]), media_type=ctype or asset["content_type"], headers={"Cache-Control": "private, max-age=3600"})
+
+    @router.put("/enrolments/{enrolment_id}/forms/{tp_key}/image/{slot}/measure")
+    async def measure_image(enrolment_id: str, tp_key: str, slot: str, body: dict, user: dict = Depends(get_current_user)):
+        """Body: {calibration:{p1:[x,y],p2:[x,y],reference_length_mm}, measurements:{var_key:{p1,p2}}}
+        Points are in natural image pixels. Value = px distance / px_per_mm (BR-22: calibration required)."""
+        _deny_nurse(user)
+        st, e, form = await _load_form_ctx(enrolment_id, tp_key, user)
+        _require(st, user, DATA_ROLES, "Not allowed to measure images for this study.")
+        if form.get("locked_at"):
+            raise HTTPException(status_code=400, detail="Form is locked.")
+        asset = (form.get("images") or {}).get(slot)
+        if not asset:
+            raise HTTPException(status_code=404, detail="Upload the radiograph first")
+        cal = body.get("calibration") or asset.get("calibration")
+        if not cal or not cal.get("p1") or not cal.get("p2") or not R._num(cal.get("reference_length_mm")):
+            raise HTTPException(status_code=400, detail="Calibrate first: mark implant shoulder → apex and enter the known implant length (BR-22).")
+        px = math.dist(cal["p1"], cal["p2"])
+        if px < 5:
+            raise HTTPException(status_code=400, detail="Calibration points are too close together")
+        px_per_mm = px / float(cal["reference_length_mm"])
+        asset["calibration"] = {"p1": cal["p1"], "p2": cal["p2"], "reference_length_mm": float(cal["reference_length_mm"]), "px_per_mm": round(px_per_mm, 4),
+                                "method": "known_implant_length", "calibrated_by": user.get("name", ""), "at": R.now_iso()}
+        asset["quality_grade"] = "B"
+        vars_by_key = {v["key"]: v for v in st.get("variables", [])}
+        tp = next(t for t in st["timepoints"] if t["key"] == tp_key)
+        for key, m in (body.get("measurements") or {}).items():
+            var = vars_by_key.get(key)
+            if not var or var["source"] != "study" or key not in tp["variables"] or not m or not m.get("p1") or not m.get("p2"):
+                continue
+            mm = math.dist(m["p1"], m["p2"]) / px_per_mm
+            if m.get("signed_negative"):
+                mm = -mm
+            val = round(mm, var.get("decimals") if var.get("decimals") is not None else 2)
+            asset.setdefault("measurements", {})[key] = {"p1": m["p1"], "p2": m["p2"], "value_mm": val, "method": "manual",
+                                                         "examiner": user.get("name", ""), "at": R.now_iso()}
+            form.setdefault("values", {})[key] = val
+            form.setdefault("not_done", {}).pop(key, None)
+        form["images"][slot] = asset
+        return await _persist_form(st, e, form, user, "image_measured", slot)
+
+    # ------------------------------------------------------------ data queries (S17)
+    @router.get("/studies/{study_id}/queries")
+    async def list_queries(study_id: str, status: Optional[str] = None, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        await _get_study(study_id, user)
+        q: dict = {"study_id": study_id}
+        if status:
+            q["status"] = status
+        out = [ _pub(d) async for d in db.research_queries.find(q).sort("updated_at", -1)]
+        return out
+
+    @router.get("/enrolments/{enrolment_id}/queries")
+    async def enrolment_queries(enrolment_id: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        e = await db.research_enrolments.find_one({"_id": _oid(enrolment_id)}, {"study_id": 1})
+        if not e:
+            raise HTTPException(status_code=404, detail="Enrolment not found")
+        await _get_study(e["study_id"], user)
+        return [_pub(d) async for d in db.research_queries.find({"enrolment_id": enrolment_id}).sort("updated_at", -1)]
+
+    @router.post("/enrolments/{enrolment_id}/queries")
+    async def raise_query(enrolment_id: str, body: dict, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        e = await db.research_enrolments.find_one({"_id": _oid(enrolment_id)})
+        if not e:
+            raise HTTPException(status_code=404, detail="Enrolment not found")
+        st = await _get_study(e["study_id"], user)
+        _require(st, user, ("pi", "guide", "statistician"), "Only PI, guide or statistician can raise data queries.")
+        text = R._s(body.get("text"), 1000)
+        if not text:
+            raise HTTPException(status_code=400, detail="Query text is required")
+        now = R.now_iso()
+        doc = {"study_id": e["study_id"], "study_code": e.get("study_code"), "enrolment_id": enrolment_id, "subject_code": e["subject_code"],
+               "timepoint_key": R._s(body.get("timepoint_key"), 40), "variable_key": R._s(body.get("variable_key"), 40),
+               "value_at_raise": body.get("value_at_raise"), "status": "open",
+               "raised_by_id": user["_id"], "raised_by": user.get("name", ""), "raised_role": user.get("role", ""),
+               "thread": [{"by_id": user["_id"], "by": user.get("name", ""), "text": text, "at": now, "kind": "raise"}],
+               "created_at": now, "updated_at": now}
+        res = await db.research_queries.insert_one(doc)
+        collectors = [m["user_id"] for m in st.get("members", []) if m["role"] in ("data_collector", "co_investigator", "pi") and m["user_id"] != user["_id"]]
+        if e.get("enrolled_by_id") and e["enrolled_by_id"] != user["_id"]:
+            collectors.append(e["enrolled_by_id"])
+        for uid in set(collectors):
+            await db.notifications.insert_one({"user_id": uid, "message": f"Data query on {e['subject_code']} ({doc['variable_key'] or doc['timepoint_key']}): {text[:80]}",
+                                               "type": "research_query", "read": False, "created_at": datetime.now(timezone.utc),
+                                               "research_enrolment_id": enrolment_id, "research_query_id": str(res.inserted_id)})
+        upd: dict = {"$set": {"updated_at": now}}
+        _audit(upd, user, "query_raised", f"{e['subject_code']} / {doc['variable_key']}")
+        await db.research_studies.update_one({"_id": st["_id"]}, upd)
+        doc["_id"] = res.inserted_id
+        return _pub(doc)
+
+    @router.post("/queries/{query_id}/reply")
+    async def reply_query(query_id: str, body: dict, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        q = await db.research_queries.find_one({"_id": _oid(query_id)})
+        if not q:
+            raise HTTPException(status_code=404, detail="Query not found")
+        st = await _get_study(q["study_id"], user)
+        text = R._s(body.get("text"), 1000)
+        action = body.get("action", "reply")  # reply | answer | close | reopen
+        if action in ("reply", "answer") and not text:
+            raise HTTPException(status_code=400, detail="Message is required")
+        if q["status"] == "closed" and action != "reopen":
+            raise HTTPException(status_code=400, detail="Query is closed")
+        roles = _member_roles(st, user)
+        now = R.now_iso()
+        setv: dict = {"updated_at": now}
+        entry = {"by_id": user["_id"], "by": user.get("name", ""), "text": text, "at": now, "kind": action}
+        if action == "close":
+            if not (roles & {"pi", "admin"}) and q["raised_by_id"] != user["_id"]:
+                raise HTTPException(status_code=403, detail="Only the raiser or PI can close a query.")
+            setv.update({"status": "closed", "closed_by": user.get("name", ""), "closed_at": now})
+        elif action == "reopen":
+            if not (roles & {"pi", "admin", "guide", "statistician"}):
+                raise HTTPException(status_code=403, detail="Only PI/guide/statistician can reopen.")
+            setv["status"] = "open"
+        elif action == "answer":
+            setv["status"] = "answered"
+        await db.research_queries.update_one({"_id": q["_id"]}, {"$set": setv, "$push": {"thread": entry}})
+        targets = {q["raised_by_id"]} | {t["by_id"] for t in q.get("thread", [])}
+        for uid in targets - {user["_id"]}:
+            await db.notifications.insert_one({"user_id": uid, "message": f"Query on {q['subject_code']} {action}: {text[:80] if text else ''}".strip(),
+                                               "type": "research_query", "read": False, "created_at": datetime.now(timezone.utc),
+                                               "research_enrolment_id": q["enrolment_id"], "research_query_id": query_id})
+        upd: dict = {"$set": {"updated_at": now}}
+        _audit(upd, user, f"query_{action}", q["subject_code"])
+        await db.research_studies.update_one({"_id": st["_id"]}, upd)
+        return _pub(await db.research_queries.find_one({"_id": q["_id"]}))
+
+    # ------------------------------------------------------------ synopsis (S19/S20, D3 — per-study editable sections)
+    @router.put("/studies/{study_id}/synopsis")
+    async def save_synopsis(study_id: str, body: dict, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        _require(st, user, ("pi", "guide", "co_investigator"), "Not allowed to edit the synopsis.")
+        syn = R.sanitize_synopsis(body)
+        update = {"$set": {"synopsis": syn, "updated_at": R.now_iso()}}
+        _audit(update, user, "synopsis_updated")
+        await db.research_studies.update_one({"_id": st["_id"]}, update)
+        return syn
+
+    @router.get("/studies/{study_id}/synopsis.{fmt}")
+    async def synopsis_export(study_id: str, fmt: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        if fmt not in ("docx", "pdf"):
+            raise HTTPException(status_code=400, detail="fmt must be docx or pdf")
+        dash = await dashboard(study_id, None, user)
+        data = R.build_synopsis_docx(st, dash) if fmt == "docx" else R.build_synopsis_pdf(st, dash)
+        upd: dict = {"$set": {"updated_at": R.now_iso()}}
+        _audit(upd, user, "synopsis_exported", fmt)
+        await db.research_studies.update_one({"_id": st["_id"]}, upd)
+        media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if fmt == "docx" else "application/pdf"
+        return StreamingResponse(iter([data]), media_type=media,
+                                 headers={"Content-Disposition": f'attachment; filename="{st["code"]}_synopsis.{fmt}"'})
 
     @router.get("/my-tasks")
     async def my_tasks(user: dict = Depends(get_current_user)):

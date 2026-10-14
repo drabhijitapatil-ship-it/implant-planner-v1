@@ -125,3 +125,38 @@ def test_non_member_forbidden(student, study):
     assert r.status_code == 403
     r = requests.get(f"{BASE}/research/studies", headers=student)
     assert r.status_code == 200
+
+
+def test_phase1_fields_queries_images_synopsis(admin, study):
+    """iter-445: new registry fields, data queries, radiograph upload + calibrated measurement, synopsis export."""
+    import io
+    from PIL import Image
+    sid = study["id"]
+    reg = {f["path"] for f in requests.get(f"{BASE}/research/registry", headers=admin).json()["fields"]}
+    assert {"patient.medical.hba1c_pct", "patient.medical.cigarettes_per_day", "patient.medical.bisphosphonate_history", "site.socket_type"} <= reg
+    eid = requests.get(f"{BASE}/research/studies/{sid}/enrolments", headers=admin).json()[0]["id"]
+    # image upload + measure
+    img = Image.new("RGB", (800, 600), "gray"); b = io.BytesIO(); img.save(b, "JPEG")
+    r = requests.post(f"{BASE}/research/enrolments/{eid}/forms/m6/image", files={"file": ("iopa.jpg", b.getvalue(), "image/jpeg")}, data={"slot": "iopa"}, headers=admin)
+    assert r.status_code == 200, r.text
+    r = requests.put(f"{BASE}/research/enrolments/{eid}/forms/m6/image/iopa/measure", json={"measurements": {"bl_mesial": {"p1": [0, 0], "p2": [0, 100]}}}, headers=admin)
+    assert r.status_code == 400  # calibration required (BR-22)
+    r = requests.put(f"{BASE}/research/enrolments/{eid}/forms/m6/image/iopa/measure",
+                     json={"calibration": {"p1": [100, 100], "p2": [100, 330], "reference_length_mm": 11.5}, "measurements": {"bl_mesial": {"p1": [0, 0], "p2": [0, 40]}}}, headers=admin)
+    assert r.status_code == 200, r.text
+    f = next(x for x in r.json()["forms"] if x["timepoint_key"] == "m6")
+    assert f["values"]["bl_mesial"] == 2.0 and f["images"]["iopa"]["quality_grade"] == "B"
+    tok = admin["Authorization"].split()[1]
+    assert requests.get(f"{BASE}/research/images/{eid}/m6/iopa?token={tok}").status_code == 200
+    assert requests.get(f"{BASE}/research/images/{eid}/m6/iopa?token=bad").status_code == 401
+    # data query lifecycle
+    r = requests.post(f"{BASE}/research/enrolments/{eid}/queries", json={"text": "check", "timepoint_key": "m6", "variable_key": "bl_mesial", "value_at_raise": 2.0}, headers=admin)
+    assert r.status_code == 200 and r.json()["status"] == "open"
+    qid = r.json()["id"]
+    assert requests.post(f"{BASE}/research/queries/{qid}/reply", json={"action": "answer", "text": "fixed"}, headers=admin).json()["status"] == "answered"
+    assert requests.post(f"{BASE}/research/queries/{qid}/reply", json={"action": "close"}, headers=admin).json()["status"] == "closed"
+    assert len(requests.get(f"{BASE}/research/studies/{sid}/queries?status=closed", headers=admin).json()) >= 1
+    # synopsis
+    assert requests.put(f"{BASE}/research/studies/{sid}/synopsis", json={"university_name": "MUHS", "introduction": "Intro"}, headers=admin).status_code == 200
+    r = requests.get(f"{BASE}/research/studies/{sid}/synopsis.docx", headers=admin); assert r.status_code == 200 and r.content[:2] == b"PK"
+    r = requests.get(f"{BASE}/research/studies/{sid}/synopsis.pdf", headers=admin); assert r.status_code == 200 and r.content[:4] == b"%PDF"

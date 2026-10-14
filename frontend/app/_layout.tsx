@@ -85,6 +85,8 @@ export default function RootLayout() {
               <Stack.Screen name="research/[id]/team" options={{ headerShown: false }} />
               <Stack.Screen name="research/[id]/screening" options={{ headerShown: false }} />
               <Stack.Screen name="research/[id]/results" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/queries" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/synopsis" options={{ headerShown: false }} />
               <Stack.Screen name="research/enrolment/[eid]" options={{ headerShown: false }} />
             </Stack>
             <AttachPickerModalRoot />
