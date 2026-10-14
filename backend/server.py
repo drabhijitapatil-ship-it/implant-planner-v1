@@ -25098,6 +25098,11 @@ setup_lab_files(
     get_current_user=get_current_user, get_current_user_optional=get_current_user_optional,
     log_access=log_access, secret_key=SECRET_KEY, uploads_dir=UPLOADS_DIR, decode_query_token=_decode_query_token,
 )
+# Research Module (studies / enrolment / data capture / export) — lives in
+# research.py (engines) + research_routes.py (endpoints), mounted under /api/research.
+import research_routes as _research_routes
+api_router.include_router(_research_routes.build_router(db, get_current_user))
+
 app.include_router(api_router)
 
 app.add_middleware(

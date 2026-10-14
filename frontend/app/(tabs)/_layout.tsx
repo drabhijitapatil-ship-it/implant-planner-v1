@@ -103,6 +103,13 @@ function DrawerMenu({
       key: 'profile', icon: 'person-circle' as const, label: 'My Profile', route: '/profile',
       bg: '#E0F7FA', chip: '#B2EBF2', iconColor: '#00838F',
     },
+    // Research Module tile — all clinical roles except nurse; sits before Archived.
+    ...(isNurse
+      ? []
+      : [{
+          key: 'research', icon: 'flask' as const, label: 'Research', route: '/research',
+          bg: '#F3E5F5', chip: '#E1BEE7', iconColor: '#6A1B9A',
+        }]),
     ...(isNurse
       ? []
       : [{

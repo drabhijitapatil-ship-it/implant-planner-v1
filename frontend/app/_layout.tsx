@@ -75,6 +75,17 @@ export default function RootLayout() {
               <Stack.Screen name="forum/chat/index" options={{ headerShown: false }} />
               <Stack.Screen name="forum/chat/create" options={{ headerShown: false }} />
               <Stack.Screen name="forum/chat/[groupId]" options={{ headerShown: false }} />
+              <Stack.Screen name="research/index" options={{ headerShown: false }} />
+              <Stack.Screen name="research/new" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/index" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/eligibility" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/variables" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/schedule" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/ethics" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/team" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/screening" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/results" options={{ headerShown: false }} />
+              <Stack.Screen name="research/enrolment/[eid]" options={{ headerShown: false }} />
             </Stack>
             <AttachPickerModalRoot />
           </ActivityTracker>

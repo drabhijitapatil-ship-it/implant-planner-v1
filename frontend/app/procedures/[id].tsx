@@ -20,6 +20,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import RiskPill from '../../components/RiskPill';
 import CaseRiskPills from '../../components/CaseRiskPills';
+import CaseResearchCard from '../../components/CaseResearchCard';
 import PrescriptionEditor from '../../components/PrescriptionEditor';
 import EraGuidance from '../../components/EraGuidance';
 import { computeEra, isAnteriorMaxillaCase, ERA_FACTORS, RISK_COLORS } from '../../utils/aestheticRisk';
@@ -998,6 +999,9 @@ export default function ProcedureDetailScreen() {
 
         {/* iter-Jun-2026: prominent Aesthetic Risk / Medical Risk banner at case top */}
         <CaseRiskPills procedure={procedure} variant="banner" prefix="case-detail" />
+
+        {/* Research Module: studies this case is in / eligible for (S12) */}
+        <CaseResearchCard procedureId={String(id)} role={user?.role} />
 
         {/* ── Treatment Complete + Case Summary + Digital Sign-Off (rendered above timeline on completion) ── */}
         {procedure.status === 'completed' && (

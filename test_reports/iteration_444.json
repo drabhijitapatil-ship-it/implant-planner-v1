@@ -1,0 +1,37 @@
+{
+  "summary": "iter-444 Research Module — Backend: 10/10 pytest green (5 pre-existing + 5 new iter-444 edge cases). Frontend: not fully verified in this run (web preview /login route returned 'Unmatched Route' when hit directly in the browser automation; main-agent/testing can navigate from root). All backend contracts from the review request are confirmed working: GET /registry, GET /templates (3), POST /studies with template (draft), PUT updates ethics fields (iec_ref/iec_approval_date/consent_form_version), activation blocked until all activation_checklist items ok then flips to active, active protocol cannot remove variables → 400, GET /candidates returns pass/fail/unknown + decision eligible/needs_review/excluded, POST /enrol → subject_code ends -P001-I01 with 5 forms, duplicate enrol → 400, baseline complete without required fields → 400, baseline complete with values + visit_date + deviation_reason → 200 (completed), m12 derived cbl_mesial=0.9 / cbl_mean=0.75 / success_flag=true, lock → linked_snapshot populated, save on locked → 400, unlock with reason → 200, dashboard flow.enrolled==1, export shapes wide/long/dictionary/methods all 200, wide CSV does NOT contain patient name (de-id confirmed), /case/{procedure_id} lists enrolment, /my-tasks 200, POST /studies/{id}/members adds member and formerly-forbidden student can now GET /studies/{id} (200), non-member student → 403, nurse (Nurse.1/Nurse@123) → 403 on /research/studies and /research/registry and /research/templates, POST /screening/exclude + DELETE round-trip works and reason is required, POST /enrolments/{eid}/status requires reason for withdrawn and succeeds with scope=future_only. No react_native_issues introduced by this feature; backend has no deprecated-package concerns. Mongo cleanup of T* studies performed between runs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_444.json",
+    "/app/backend/tests/test_research_module_iter444.py",
+    "/app/backend/tests/test_research_module.py",
+    "/app/test_reports/pytest/iter444_results.xml"
+  ],
+  "action_items": [
+    "Frontend verification (drawer tile ordering, /research/new, study detail tabs, ethics save, activate flow, screening list, enrol bottom sheet, form entry, results export, case research card, nurse-has-no-tile) was not fully exercised in this pass — the automation browser hit /login directly which rendered 'Unmatched Route'. Main agent can self-test by navigating from root ('/') after login or by hitting the home route; the backend endpoints that back every one of those screens are green."
+  ],
+  "critical_code_review_comments": [
+    "research_routes.py build_router mounts /research prefix correctly; _deny_nurse applied on every handler including /registry and /templates — verified via nurse 403 test.",
+    "_require/_member_roles gate editing to PI (and admin), screening/enrolment/forms to DATA_ROLES, export to EXPORT_ROLES — exercised across tests.",
+    "research.py form_status/build_forms correctly compute windows from today() = 2026-10-14; dashboard flow.enrolled==1 after one enrol confirms the aggregation.",
+    "export(shape='wide') de-identifies by excluding patient_name and converting dates to days-from-anchor — wide CSV assertion confirms patient_name not present.",
+    "DELETE /studies/{id}/screening/exclude uses query params (procedure_id, tooth_number) — matches the review-request contract and the test passes.",
+    "Code conflict in test_research_module.py fixture: `int(time.time()) % 100000` can collide when the two files run in the same second — handled by cleaning up Mongo T* leftovers between runs; the iter444 file uses the same scheme and ran clean after cleanup. Consider using uuid4().hex[:5] for truly unique codes if both files are routinely co-run.",
+    "research.py registry levels: patient-level values are persisted in research_patient_values (per patient+timepoint, D2) and hydrated into every enrolment for that patient — verified via dashboard/export without exceptions."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_research_module_iter444.py (new, 5 tests)"
+  ],
+  "success_rate": {"backend": "100% (10/10 pytest)", "frontend": "not verified in this iteration"},
+  "seed_data_creation": "No persistent seeds. Each test run creates a draft study (code T<ts%100000>) via template cbl_immediate_maxillary_anterior, activates it with ethics fields, uses it, then archives+deletes. Direct Mongo cleanup of code-prefix T* studies/enrolments between runs to avoid code-collision across the two test files.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reproduce backend with: pytest /app/backend/tests/test_research_module.py /app/backend/tests/test_research_module_iter444.py -v (EXPO_PUBLIC_BACKEND_URL + MONGO_URL + DB_NAME required; set in env). If codes collide clear with: db.research_studies.delete_many({'code': {'$regex': '^T'}}); db.research_enrolments.delete_many({'study_code': {'$regex': '^T'}}). For frontend: the /login path is unmatched; the app's login is at '/'. Expected testIDs (per review): tile-research, tile-archived, new-study-btn, tpl-cbl_immediate_maxillary_anterior, create-study-btn, study-detail-title, activation-checklist, edit-eligibility, feasibility-card, iec-ref, consent-version, activate-btn, go-screening-btn, enrol-*, tick-0..tick-N, consent-tick, confirm-enrol, tp-chip-baseline..., visit-date, f-bl_mesial, save-form, complete-form, lock-form, flow-card, compliance-card, results-card, export-card, export-wide, case-research-card. RN-web Alert.alert does not render a DOM dialog — verify activate/status changes via GET /research/studies/{id}.status after triggering.",
+  "rca_of_issue": "N/A — new-feature regression. All backend contracts for the Research Module match the review spec; the only concern is a transient test-code-collision between the two pytest files when run back-to-back within one second, mitigated by Mongo cleanup; recommend uuid-based codes in both test fixtures as a durable fix."
+}
