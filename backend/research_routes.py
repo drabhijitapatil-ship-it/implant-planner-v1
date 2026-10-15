@@ -53,6 +53,8 @@ def build_router(db, get_current_user, user_from_token=None):
         roles = {m["role"] for m in study.get("members", []) if m.get("user_id") == user["_id"]}
         if study.get("pi_user_id") == user["_id"]:
             roles.add("pi")
+        if not roles and user["_id"] in (study.get("case_collaborators") or []):
+            roles.add("case_collaborator")  # treating clinician of an included case: data entry for that case only
         if not roles and user.get("role") in FACULTY_ADMIN:
             roles.add("observer")  # Admin / Implant In-charge oversight: read-only until added to the team
         return roles
@@ -60,18 +62,36 @@ def build_router(db, get_current_user, user_from_token=None):
     def _can_view(study, user):
         return bool(_member_roles(study, user))
 
+    def _treats_case(proc: dict, user: dict) -> bool:
+        """The user is personally involved in treating this case (not merely able to open it by rank)."""
+        return user["_id"] in {proc.get("student_id"), proc.get("supervisor_id"), proc.get("created_by_id"), proc.get("assistant_id")} \
+            or user["_id"] in (proc.get("previous_students") or [])
+
+    def _is_case_collaborator(e: dict, user: dict) -> bool:
+        return any(c.get("user_id") == user["_id"] for c in e.get("collaborators") or [])
+
+    def _require_case_access(st: dict, e: dict, user: dict, msg: str) -> set[str]:
+        """Study DATA_ROLES, or a treating clinician who accepted inclusion of this specific case."""
+        roles = _member_roles(st, user)
+        if roles & set(DATA_ROLES) or _is_case_collaborator(e, user):
+            return roles
+        raise HTTPException(status_code=403, detail=msg)
+
     def _require(study, user, allowed: tuple, msg: str):
         roles = _member_roles(study, user)
         if roles & set(allowed):
             return roles
         raise HTTPException(status_code=403, detail=msg)
 
-    async def _get_study(study_id: str, user: dict) -> dict:
+    async def _get_study(study_id: str, user: dict, allow_collaborator: bool = False) -> dict:
         st = await db.research_studies.find_one({"_id": _oid(study_id)})
         if not st:
             raise HTTPException(status_code=404, detail="Study not found")
-        if not _can_view(st, user):
+        roles = _member_roles(st, user)
+        if not roles:
             raise HTTPException(status_code=403, detail="You are not a member of this study.")
+        if roles == {"case_collaborator"} and not allow_collaborator:
+            raise HTTPException(status_code=403, detail="You contribute cases to this study but are not a team member — only your own cases are accessible.")
         return st
 
     def _case_scope(user: dict) -> dict:
@@ -171,6 +191,10 @@ def build_router(db, get_current_user, user_from_token=None):
             out["is_dissertation"] = bool(body["is_dissertation"])
         if "reminders" in body:
             out["reminders"] = sanitize_reminders(body["reminders"])
+        if "recruitment_scope" in body:
+            out["recruitment_scope"] = "department" if body["recruitment_scope"] == "department" else "team"
+        if "iec_multi_operator_declared" in body:
+            out["iec_multi_operator_declared"] = bool(body["iec_multi_operator_declared"])
         for k in ("eligibility", "variables", "timepoints"):
             if k in body and isinstance(body[k], list):
                 fn = {"eligibility": R.sanitize_rule, "variables": R.sanitize_variable, "timepoints": R.sanitize_timepoint}[k]
@@ -210,7 +234,7 @@ def build_router(db, get_current_user, user_from_token=None):
     @router.get("/studies")
     async def list_studies(user: dict = Depends(get_current_user)):
         _deny_nurse(user)
-        q: dict = {} if user["role"] in FACULTY_ADMIN else {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}]}
+        q: dict = {} if user["role"] in FACULTY_ADMIN else {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}, {"case_collaborators": user["_id"]}]}
         studies = [s async for s in db.research_studies.find(q).sort("updated_at", -1)]
         counts = await _form_counts([s["_id"] for s in studies])
         return [_study_summary(s, counts.get(str(s["_id"]), {}), user) for s in studies]
@@ -256,7 +280,7 @@ def build_router(db, get_current_user, user_from_token=None):
     @router.get("/studies/{study_id}")
     async def get_study(study_id: str, user: dict = Depends(get_current_user)):
         _deny_nurse(user)
-        st = await _get_study(study_id, user)
+        st = await _get_study(study_id, user, allow_collaborator=True)
         st["my_roles"] = sorted(_member_roles(st, user))
         st["needs_guide_approval"] = R.needs_guide_approval(st)
         st["can_view_iec_letter"] = _can_see_iec_letter(st, user)
@@ -520,18 +544,33 @@ def build_router(db, get_current_user, user_from_token=None):
 
     # ------------------------------------------------------------ screening / feasibility
     async def _candidates(st: dict, user: dict, limit: int, skip: int, search: str) -> dict:
-        q = {**_case_scope(user), "archived": {"$ne": True}, "status": {"$ne": "draft"}}
+        department = st.get("recruitment_scope") == "department" and st.get("status") in ("active", "recruitment_closed", "draft")
+        scope = _case_scope(user)
+        q: dict = {"archived": {"$ne": True}, "status": {"$ne": "draft"}}
+        if not department:
+            q.update(scope)
         if search:
-            q["patient_name"] = {"$regex": search, "$options": "i"}
+            rx = {"$regex": search, "$options": "i"}
+            # patient names only match on cases the user can open; otherwise match the treating clinician
+            q["$and"] = [{"$or": [{"$and": [scope, {"patient_name": rx}]} if scope else {"patient_name": rx},
+                                  {"student_name": rx}, {"supervisor_name": rx}]}]
+        accessible_ids: set = set()
+        if department:
+            accessible_ids = {str(p["_id"]) async for p in db.procedures.find({**scope, "archived": {"$ne": True}}, {"_id": 1})} if scope else set()
+        requests_by_key = {(r["procedure_id"], r["tooth_number"]): r async for r in db.research_inclusion_requests.find(
+            {"study_id": str(st["_id"]), "status": {"$in": ["pending", "declined"]}})}
         enrolled = {(e["procedure_id"], e["tooth_number"]) async for e in db.research_enrolments.find({"study_id": str(st["_id"])}, {"procedure_id": 1, "tooth_number": 1})}
         excluded = {(e["procedure_id"], e["tooth_number"]): e async for e in db.research_screening.find({"study_id": str(st["_id"])})}
         other_studies: dict = {}
         async for e in db.research_enrolments.find({"study_id": {"$ne": str(st["_id"])}, "status": {"$in": ["enrolled", "active"]}}, {"procedure_id": 1, "tooth_number": 1, "study_code": 1}):
             other_studies.setdefault((e["procedure_id"], e["tooth_number"]), []).append(e.get("study_code"))
         rows, summary = [], {"eligible": 0, "needs_review": 0, "excluded": 0, "enrolled": 0, "manually_excluded": 0, "cases_scanned": 0}
+        summary["department_wide"] = department
         async for p in db.procedures.find(q).sort("procedure_date", -1):
             summary["cases_scanned"] += 1
             pid = str(p["_id"])
+            accessible = (not department) or (not scope) or pid in accessible_ids
+            direct = (not department) or _treats_case(p, user)
             for site in R.case_sites(p):
                 key = (pid, site["tooth_number"])
                 if key in enrolled:
@@ -544,14 +583,19 @@ def build_router(db, get_current_user, user_from_token=None):
                 else:
                     summary[ev["overall"]] += 1
                     decision = ev["overall"]
+                req = requests_by_key.get(key)
                 rows.append({
-                    "procedure_id": pid, "patient_name": p.get("patient_name", ""), "age": p.get("age"), "sex": p.get("sex"),
+                    "procedure_id": pid, "patient_name": p.get("patient_name", "") if accessible else None, "age": p.get("age"), "sex": p.get("sex"),
                     "procedure_type": p.get("implant_procedure_type", ""), "case_status": p.get("status"),
                     "tooth_number": site["tooth_number"], "planned_only": site["planned"],
                     "implant": {k: site["implant"].get(k) for k in ("brand", "system", "diameter", "length", "insertion_torque_ncm", "placement_date")},
                     "eligibility": ev, "decision": decision,
                     "exclusion_reason": (excluded.get(key) or {}).get("reason"),
                     "other_studies": other_studies.get(key, []),
+                    "accessible": accessible, "can_enrol_directly": direct,
+                    "treating": {"student_name": p.get("student_name"), "supervisor_name": p.get("supervisor_name"), "procedure_date": str(p.get("procedure_date") or "")[:10]},
+                    "inclusion_request": {"id": str(req["_id"]), "status": req["status"], "direction": req["direction"], "decision_reason": req.get("decision_reason"),
+                                          "requested_at": req["created_at"]} if req else None,
                 })
         order = {"eligible": 0, "needs_review": 1, "excluded": 2}
         rows.sort(key=lambda r: order.get(r["decision"], 3))
@@ -613,13 +657,14 @@ def build_router(db, get_current_user, user_from_token=None):
             raise HTTPException(status_code=400, detail="Study must be active to enrol cases.")
         pid, tooth = str(body.get("procedure_id") or ""), str(body.get("tooth_number") or "")
         proc = await db.procedures.find_one({"_id": _oid(pid), **_case_scope(user)})
+        if st.get("recruitment_scope") == "department":
+            full = proc or await db.procedures.find_one({"_id": _oid(pid)})
+            if full and not _treats_case(full, user):
+                raise HTTPException(status_code=403, detail="This case is treated by another clinician — send an inclusion request; they enrol it once they confirm the patient's consent.")
         if not proc:
             raise HTTPException(status_code=404, detail="Case not found or not accessible to you.")
-        site = next((s for s in R.case_sites(proc) if s["tooth_number"] == tooth), None)
-        if not site:
-            raise HTTPException(status_code=400, detail="That tooth/site is not part of this case.")
-        if await db.research_enrolments.find_one({"study_id": study_id, "procedure_id": pid, "tooth_number": tooth}):
-            raise HTTPException(status_code=400, detail="This implant/site is already enrolled in the study.")
+        site = _site_or_400(proc, tooth)
+        await _assert_not_enrolled(study_id, pid, tooth)
         ev = R.evaluate_eligibility(st, proc, site["implant"])
         override = R._s(body.get("override_reason"), 400)
         if ev["overall"] != "eligible":
@@ -627,6 +672,23 @@ def build_router(db, get_current_user, user_from_token=None):
                 raise HTTPException(status_code=400, detail=f"Case is '{ev['overall'].replace('_', ' ')}' — only the PI can override eligibility.")
             if not override:
                 raise HTTPException(status_code=400, detail="Eligibility is not fully met — an override reason is required.")
+        return await _do_enrol(st, proc, site, user, body, ev, override)
+
+    def _site_or_400(proc: dict, tooth: str) -> dict:
+        site = next((s for s in R.case_sites(proc) if s["tooth_number"] == tooth), None)
+        if not site:
+            raise HTTPException(status_code=400, detail="That tooth/site is not part of this case.")
+        return site
+
+    async def _assert_not_enrolled(study_id: str, pid: str, tooth: str):
+        if await db.research_enrolments.find_one({"study_id": study_id, "procedure_id": pid, "tooth_number": tooth}):
+            raise HTTPException(status_code=400, detail="This implant/site is already enrolled in the study.")
+
+    async def _do_enrol(st: dict, proc: dict, site: dict, user: dict, body: dict, ev: dict, override: str,
+                        consent_by: Optional[dict] = None, collaborators: Optional[list] = None, request_id: Optional[str] = None) -> dict:
+        """Shared enrolment: checklist + consent validation, subject codes, forms, audit.
+        `consent_by` = the clinician who confirmed consent (defaults to the acting user)."""
+        study_id, pid, tooth = str(st["_id"]), str(proc["_id"]), site["tooth_number"]
         checklist = [r for r in st.get("eligibility", []) if r["mode"] == "checklist"]
         ticked = body.get("checklist_ticked") or []
         if len(checklist) and len([x for x in ticked if x]) < len(checklist):
@@ -636,6 +698,7 @@ def build_router(db, get_current_user, user_from_token=None):
         now = R.now_iso()
         pcode, scode = await _next_codes(st, pid)
         forms = R.build_forms(st, proc, site["implant"], now)
+        consent_by = consent_by or user
         doc = {
             "study_id": study_id, "study_code": st["code"], "procedure_id": pid, "tooth_number": tooth,
             "implant_index": site["index"], "patient_subject_code": pcode, "subject_code": scode,
@@ -643,14 +706,17 @@ def build_router(db, get_current_user, user_from_token=None):
             "eligibility_at_enrolment": ev, "override_reason": override,
             "checklist": [{"text": c["checklist_text"], "kind": c["kind"]} for c in checklist],
             "consent": {"confirmed": True, "form_version": st.get("consent_form_version"), "method": body.get("consent_method", "paper"),
-                        "language": R._s(body.get("consent_language"), 30), "confirmed_by": user.get("name", ""), "at": now},
+                        "language": R._s(body.get("consent_language"), 30), "confirmed_by": consent_by.get("name", ""), "confirmed_by_id": consent_by["_id"], "at": now},
             "enrolled_by_id": user["_id"], "enrolled_by": user.get("name", ""), "enrolled_at": now, "updated_at": now,
+            "collaborators": collaborators or [], "inclusion_request_id": request_id,
             "forms": forms,
         }
         res = await db.research_enrolments.insert_one(doc)
         await db.research_screening.delete_one({"study_id": study_id, "procedure_id": pid, "tooth_number": tooth})
         upd: dict = {"$set": {"updated_at": now}}
-        _audit(upd, user, "enrolled", scode, override)
+        if collaborators:
+            upd["$addToSet"] = {"case_collaborators": {"$each": [c["user_id"] for c in collaborators]}}
+        _audit(upd, user, "enrolled", scode + (" (via inclusion request — " + ", ".join(c["name"] for c in collaborators) + " as case collaborator)" if collaborators else ""), override)
         await db.research_studies.update_one({"_id": st["_id"]}, upd)
         # BR-12 heads-up: same site in other active studies
         others = [e.get("study_code") async for e in db.research_enrolments.find(
@@ -659,6 +725,217 @@ def build_router(db, get_current_user, user_from_token=None):
         out = _pub(doc)
         out["also_in_studies"] = others
         return out
+
+    # ------------------------------------------------------------ inclusion requests (multi-operator recruitment)
+    def _treating_ids(proc: dict) -> list[dict]:
+        out = []
+        for id_key, name_key, label in (("student_id", "student_name", "treating student"), ("supervisor_id", "supervisor_name", "supervisor")):
+            if proc.get(id_key):
+                out.append({"user_id": proc[id_key], "name": proc.get(name_key) or "", "label": label})
+        return out
+
+    def _pub_req(r: dict) -> dict:
+        r = dict(r); r["id"] = str(r.pop("_id")); return r
+
+    async def _create_request(st: dict, proc: dict, tooth: str, user: dict, direction: str, body: dict) -> dict:
+        study_id, pid = str(st["_id"]), str(proc["_id"])
+        if st.get("status") != "active":
+            raise HTTPException(status_code=400, detail="Study must be active to recruit cases.")
+        if st.get("recruitment_scope") != "department":
+            raise HTTPException(status_code=400, detail="This study recruits from the team's own cases only (PI can switch to department-wide recruitment under Ethics & consent).")
+        site = _site_or_400(proc, tooth)
+        await _assert_not_enrolled(study_id, pid, tooth)
+        if await db.research_inclusion_requests.find_one({"study_id": study_id, "procedure_id": pid, "tooth_number": tooth, "status": "pending"}):
+            raise HTTPException(status_code=400, detail="An inclusion request for this site is already pending.")
+        ev = R.evaluate_eligibility(st, proc, site["implant"])
+        override = R._s(body.get("override_reason"), 400)
+        if ev["overall"] == "excluded":
+            raise HTTPException(status_code=400, detail="This site fails an exclusion rule — it cannot be requested.")
+        if ev["overall"] != "eligible" and direction == "request":
+            if "pi" not in _member_roles(st, user):
+                raise HTTPException(status_code=400, detail="Case needs review — only the PI can request it with an override reason.")
+            if not override:
+                raise HTTPException(status_code=400, detail="Case needs review — an override reason is required.")
+        treating = _treating_ids(proc)
+        if direction == "request":
+            responders = [t["user_id"] for t in treating if t["user_id"] != user["_id"]]
+            if not responders:
+                raise HTTPException(status_code=400, detail="No treating clinician is recorded on this case.")
+        else:
+            responders = [st["pi_user_id"]] + [m["user_id"] for m in st.get("members", []) if m.get("role") == "co_investigator"]
+            if not body.get("consent_confirmed"):
+                raise HTTPException(status_code=400, detail="Confirm that the patient has consented to research participation before offering the case.")
+        now = R.now_iso()
+        doc = {
+            "study_id": study_id, "study_code": st["code"], "study_title": st["title"], "pi_name": st.get("pi_name"),
+            "procedure_id": pid, "tooth_number": tooth, "direction": direction, "status": "pending",
+            "eligibility": ev["overall"], "override_reason": override,
+            "implant": {k: site["implant"].get(k) for k in ("brand", "system", "diameter", "length", "placement_date")},
+            "treating": [{k: t[k] for k in ("user_id", "name", "label")} for t in treating],
+            "requested_by_id": user["_id"], "requested_by": user.get("name", ""), "requested_by_role": user.get("role", ""),
+            "message": R._s(body.get("message"), 500),
+            "offer_consent": {"confirmed": True, "method": body.get("consent_method", "paper"), "language": R._s(body.get("consent_language"), 30),
+                              "checklist_ticked": body.get("checklist_ticked") or []} if direction == "offer" else None,
+            "responders": responders, "created_at": now, "updated_at": now,
+        }
+        res = await db.research_inclusion_requests.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        upd: dict = {"$set": {"updated_at": now}}
+        _audit(upd, user, "inclusion_requested" if direction == "request" else "case_offered",
+               f"tooth {tooth} · {'→ ' + ', '.join(t['name'] for t in treating) if direction == 'request' else 'offered by treating clinician'}", override or doc["message"])
+        await db.research_studies.update_one({"_id": st["_id"]}, upd)
+        for uid in responders:
+            if uid != user["_id"]:
+                msg = (f"{user.get('name', '')} requests to include your patient's implant (tooth {tooth}) in research study {st['code']} — please accept or decline"
+                       if direction == "request" else f"{user.get('name', '')} offers a case (tooth {tooth}) to your study {st['code']} — review and accept")
+                await _notify_req(uid, msg, study_id, str(res.inserted_id))
+        return _pub_req(doc)
+
+    async def _notify_req(uid: str, message: str, study_id: str, request_id: str):
+        await db.notifications.insert_one({"user_id": uid, "message": message[:200], "type": "research_inclusion", "read": False,
+                                           "created_at": datetime.now(timezone.utc), "research_study_id": study_id, "inclusion_request_id": request_id})
+
+    @router.post("/studies/{study_id}/inclusion-requests")
+    async def create_inclusion_request(study_id: str, body: dict, user: dict = Depends(get_current_user)):
+        """Study team → treating clinician: ask to include a case the team cannot open."""
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        _require(st, user, DATA_ROLES, "Not allowed to recruit cases for this study.")
+        proc = await db.procedures.find_one({"_id": _oid(str(body.get("procedure_id") or "")), "archived": {"$ne": True}})
+        if not proc:
+            raise HTTPException(status_code=404, detail="Case not found")
+        return await _create_request(st, proc, str(body.get("tooth_number") or ""), user, "request", body)
+
+    @router.post("/offers")
+    async def offer_case(body: dict, user: dict = Depends(get_current_user)):
+        """Treating clinician → study team: offer one of my cases to a department-wide study."""
+        _deny_nurse(user)
+        proc = await db.procedures.find_one({"_id": _oid(str(body.get("procedure_id") or "")), **_case_scope(user)})
+        if not proc or not _treats_case(proc, user):
+            raise HTTPException(status_code=404, detail="Case not found or not treated by you.")
+        st = await db.research_studies.find_one({"_id": _oid(str(body.get("study_id") or ""))})
+        if not st:
+            raise HTTPException(status_code=404, detail="Study not found")
+        if _member_roles(st, user) & set(DATA_ROLES):
+            raise HTTPException(status_code=400, detail="You are on this study's team — enrol the case directly from Screen & enrol.")
+        return await _create_request(st, proc, str(body.get("tooth_number") or ""), user, "offer", body)
+
+    @router.get("/studies/{study_id}/inclusion-requests")
+    async def list_inclusion_requests(study_id: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        await _get_study(study_id, user)
+        return [_pub_req(r) async for r in db.research_inclusion_requests.find({"study_id": study_id}).sort("created_at", -1)]
+
+    @router.get("/inclusion-requests/mine")
+    async def my_inclusion_requests(user: dict = Depends(get_current_user)):
+        """Incoming = I must respond (treating clinician for requests, PI/co-investigator for offers). Outgoing = I created."""
+        _deny_nurse(user)
+        incoming = [_pub_req(r) async for r in db.research_inclusion_requests.find({"responders": user["_id"], "status": "pending"}).sort("created_at", -1)]
+        outgoing = [_pub_req(r) async for r in db.research_inclusion_requests.find({"requested_by_id": user["_id"]}).sort("created_at", -1).limit(50)]
+        # treating clinicians may see the patient; the study team sees the site only until accepted
+        for r in incoming + outgoing:
+            proc = await db.procedures.find_one({"_id": _oid(r["procedure_id"]), **_case_scope(user)}, {"patient_name": 1, "age": 1, "sex": 1})
+            r["patient_name"] = (proc or {}).get("patient_name")
+            r["case_accessible"] = bool(proc)
+        return {"incoming": incoming, "outgoing": outgoing}
+
+    @router.get("/inclusion-requests/{request_id}")
+    async def get_inclusion_request(request_id: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        r = await db.research_inclusion_requests.find_one({"_id": _oid(request_id)})
+        if not r:
+            raise HTTPException(status_code=404, detail="Request not found")
+        st = await db.research_studies.find_one({"_id": _oid(r["study_id"])})
+        if user["_id"] not in r["responders"] and r["requested_by_id"] != user["_id"] and not (_member_roles(st, user) - {"observer"}):
+            raise HTTPException(status_code=403, detail="Not your request")
+        out = _pub_req(r)
+        proc = await db.procedures.find_one({"_id": _oid(r["procedure_id"]), **_case_scope(user)}, {"patient_name": 1, "age": 1, "sex": 1})
+        out["patient_name"] = (proc or {}).get("patient_name"); out["case_accessible"] = bool(proc)
+        out["study"] = {"id": str(st["_id"]), "code": st["code"], "title": st["title"], "pi_name": st.get("pi_name"), "research_question": st.get("research_question"),
+                        "consent_form_version": st.get("consent_form_version"), "iec_ref": st.get("iec_ref"),
+                        "checklist": [{"text": c["checklist_text"], "kind": c["kind"]} for c in st.get("eligibility", []) if c["mode"] == "checklist"],
+                        "timepoints": [{"key": t["key"], "label": t["label"]} for t in st.get("timepoints", [])]}
+        out["can_respond"] = user["_id"] in r["responders"] and r["status"] == "pending"
+        out["can_cancel"] = r["requested_by_id"] == user["_id"] and r["status"] == "pending"
+        return out
+
+    @router.post("/inclusion-requests/{request_id}/respond")
+    async def respond_inclusion_request(request_id: str, body: dict, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        r = await db.research_inclusion_requests.find_one({"_id": _oid(request_id)})
+        if not r or r["status"] != "pending":
+            raise HTTPException(status_code=404, detail="Request not found or already decided")
+        if user["_id"] not in r["responders"]:
+            raise HTTPException(status_code=403, detail="Only the treating clinician / study PI can respond to this request.")
+        st = await db.research_studies.find_one({"_id": _oid(r["study_id"])})
+        proc = await db.procedures.find_one({"_id": _oid(r["procedure_id"])})
+        if not st or not proc:
+            raise HTTPException(status_code=404, detail="Study or case no longer exists")
+        action, reason = body.get("action"), R._s(body.get("reason"), 400)
+        now = R.now_iso()
+        if action == "decline":
+            if not reason:
+                raise HTTPException(status_code=400, detail="Please give a reason for declining.")
+            await db.research_inclusion_requests.update_one({"_id": r["_id"]}, {"$set": {"status": "declined", "decided_by_id": user["_id"], "decided_by": user.get("name", ""),
+                                                                                         "decided_at": now, "decision_reason": reason, "updated_at": now}})
+            upd: dict = {"$set": {"updated_at": now}}
+            _audit(upd, user, "inclusion_declined", f"tooth {r['tooth_number']}", reason)
+            await db.research_studies.update_one({"_id": st["_id"]}, upd)
+            await _notify_req(r["requested_by_id"], f"{user.get('name', '')} declined the inclusion of tooth {r['tooth_number']} in {st['code']}: {reason}", r["study_id"], request_id)
+            return {"ok": True, "status": "declined"}
+        if action != "accept":
+            raise HTTPException(status_code=400, detail="action must be accept or decline")
+        if st.get("status") != "active":
+            raise HTTPException(status_code=400, detail="Study is no longer recruiting.")
+        site = _site_or_400(proc, r["tooth_number"])
+        await _assert_not_enrolled(r["study_id"], r["procedure_id"], r["tooth_number"])
+        ev = R.evaluate_eligibility(st, proc, site["implant"])
+        if ev["overall"] == "excluded":
+            raise HTTPException(status_code=400, detail="The case now fails an exclusion rule and cannot be enrolled.")
+        if r["direction"] == "request":
+            # treating clinician accepts: they confirm consent + checklist; they (and the other treating clinician) become case collaborators
+            enrol_body = {**body, "consent_confirmed": bool(body.get("consent_confirmed"))}
+            consent_by, collaborators = user, [{k: t[k] for k in ("user_id", "name", "label")} for t in r.get("treating", [])]
+            acting = user
+        else:
+            # PI / co-investigator accepts an offer: consent was confirmed by the offering clinician
+            oc = r.get("offer_consent") or {}
+            enrol_body = {"consent_confirmed": True, "consent_method": oc.get("method", "paper"), "consent_language": oc.get("language"),
+                          "checklist_ticked": oc.get("checklist_ticked") or body.get("checklist_ticked") or []}
+            offerer = await db.users.find_one({"_id": _oid(r["requested_by_id"])}, {"name": 1}) or {"_id": r["requested_by_id"], "name": r["requested_by"]}
+            consent_by = {"_id": r["requested_by_id"], "name": offerer.get("name", r["requested_by"])}
+            collaborators = [{k: t[k] for k in ("user_id", "name", "label")} for t in r.get("treating", [])]
+            acting = user
+        override = r.get("override_reason") or R._s(body.get("override_reason"), 400)
+        if ev["overall"] != "eligible" and not override:
+            raise HTTPException(status_code=400, detail="Case needs review — the PI must provide an override reason.")
+        # drop collaborators who are already on the study team (they have access anyway)
+        team_ids = {st.get("pi_user_id")} | {m["user_id"] for m in st.get("members", [])}
+        collaborators = [c for c in collaborators if c["user_id"] not in team_ids]
+        enr = await _do_enrol(st, proc, site, acting, enrol_body, ev, override, consent_by=consent_by, collaborators=collaborators, request_id=request_id)
+        await db.research_inclusion_requests.update_one({"_id": r["_id"]}, {"$set": {"status": "accepted", "decided_by_id": user["_id"], "decided_by": user.get("name", ""),
+                                                                                     "decided_at": now, "decision_reason": reason, "enrolment_id": enr["id"], "updated_at": now}})
+        upd = {"$set": {"updated_at": now}}
+        _audit(upd, user, "inclusion_accepted", f"tooth {r['tooth_number']} → {enr['subject_code']}", reason)
+        await db.research_studies.update_one({"_id": st["_id"]}, upd)
+        notify = {r["requested_by_id"], st.get("pi_user_id")} | {c["user_id"] for c in collaborators}
+        for uid in notify - {user["_id"]}:
+            await _notify_req(uid, f"Case included in {st['code']} as {enr['subject_code']} (accepted by {user.get('name', '')}). Treating clinicians can enter visit data for this case.", r["study_id"], request_id)
+        return {"ok": True, "status": "accepted", "enrolment": enr}
+
+    @router.post("/inclusion-requests/{request_id}/cancel")
+    async def cancel_inclusion_request(request_id: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        r = await db.research_inclusion_requests.find_one({"_id": _oid(request_id), "status": "pending"})
+        if not r:
+            raise HTTPException(status_code=404, detail="Request not found or already decided")
+        if r["requested_by_id"] != user["_id"]:
+            raise HTTPException(status_code=403, detail="Only the requester can cancel.")
+        now = R.now_iso()
+        await db.research_inclusion_requests.update_one({"_id": r["_id"]}, {"$set": {"status": "cancelled", "decided_at": now, "decided_by_id": user["_id"], "decided_by": user.get("name", ""), "updated_at": now}})
+        await db.research_studies.update_one({"_id": _oid(r["study_id"])}, {"$push": {"audit_log": {"action": "inclusion_cancelled", "detail": f"tooth {r['tooth_number']}", "reason": "",
+                                                                                                    "by_id": user["_id"], "by_name": user.get("name", ""), "by_role": user.get("role", ""), "at": now}}})
+        return {"ok": True}
 
     async def _reschedule_all(study_oid):
         st = await db.research_studies.find_one({"_id": study_oid})
@@ -720,12 +997,15 @@ def build_router(db, get_current_user, user_from_token=None):
     @router.get("/studies/{study_id}/enrolments")
     async def list_enrolments(study_id: str, user: dict = Depends(get_current_user)):
         _deny_nurse(user)
-        st = await _get_study(study_id, user)
+        st = await _get_study(study_id, user, allow_collaborator=True)
         tps = {t["key"]: t for t in st.get("timepoints", [])}
         out = []
-        pids = [e["procedure_id"] async for e in db.research_enrolments.find({"study_id": study_id}, {"procedure_id": 1})]
+        eq: dict = {"study_id": study_id}
+        if _member_roles(st, user) == {"case_collaborator"}:
+            eq["collaborators.user_id"] = user["_id"]
+        pids = [e["procedure_id"] async for e in db.research_enrolments.find(eq, {"procedure_id": 1})]
         accessible = {str(p["_id"]): p async for p in db.procedures.find({"_id": {"$in": [_oid(x) for x in set(pids)]}, **_case_scope(user)}, {"patient_name": 1, "implant_procedure_type": 1, "status": 1})}
-        async for e in db.research_enrolments.find({"study_id": study_id}).sort("enrolled_at", 1):
+        async for e in db.research_enrolments.find(eq).sort("enrolled_at", 1):
             p = accessible.get(e["procedure_id"])
             forms = [{"timepoint_key": f["timepoint_key"], "label": f.get("label"), "due_date": f.get("due_date"),
                       "status": R.form_status(f, tps.get(f["timepoint_key"], {}))} for f in e.get("forms", [])]
@@ -741,7 +1021,9 @@ def build_router(db, get_current_user, user_from_token=None):
         e = await db.research_enrolments.find_one({"_id": _oid(enrolment_id)})
         if not e:
             raise HTTPException(status_code=404, detail="Enrolment not found")
-        st = await _get_study(e["study_id"], user)
+        st = await _get_study(e["study_id"], user, allow_collaborator=True)
+        if _member_roles(st, user) == {"case_collaborator"} and not _is_case_collaborator(e, user):
+            raise HTTPException(status_code=403, detail="You only have access to the cases you treat.")
         proc = await db.procedures.find_one({"_id": _oid(e["procedure_id"])})
         out = await _hydrate(st, e, proc, user)
         out["study"] = {"id": str(st["_id"]), "code": st["code"], "title": st["title"], "status": st["status"],
@@ -777,8 +1059,8 @@ def build_router(db, get_current_user, user_from_token=None):
         e = await db.research_enrolments.find_one({"_id": _oid(enrolment_id)})
         if not e:
             raise HTTPException(status_code=404, detail="Enrolment not found")
-        st = await _get_study(e["study_id"], user)
-        roles = _require(st, user, DATA_ROLES, "Not allowed to enter data for this study.")
+        st = await _get_study(e["study_id"], user, allow_collaborator=True)
+        roles = _require_case_access(st, e, user, "Not allowed to enter data for this study.")
         if st.get("status") in ("data_locked", "archived"):
             raise HTTPException(status_code=400, detail="Study dataset is locked.")
         if e.get("status") not in ("enrolled", "active", "completed"):
@@ -931,7 +1213,22 @@ def build_router(db, get_current_user, user_from_token=None):
                 ev = R.evaluate_eligibility(st, proc, site["implant"])
                 if ev["overall"] in ("eligible", "needs_review"):
                     eligible.append({"study_id": sid, "study_code": st["code"], "study_title": st["title"], "tooth_number": site["tooth_number"], "result": ev["overall"]})
-        return {"enrolled": enrolled, "eligible": eligible}
+        # Department-wide studies I am NOT on: the treating clinician may offer this case
+        offerable, pending = [], {}
+        async for r in db.research_inclusion_requests.find({"procedure_id": procedure_id, "status": "pending"}):
+            pending[(r["study_id"], r["tooth_number"])] = {"id": str(r["_id"]), "direction": r["direction"], "requested_by": r["requested_by"], "can_respond": user["_id"] in r["responders"]}
+        async for st in db.research_studies.find({"status": "active", "recruitment_scope": "department", "_id": {"$nin": [_oid(k) for k in studies.keys()]}}):
+            sid = str(st["_id"])
+            for site in R.case_sites(proc):
+                if (sid, site["tooth_number"]) in enrolled_keys:
+                    continue
+                ev = R.evaluate_eligibility(st, proc, site["implant"])
+                if ev["overall"] in ("eligible", "needs_review"):
+                    offerable.append({"study_id": sid, "study_code": st["code"], "study_title": st["title"], "pi_name": st.get("pi_name"), "tooth_number": site["tooth_number"],
+                                      "result": ev["overall"], "consent_form_version": st.get("consent_form_version"),
+                                      "checklist": [{"text": c["checklist_text"], "kind": c["kind"]} for c in st.get("eligibility", []) if c["mode"] == "checklist"],
+                                      "pending_request": pending.get((sid, site["tooth_number"]))})
+        return {"enrolled": enrolled, "eligible": eligible, "offerable": offerable}
 
     # ------------------------------------------------------------ dashboard / results
     @router.get("/studies/{study_id}/dashboard")
@@ -1119,7 +1416,9 @@ def build_router(db, get_current_user, user_from_token=None):
         e = await db.research_enrolments.find_one({"_id": _oid(enrolment_id)})
         if not e:
             raise HTTPException(status_code=404, detail="Enrolment not found")
-        st = await _get_study(e["study_id"], user)
+        st = await _get_study(e["study_id"], user, allow_collaborator=True)
+        if _member_roles(st, user) == {"case_collaborator"} and not _is_case_collaborator(e, user):
+            raise HTTPException(status_code=403, detail="You only have access to the cases you treat.")
         form = next((f for f in e.get("forms", []) if f["timepoint_key"] == tp_key), None)
         if not form:
             raise HTTPException(status_code=404, detail="Timepoint not found")
@@ -1130,7 +1429,7 @@ def build_router(db, get_current_user, user_from_token=None):
                                 acquisition_date: str = Form(""), user: dict = Depends(get_current_user)):
         _deny_nurse(user)
         st, e, form = await _load_form_ctx(enrolment_id, tp_key, user)
-        _require(st, user, DATA_ROLES, "Not allowed to upload images for this study.")
+        _require_case_access(st, e, user, "Not allowed to upload images for this study.")
         if form.get("locked_at"):
             raise HTTPException(status_code=400, detail="Form is locked.")
         ctype = (file.content_type or "").lower()
@@ -1197,7 +1496,7 @@ def build_router(db, get_current_user, user_from_token=None):
         Points are in natural image pixels. Value = px distance / px_per_mm (BR-22: calibration required)."""
         _deny_nurse(user)
         st, e, form = await _load_form_ctx(enrolment_id, tp_key, user)
-        _require(st, user, DATA_ROLES, "Not allowed to measure images for this study.")
+        _require_case_access(st, e, user, "Not allowed to measure images for this study.")
         if form.get("locked_at"):
             raise HTTPException(status_code=400, detail="Form is locked.")
         asset = (form.get("images") or {}).get(slot)
@@ -1482,7 +1781,7 @@ def build_router(db, get_current_user, user_from_token=None):
         "protocol": ("created", "protocol_updated", "study_updated", "status_changed", "amendment_published", "iec_letter_uploaded", "iec_letter_removed", "synopsis_updated"),
         "team": ("members_updated", "submitted_to_guide", "guide_approve", "guide_request_changes"),
         "data": ("enrolled", "enrolment_status", "form_saved", "form_completed", "form_locked", "form_unlocked", "form_edited_after_complete",
-                 "image_uploaded", "image_measured", "image_measured_blinded"),
+                 "image_uploaded", "image_measured", "image_measured_blinded", "inclusion_requested", "inclusion_accepted", "inclusion_declined", "inclusion_cancelled", "case_offered"),
         "queries": ("query_raised", "query_reply", "query_closed", "query_reopened"),
         "exports": ("export", "export_long", "export_wide", "synopsis_exported"),
     }
@@ -1546,11 +1845,13 @@ def build_router(db, get_current_user, user_from_token=None):
     @router.get("/my-tasks")
     async def my_tasks(user: dict = Depends(get_current_user)):
         _deny_nurse(user)
-        q = {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}]}  # tasks only for real team members
+        q = {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}, {"case_collaborators": user["_id"]}]}
         studies = {str(s["_id"]): s async for s in db.research_studies.find({**q, "status": "active"})}
         tasks = []
         async for e in db.research_enrolments.find({"study_id": {"$in": list(studies.keys())}, "status": {"$in": ["enrolled", "active"]}}):
             st = studies[e["study_id"]]
+            if _member_roles(st, user) == {"case_collaborator"} and not _is_case_collaborator(e, user):
+                continue
             tps = {t["key"]: t for t in st.get("timepoints", [])}
             for f in e.get("forms", []):
                 s = R.form_status(f, tps.get(f["timepoint_key"], {}))

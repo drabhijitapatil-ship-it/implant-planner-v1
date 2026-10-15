@@ -17,6 +17,7 @@ export default function ResearchHome() {
   const { user, loading: authLoading } = useAuth();
   const [studies, setStudies] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [requests, setRequests] = useState<{ incoming: any[]; outgoing: any[] }>({ incoming: [], outgoing: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const autoOpened = React.useRef(false);
@@ -35,8 +36,8 @@ export default function ResearchHome() {
 
   const load = useCallback(async () => {
     try {
-      const [s, t] = await Promise.all([api.get('/research/studies'), api.get('/research/my-tasks')]);
-      setStudies(s.data); setTasks(t.data);
+      const [s, t, q] = await Promise.all([api.get('/research/studies'), api.get('/research/my-tasks'), api.get('/research/inclusion-requests/mine')]);
+      setStudies(s.data); setTasks(t.data); setRequests(q.data);
     } catch { /* non-fatal */ } finally { setLoading(false); setRefreshing(false); }
   }, []);
   useFocusEffect(useCallback(() => { if (user && user.role !== 'nurse') load(); }, [user, load]));
@@ -76,6 +77,7 @@ export default function ResearchHome() {
           {item.is_dissertation && <View style={{ marginLeft: 6 }}><Chip label="Dissertation" color={RC.purple} bg={RC.purpleSoft} small /></View>}
           {item.awaiting_my_approval && <View style={{ marginLeft: 6 }}><Chip label="Needs your approval" color={RC.purple} bg={RC.purpleSoft} small /></View>}
           {item.view_only && <View style={{ marginLeft: 6 }}><Chip label="View only" color={RC.sub} bg={RC.greySoft} small /></View>}
+          {item.my_roles?.length === 1 && item.my_roles[0] === 'case_collaborator' && <View style={{ marginLeft: 6 }}><Chip label="My cases only" color={RC.purple} bg={RC.purpleSoft} small /></View>}
         </View>
       </TouchableOpacity>
     );
@@ -108,6 +110,20 @@ export default function ResearchHome() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={RC.muted} />
           </TouchableOpacity>
+        {requests.incoming.length > 0 && (
+          <View style={[s.taskStrip, { borderColor: '#E1BEE7', backgroundColor: RC.purpleSoft }]} testID="inclusion-strip">
+            <View style={u.row}>
+              <Ionicons name="paper-plane" size={16} color={RC.purple} />
+              <Text style={[s.taskTitle, { color: RC.purple }]}>  {requests.incoming.length} case inclusion request{requests.incoming.length === 1 ? '' : 's'} for you to answer</Text>
+            </View>
+            {requests.incoming.slice(0, 4).map(r => (
+              <TouchableOpacity key={r.id} style={s.taskRow} onPress={() => router.push(`/research/inclusion/${r.id}`)} testID={`inclusion-row-${r.id}`}>
+                <Text style={s.taskTxt} numberOfLines={1}>{r.direction === 'request' ? `${r.requested_by} asks to include ${r.patient_name || 'your patient'} (tooth ${r.tooth_number}) in ${r.study_code}` : `${r.requested_by} offers a case (tooth ${r.tooth_number}) to ${r.study_code}`}</Text>
+                <Text style={[s.taskDue, { color: RC.purple }]}>Respond →</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         {(() => { const approvals = studies.filter(st => st.awaiting_my_approval); return approvals.length > 0 ? (
           <View style={[s.taskStrip, { borderColor: '#E1BEE7', backgroundColor: RC.purpleSoft }]} testID="guide-approvals-strip">
             <View style={u.row}>

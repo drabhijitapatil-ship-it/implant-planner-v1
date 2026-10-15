@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api, { getToken } from '../../../utils/api';
 import CalendarPicker from '../../../components/CalendarPicker';
-import { RC, Card, Chip, Field, Loading, PrimaryButton, ScreenHeader, SectionTitle, errText, u } from '../../../components/research/ResearchUI';
+import { RC, Card, Chip, Field, Loading, PillSelect, PrimaryButton, ScreenHeader, SectionTitle, errText, u } from '../../../components/research/ResearchUI';
 
 export default function EthicsEditor() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -26,6 +26,7 @@ export default function EthicsEditor() {
       research_question: s.data.research_question || '', target_n: String(s.data.target_n || ''), iec_ref: s.data.iec_ref || '',
       iec_approval_date: s.data.iec_approval_date || '', ctri_number: s.data.ctri_number || '', consent_form_version: s.data.consent_form_version || '',
       planned_start: s.data.planned_start || '', planned_end: s.data.planned_end || '', notes: s.data.notes || '', study_type: s.data.study_type, title: s.data.title,
+      recruitment_scope: s.data.recruitment_scope || 'team', iec_multi_operator_declared: !!s.data.iec_multi_operator_declared,
     }); }).catch(e => Alert.alert('Error', errText(e)));
   }, [id]);
 
@@ -101,6 +102,22 @@ export default function EthicsEditor() {
             <Field label="Consent form version" value={form.consent_form_version} onChangeText={set('consent_form_version')} placeholder="e.g. v1.0 (English / Marathi / Hindi)" hint="Enrolment records which version the patient signed." testID="consent-version" />
             <Field label="Notes (protocol summary, references)" value={form.notes} onChangeText={set('notes')} multiline />
             <Text style={u.kv}>Per ICMR 2017 guidelines: versioned consent in the patient{"'"}s language; withdrawal is honoured (future-only or all data).</Text>
+          </Card>
+          <Card testID="recruitment-scope-card">
+            <SectionTitle title="Recruitment scope" icon="business-outline" />
+            <PillSelect value={form.recruitment_scope} onChange={(v: string) => setForm((f: any) => ({ ...f, recruitment_scope: v }))}
+              options={[{ key: 'team', label: 'Team cases only' }, { key: 'department', label: 'Department-wide' }]} testID="recruitment-scope" />
+            <Text style={[u.kv, { marginTop: 8 }]}>
+              {form.recruitment_scope === 'department'
+                ? 'Eligible implants treated by any clinician in the department appear in screening without patient identity. The study team sends an inclusion request; the treating student or supervisor confirms the patient\'s consent, the case is enrolled and they can enter its visit data. Treating clinicians can also offer their cases from the case screen.'
+                : 'Only cases the study team can already open clinically (own cases / supervised cases) can be screened and enrolled.'}
+            </Text>
+            {form.recruitment_scope === 'department' && (
+              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, minHeight: 44 }} onPress={() => setForm((f: any) => ({ ...f, iec_multi_operator_declared: !f.iec_multi_operator_declared }))} testID="iec-multi-operator">
+                <Ionicons name={form.iec_multi_operator_declared ? 'checkbox' : 'square-outline'} size={22} color={form.iec_multi_operator_declared ? RC.primary : RC.muted} />
+                <Text style={[u.kv, { flex: 1, marginLeft: 8, marginTop: 2 }]}>The IEC application states that patients treated by other clinicians in the department may be recruited (multi-operator recruitment). Required for activation.</Text>
+              </TouchableOpacity>
+            )}
           </Card>
           <View style={{ marginHorizontal: 14, marginTop: 14 }}>
             <PrimaryButton label="Save" icon="save-outline" onPress={save} loading={saving} testID="save-ethics" />

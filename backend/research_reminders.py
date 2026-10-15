@@ -50,6 +50,7 @@ async def run_visit_reminders(db) -> dict:
             targets = set(collectors)
             if e.get("enrolled_by_id"):
                 targets.add(e["enrolled_by_id"])
+            targets |= {c["user_id"] for c in e.get("collaborators") or [] if c.get("user_id")}  # treating clinicians of included cases
             for f in e.get("forms", []):
                 tp = tps.get(f["timepoint_key"], {})
                 if not f.get("due_date"):

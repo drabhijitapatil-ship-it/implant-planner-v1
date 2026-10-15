@@ -38,6 +38,7 @@ export default function StudyDetail() {
   if (!study) return <Loading />;
   const isPI = study.my_roles.includes('pi');
   const isObserver = study.my_roles.length === 1 && study.my_roles[0] === 'observer';
+  const isCollabOnly = study.my_roles.length === 1 && study.my_roles[0] === 'case_collaborator';
   const guideCanEdit = study.my_roles.includes('guide') && study.status === 'draft';
   const canEnterData = isPI || study.my_roles.includes('co_investigator') || study.my_roles.includes('data_collector');
   const canExport = isPI || study.my_roles.includes('guide') || study.my_roles.includes('statistician');
@@ -106,6 +107,12 @@ export default function StudyDetail() {
         <Segmented value={tab} onChange={setTab} testID="study-tab"
           options={[{ key: 'overview', label: 'Overview' }, { key: 'protocol', label: 'Protocol' }, { key: 'cases', label: `Cases (${enrolments.length})` }, { key: 'team', label: 'Team' }]} />
       </View>
+      {isCollabOnly && (
+        <View style={s.observerBar} testID="collaborator-banner">
+          <Ionicons name="medkit-outline" size={16} color={RC.purple} />
+          <Text style={s.observerTxt}>You treat case(s) included in this study. You can enter visit data and radiographs for your own cases (Cases tab) — study-wide screening, results and exports stay with the study team (PI {study.pi_name}).</Text>
+        </View>
+      )}
       {isObserver && (
         <View style={s.observerBar} testID="observer-banner">
           <Ionicons name="eye-outline" size={16} color={RC.sub} />
@@ -184,16 +191,16 @@ export default function StudyDetail() {
               {study.status === 'active' && canEnterData && (
                 <NavRow icon="search-outline" label="Screen & enrol cases" sub="Retrospective pull of your cases with per-rule pass / fail / needs-review." route={`/research/${id}/screening`} />
               )}
-              <NavRow icon="flag-outline" label="Data queries" sub="Flagged values and their resolution threads." route={`/research/${id}/queries`} />
+              {!isCollabOnly && <NavRow icon="flag-outline" label="Data queries" sub="Flagged values and their resolution threads." route={`/research/${id}/queries`} />}
               {study.status !== 'draft' && canEnterData && (
                 <NavRow icon="eye-off-outline" label="Blinded measurement" sub="Shuffled radiographs without patient or timepoint labels — measure bone levels without bias." route={`/research/${id}/blind-queue`} />
               )}
-              {study.status !== 'draft' && (
+              {study.status !== 'draft' && !isCollabOnly && (
                 <NavRow icon="git-compare-outline" label="Protocol amendments" sub={pendingChanges.length ? `${pendingChanges.length} unpublished change${pendingChanges.length === 1 ? '' : 's'} since v${protocolVersion} — publish v${nextMinor(protocolVersion)} with a reason.` : `Protocol v${protocolVersion} · version history and change notes.`} route={`/research/${id}/amendments`} count={pendingChanges.length || undefined} />
               )}
-              <NavRow icon="school-outline" label="Synopsis / dissertation" sub="University-format DOCX & PDF with methods and criteria generated from the protocol." route={`/research/${id}/synopsis`} />
-              <NavRow icon="stats-chart-outline" label="Results & export" sub="Recruitment flow, follow-up compliance, descriptive statistics, de-identified CSV." route={`/research/${id}/results`} />
-              <NavRow icon="receipt-outline" label="Audit trail" sub="Every change by every user — protocol, team, data, queries, exports — with before/after values. CSV download." route={`/research/${id}/audit`} />
+              {!isCollabOnly && <NavRow icon="school-outline" label="Synopsis / dissertation" sub="University-format DOCX & PDF with methods and criteria generated from the protocol." route={`/research/${id}/synopsis`} />}
+              {!isCollabOnly && <NavRow icon="stats-chart-outline" label="Results & export" sub="Recruitment flow, follow-up compliance, descriptive statistics, de-identified CSV." route={`/research/${id}/results`} />}
+              {!isCollabOnly && <NavRow icon="receipt-outline" label="Audit trail" sub="Every change by every user — protocol, team, data, queries, exports — with before/after values. CSV download." route={`/research/${id}/audit`} />}
               {(isPI || guideCanEdit) && (
                 <NavRow icon="shield-checkmark-outline" label="Ethics & consent" sub={study.iec_ref ? `IEC ${study.iec_ref} · consent ${study.consent_form_version || '—'}` : 'IEC reference, approval date, consent form version, CTRI.'} route={`/research/${id}/ethics`} />
               )}

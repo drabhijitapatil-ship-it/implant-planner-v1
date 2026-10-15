@@ -667,6 +667,8 @@ def activation_checklist(study: dict) -> list[dict]:
     ]
     if study.get("study_type") == "rct":
         items.append(("CTRI number (RCT)", bool(study.get("ctri_number"))))
+    if study.get("recruitment_scope") == "department":
+        items.append(("Multi-operator (department-wide) recruitment declared to IEC", bool(study.get("iec_multi_operator_declared"))))
     if needs_guide_approval(study):
         items.append(("Guide chosen (Supervisor / Implant In-charge)", bool(study.get("guide_user_id"))))
         items.append(("Guide approval recorded", (study.get("guide_review") or {}).get("status") == "approved"))

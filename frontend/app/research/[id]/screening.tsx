@@ -29,7 +29,8 @@ export default function Screening() {
   const [consentLang, setConsentLang] = useState('');
   const [override, setOverride] = useState('');
   const [excludeReason, setExcludeReason] = useState('');
-  const [mode, setMode] = useState<'enrol' | 'exclude'>('enrol');
+  const [mode, setMode] = useState<'enrol' | 'exclude' | 'request'>('enrol');
+  const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -45,9 +46,10 @@ export default function Screening() {
   const isPI = study.my_roles.includes('pi');
   const rows = data.rows.filter((r: any) => filter === 'all' || r.decision === filter);
 
-  const openSheet = (row: any, m: 'enrol' | 'exclude') => {
-    setSheet(row); setMode(m); setTicks(checklist.map(() => false)); setConsent(false); setOverride(''); setExcludeReason(''); setConsentLang('');
+  const openSheet = (row: any, m: 'enrol' | 'exclude' | 'request') => {
+    setSheet(row); setMode(m); setTicks(checklist.map(() => false)); setConsent(false); setOverride(''); setExcludeReason(''); setConsentLang(''); setMessage('');
   };
+  const dept = !!data.summary.department_wide;
 
   const submit = async () => {
     if (!sheet) return;
@@ -55,6 +57,9 @@ export default function Screening() {
     try {
       if (mode === 'exclude') {
         await api.post(`/research/studies/${id}/screening/exclude`, { procedure_id: sheet.procedure_id, tooth_number: sheet.tooth_number, reason: excludeReason });
+      } else if (mode === 'request') {
+        await api.post(`/research/studies/${id}/inclusion-requests`, { procedure_id: sheet.procedure_id, tooth_number: sheet.tooth_number, message, override_reason: override });
+        Alert.alert('Request sent', `The treating clinician${sheet.treating?.supervisor_name ? 's' : ''} (${[sheet.treating?.student_name, sheet.treating?.supervisor_name].filter(Boolean).join(', ')}) have been notified. The case is enrolled automatically once they confirm the patient's consent.`);
       } else {
         const r = await api.post(`/research/studies/${id}/enrol`, {
           procedure_id: sheet.procedure_id, tooth_number: sheet.tooth_number, checklist_ticked: ticks, consent_confirmed: consent,
@@ -64,7 +69,7 @@ export default function Screening() {
         Alert.alert('Enrolled', `Subject code ${r.data.subject_code}. ${r.data.forms.length} visit forms scheduled.${also}`);
       }
       setSheet(null); load();
-    } catch (e) { Alert.alert('Not enrolled', errText(e)); } finally { setBusy(false); }
+    } catch (e) { Alert.alert(mode === 'request' ? 'Request not sent' : 'Not enrolled', errText(e)); } finally { setBusy(false); }
   };
 
   const unexclude = async (row: any) => {
@@ -78,7 +83,10 @@ export default function Screening() {
       <View style={s.card} testID={`cand-${r.procedure_id}-${r.tooth_number}`}>
         <View style={u.row}>
           <View style={{ flex: 1 }}>
-            <Text style={u.strong}>{r.patient_name} <Text style={{ color: RC.sub, fontWeight: '600' }}>· {r.age ? `${r.age} y` : ''} {r.sex || ''}</Text></Text>
+            <Text style={u.strong}>{r.patient_name || 'Patient identity hidden'} <Text style={{ color: RC.sub, fontWeight: '600' }}>· {r.age ? `${r.age} y` : ''} {r.sex || ''}</Text></Text>
+            {dept && (r.treating?.student_name || r.treating?.supervisor_name) && (
+              <Text style={s.treatTxt} testID={`treating-${r.procedure_id}-${r.tooth_number}`}><Ionicons name="medkit-outline" size={11} color={RC.sub} /> Treated by {[r.treating.student_name, r.treating.supervisor_name].filter(Boolean).join(' · ')}{r.treating.procedure_date ? ` · ${r.treating.procedure_date}` : ''}</Text>
+            )}
             <Text style={u.kv}>Tooth {r.tooth_number}{r.planned_only ? ' (planned)' : ''} · {r.procedure_type}{r.implant?.system ? ` · ${r.implant.brand || ''} ${r.implant.system}` : ''}{r.implant?.insertion_torque_ncm ? ` · ${r.implant.insertion_torque_ncm} Ncm` : ''}</Text>
           </View>
           <Chip label={st.l} color={st.c} bg={st.b} />
@@ -94,9 +102,24 @@ export default function Screening() {
         </View>
         {r.other_studies?.length > 0 && <Text style={s.otherTxt}>Also in: {r.other_studies.join(', ')}</Text>}
         {r.exclusion_reason && <Text style={s.otherTxt}>Excluded manually: {r.exclusion_reason}</Text>}
+        {r.inclusion_request && (
+          <View style={[s.reqBox, r.inclusion_request.status === 'declined' && { backgroundColor: RC.redSoft, borderColor: '#FFCDD2' }]} testID={`req-status-${r.procedure_id}-${r.tooth_number}`}>
+            <Ionicons name={r.inclusion_request.status === 'declined' ? 'close-circle-outline' : 'time-outline'} size={14} color={r.inclusion_request.status === 'declined' ? RC.red : RC.purple} />
+            <Text style={[s.reqTxt, r.inclusion_request.status === 'declined' && { color: RC.red }]}>
+              {r.inclusion_request.status === 'declined' ? `Inclusion declined by treating clinician: ${r.inclusion_request.decision_reason || 'no reason given'}` : r.inclusion_request.direction === 'offer' ? 'Offered by the treating clinician — awaiting your team\'s acceptance' : 'Inclusion requested — awaiting the treating clinician\'s consent confirmation'}
+            </Text>
+          </View>
+        )}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
           {r.exclusion_reason ? (
             <PrimaryButton label="Undo exclusion" variant="outline" onPress={() => unexclude(r)} style={{ flex: 1 }} />
+          ) : r.can_enrol_directly === false ? (
+            <>
+              {r.decision !== 'excluded' && !(r.inclusion_request?.status === 'pending') && (r.decision === 'eligible' || isPI) && (
+                <PrimaryButton label={r.inclusion_request?.status === 'declined' ? 'Request again' : 'Request inclusion'} icon="paper-plane-outline" onPress={() => openSheet(r, 'request')} style={{ flex: 1 }} testID={`request-${r.procedure_id}-${r.tooth_number}`} />
+              )}
+              <PrimaryButton label="Exclude" variant="ghost" onPress={() => openSheet(r, 'exclude')} />
+            </>
           ) : (
             <>
               {(r.decision === 'eligible' || isPI) && <PrimaryButton label={r.decision === 'eligible' ? 'Enrol' : 'Enrol (PI override)'} icon="person-add-outline" onPress={() => openSheet(r, 'enrol')} style={{ flex: 1 }} testID={`enrol-${r.procedure_id}-${r.tooth_number}`} />}
@@ -112,26 +135,43 @@ export default function Screening() {
     <SafeAreaView style={u.container} edges={['bottom']}>
       <ScreenHeader title="Screen & enrol" subtitle={`${study.code} · ${data.summary.cases_scanned} cases scanned`} testID="screening-title" />
       <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
-        <TextInput value={search} onChangeText={setSearch} placeholder="Search patient name…" placeholderTextColor={RC.muted} style={u.input} testID="screening-search" />
+        <TextInput value={search} onChangeText={setSearch} placeholder={dept ? 'Search patient (your cases) or clinician name…' : 'Search patient name…'} placeholderTextColor={RC.muted} style={u.input} testID="screening-search" />
         <View style={{ height: 8 }} />
         <Segmented value={filter} onChange={setFilter} testID="screening-filter" options={[
           { key: 'all', label: `All ${data.total}` }, { key: 'eligible', label: `Eligible ${data.summary.eligible}` },
           { key: 'needs_review', label: `Review ${data.summary.needs_review}` }, { key: 'excluded', label: `Excl. ${data.summary.excluded + data.summary.manually_excluded}` }]} />
       </View>
       <FlatList data={rows} keyExtractor={r => `${r.procedure_id}-${r.tooth_number}`} renderItem={renderRow} contentContainerStyle={{ paddingBottom: 60 }}
-        ListEmptyComponent={<Empty icon="search-outline" title="No candidate sites" body={`${data.summary.enrolled} already enrolled. Cases must be submitted (not draft) and within your clinical access.`} />} />
+        ListHeaderComponent={dept ? (
+          <View style={[s.reqBox, { marginHorizontal: 14, marginTop: 10 }]} testID="dept-banner">
+            <Ionicons name="business-outline" size={14} color={RC.purple} />
+            <Text style={s.reqTxt}>Department-wide recruitment: cases treated by other clinicians are listed without patient identity. Use Request inclusion — the treating clinician confirms consent and the case is enrolled automatically.</Text>
+          </View>
+        ) : null}
+        ListEmptyComponent={<Empty icon="search-outline" title="No candidate sites" body={`${data.summary.enrolled} already enrolled. ${dept ? 'Cases must be submitted (not draft).' : 'Cases must be submitted (not draft) and within your clinical access.'}`} />} />
 
       <Modal visible={!!sheet} animationType="slide" transparent onRequestClose={() => setSheet(null)}>
         <View style={s.overlay}>
           <View style={s.sheet}>
             <View style={u.row}>
-              <Text style={s.sheetTitle}>{mode === 'enrol' ? 'Enrol in study' : 'Exclude from study'}</Text>
+              <Text style={s.sheetTitle}>{mode === 'enrol' ? 'Enrol in study' : mode === 'request' ? 'Request inclusion' : 'Exclude from study'}</Text>
               <View style={{ flex: 1 }} />
               <TouchableOpacity onPress={() => setSheet(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Ionicons name="close" size={22} color={RC.sub} /></TouchableOpacity>
             </View>
-            {sheet && <Text style={u.kv}>{sheet.patient_name} · tooth {sheet.tooth_number} · {study.code}</Text>}
+            {sheet && <Text style={u.kv}>{sheet.patient_name || 'De-identified case'} · tooth {sheet.tooth_number} · {study.code}</Text>}
             <ScrollView style={{ marginTop: 10, maxHeight: 440 }} keyboardShouldPersistTaps="handled">
-              {mode === 'exclude' ? (
+              {mode === 'request' ? (
+                <>
+                  <View style={s.reqBox}>
+                    <Ionicons name="information-circle-outline" size={16} color={RC.purple} />
+                    <Text style={s.reqTxt}>This case is treated by {[sheet?.treating?.student_name, sheet?.treating?.supervisor_name].filter(Boolean).join(' and ') || 'another clinician'}. They will be asked to confirm the patient's research consent and the clinical checklist; on acceptance the case is enrolled and they can enter visit data for it.</Text>
+                  </View>
+                  {sheet?.decision !== 'eligible' && (
+                    <Field label="PI override reason (eligibility needs review)" value={override} onChangeText={setOverride} multiline placeholder="Why this case should be included despite the rule result" testID="override-reason" />
+                  )}
+                  <Field label="Message to the treating clinician (optional)" value={message} onChangeText={setMessage} multiline placeholder="e.g. We are collecting CBL at 6/12 months; recall visits can stay with you." testID="request-message" />
+                </>
+              ) : mode === 'exclude' ? (
                 <Field label="Exclusion reason" value={excludeReason} onChangeText={setExcludeReason} multiline placeholder="e.g. Declined consent / active periodontitis at site" testID="exclude-reason" />
               ) : (
                 <>
@@ -156,7 +196,7 @@ export default function Screening() {
                 </>
               )}
             </ScrollView>
-            <PrimaryButton label={mode === 'enrol' ? 'Confirm enrolment' : 'Exclude'} variant={mode === 'enrol' ? 'primary' : 'danger'} onPress={submit} loading={busy} style={{ marginTop: 12 }} testID="confirm-enrol" />
+            <PrimaryButton label={mode === 'enrol' ? 'Confirm enrolment' : mode === 'request' ? 'Send request' : 'Exclude'} variant={mode === 'exclude' ? 'danger' : 'primary'} onPress={submit} loading={busy} style={{ marginTop: 12 }} testID="confirm-enrol" />
           </View>
         </View>
       </Modal>
@@ -168,6 +208,9 @@ const s = StyleSheet.create({
   card: { backgroundColor: '#FFF', marginHorizontal: 14, marginTop: 10, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: RC.border },
   ruleTxt: { fontSize: 12, color: RC.text, marginLeft: 6, flex: 1 },
   otherTxt: { fontSize: 11, color: RC.amber, marginTop: 6, fontWeight: '600' },
+  treatTxt: { fontSize: 11, color: RC.sub, marginTop: 2 },
+  reqBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: RC.purpleSoft, borderRadius: 10, padding: 8, marginTop: 8, borderWidth: 1, borderColor: '#E1BEE7' },
+  reqTxt: { flex: 1, marginLeft: 6, fontSize: 12, color: RC.purple, lineHeight: 16 },
   overlay: { flex: 1, backgroundColor: 'rgba(15,25,40,0.45)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18, paddingBottom: 30 },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: RC.text },

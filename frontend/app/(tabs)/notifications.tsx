@@ -75,6 +75,10 @@ export default function NotificationsScreen() {
       else router.push('/research');
       return;
     }
+    if (t === 'research_inclusion') {
+      router.push(notification.inclusion_request_id ? `/research/inclusion/${notification.inclusion_request_id}` : '/research');
+      return;
+    }
     if (t === 'research_study') {
       router.push(notification.research_study_id ? `/research/${notification.research_study_id}` : '/research');
       return;
@@ -112,6 +116,8 @@ export default function NotificationsScreen() {
         return 'flag';
       case 'research_study':
         return 'flask';
+      case 'research_inclusion':
+        return 'paper-plane';
       default:
         return 'information-circle';
     }
@@ -135,6 +141,7 @@ export default function NotificationsScreen() {
       case 'research_visit':
       case 'research_query':
       case 'research_study':
+      case 'research_inclusion':
         return '#6A1B9A';
       default:
         return '#007AFF';
