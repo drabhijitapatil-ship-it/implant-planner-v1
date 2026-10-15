@@ -32,7 +32,8 @@ def study(admin):
     st = r.json()
     yield st
     requests.post(f"{BASE}/research/studies/{st['id']}/status", json={"status": "archived"}, headers=admin)
-    requests.delete(f"{BASE}/research/studies/{st['id']}", headers=admin)
+    from _research_cleanup import purge_study
+    purge_study(st["id"])
 
 
 def test_registry_and_templates(admin):
@@ -115,7 +116,7 @@ def test_candidates_enrol_form_dashboard_export(admin, study):
             assert "bl_mesial__baseline" in r.text and cand["patient_name"] not in r.text
     # case card
     r = requests.get(f"{BASE}/research/case/{cand['procedure_id']}", headers=admin)
-    assert r.status_code == 200 and r.json()["enrolled"][0]["subject_code"] == enr["subject_code"]
+    assert r.status_code == 200 and any(x["subject_code"] == enr["subject_code"] for x in r.json()["enrolled"])
     # my tasks
     assert requests.get(f"{BASE}/research/my-tasks", headers=admin).status_code == 200
 

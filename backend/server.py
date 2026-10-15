@@ -25122,6 +25122,13 @@ async def _research_user_from_token(token: str):
 
 api_router.include_router(_research_routes.build_router(db, get_current_user, _research_user_from_token))
 
+
+@app.on_event("startup")
+async def start_research_reminder_scheduler():
+    """Research visit reminders (upcoming / due / overdue forms) — every 6 h."""
+    from research_reminders import reminder_loop as _research_reminder_loop
+    asyncio.create_task(_research_reminder_loop(db, 6 * 3600))
+
 app.include_router(api_router)
 
 app.add_middleware(

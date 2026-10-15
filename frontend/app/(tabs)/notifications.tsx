@@ -67,6 +67,18 @@ export default function NotificationsScreen() {
     // iter-379 — deep-link chips: transfer notifications auto-scroll or
     // auto-open the relevant section on the case detail via ?anchor=….
     const t = String(notification.type || '');
+    // Research module notifications deep-link into the study / visit form.
+    if (t === 'research_visit' || t === 'research_query') {
+      if (notification.research_enrolment_id) {
+        router.push(`/research/enrolment/${notification.research_enrolment_id}${notification.timepoint_key ? `?tp=${notification.timepoint_key}` : ''}`);
+      } else if (notification.research_study_id) router.push(`/research/${notification.research_study_id}`);
+      else router.push('/research');
+      return;
+    }
+    if (t === 'research_study') {
+      router.push(notification.research_study_id ? `/research/${notification.research_study_id}` : '/research');
+      return;
+    }
     let anchor: string | null = null;
     if (t === 'transfer_approval') anchor = 'transfer';        // Sup / In-Charge approval card
     else if (t === 'transfer_recipient') anchor = 'transfer';  // Recipient accept card
@@ -94,6 +106,12 @@ export default function NotificationsScreen() {
         return 'checkmark-done';
       case 'transfer_declined':
         return 'close-circle';
+      case 'research_visit':
+        return 'alarm';
+      case 'research_query':
+        return 'flag';
+      case 'research_study':
+        return 'flask';
       default:
         return 'information-circle';
     }
@@ -114,6 +132,10 @@ export default function NotificationsScreen() {
         return '#2E7D32';
       case 'transfer_declined':
         return '#C62828';
+      case 'research_visit':
+      case 'research_query':
+      case 'research_study':
+        return '#6A1B9A';
       default:
         return '#007AFF';
     }

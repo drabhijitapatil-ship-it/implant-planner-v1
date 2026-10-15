@@ -8,8 +8,10 @@ timepoint — D2), research_screening (manual exclusions / decisions).
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import math
+import random
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -19,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import StreamingResponse
 
 import research as R
+from research_reminders import sanitize_reminders, run_visit_reminders, DEFAULTS as REMINDER_DEFAULTS
 
 FACULTY_ADMIN = ("administrator", "implant_incharge")
 DATA_ROLES = ("pi", "co_investigator", "data_collector")
@@ -143,6 +146,8 @@ def build_router(db, get_current_user, user_from_token=None):
             out["target_n"] = max(1, int(R._num(body.get("target_n")) or 1))
         if "is_dissertation" in body:
             out["is_dissertation"] = bool(body["is_dissertation"])
+        if "reminders" in body:
+            out["reminders"] = sanitize_reminders(body["reminders"])
         for k in ("eligibility", "variables", "timepoints"):
             if k in body and isinstance(body[k], list):
                 fn = {"eligibility": R.sanitize_rule, "variables": R.sanitize_variable, "timepoints": R.sanitize_timepoint}[k]
@@ -236,6 +241,12 @@ def build_router(db, get_current_user, user_from_token=None):
             st["iec_letter"] = {"present": True} if st.get("iec_letter") else None
         st["activation_checklist"] = R.activation_checklist(st)
         st["protocol_errors"] = R.validate_protocol(st)
+        st["reminders"] = {**REMINDER_DEFAULTS, **(st.get("reminders") or {})}
+        if st.get("status") != "draft":
+            last = (st.get("protocol_versions") or [{}])[-1].get("snapshot") if st.get("protocol_versions") else None
+            st["protocol_pending_changes"] = R.protocol_diff(last, R.protocol_snapshot(st)) if last is not None else []
+        else:
+            st["protocol_pending_changes"] = []
         counts = await _form_counts([st["_id"]])
         st["counts"] = counts.get(study_id, {})
         return _pub(st)
@@ -443,6 +454,9 @@ def build_router(db, get_current_user, user_from_token=None):
         setv = {"status": target, "updated_at": R.now_iso()}
         if target == "active" and not st.get("activated_at"):
             setv["activated_at"] = R.now_iso()
+            setv["protocol_version"] = st.get("protocol_version") or "1.0"
+            setv["protocol_versions"] = [{"version": setv["protocol_version"], "published_at": R.now_iso(), "published_by": user.get("name", ""),
+                                          "summary": "Initial protocol (activation)", "rationale": "", "changes": [], "snapshot": R.protocol_snapshot(st)}]
         update = {"$set": setv}
         _audit(update, user, "status_changed", f"{st.get('status')} → {target}", body.get("reason", ""))
         await db.research_studies.update_one({"_id": st["_id"]}, update)
@@ -831,6 +845,7 @@ def build_router(db, get_current_user, user_from_token=None):
         return await _persist_form(st, e, form, user, audit_action, reason, warnings)
 
     async def _persist_form(st, e, form, user, action, reason="", warnings=None):
+        form.setdefault("protocol_version", st.get("protocol_version", "1.0"))  # data keeps the version it was collected under
         forms = [form if f["timepoint_key"] == form["timepoint_key"] else f for f in e["forms"]]
         new_status = "active" if any(f.get("completed_at") for f in forms) and e["status"] == "enrolled" else e["status"]
         await db.research_enrolments.update_one({"_id": e["_id"]}, {"$set": {"forms": forms, "status": new_status, "updated_at": R.now_iso()}})
@@ -1072,17 +1087,26 @@ def build_router(db, get_current_user, user_from_token=None):
         if form.get("locked_at"):
             raise HTTPException(status_code=400, detail="Form is locked.")
         ctype = (file.content_type or "").lower()
-        if ctype not in ("image/jpeg", "image/png", "image/webp"):
-            raise HTTPException(status_code=400, detail="Upload a JPEG/PNG/WEBP photo of the radiograph (DICOM import is a later phase).")
         data = await file.read()
-        if not data or len(data) > 15 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="Image must be 1 byte – 15 MB")
+        if not data or len(data) > 40 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File must be 1 byte – 40 MB")
         from object_storage import put_object, APP_NAME
         from PIL import Image as _PIL
-        try:
-            im = _PIL.open(io.BytesIO(data)); width, height = im.size
-        except Exception:
-            raise HTTPException(status_code=400, detail="Could not read image")
+        import research_dicom as D
+        dicom = None
+        if D.is_dicom(data, file.filename or ""):
+            try:
+                dicom = D.parse_dicom(data)
+            except Exception as ex:
+                raise HTTPException(status_code=400, detail=f"DICOM could not be read: {ex}")
+            data, ctype, width, height = dicom["png"], "image/png", dicom["width"], dicom["height"]
+        elif ctype not in ("image/jpeg", "image/png", "image/webp"):
+            raise HTTPException(status_code=400, detail="Upload a DICOM (.dcm) file or a JPEG/PNG/WEBP photo of the radiograph.")
+        else:
+            try:
+                im = _PIL.open(io.BytesIO(data)); width, height = im.size
+            except Exception:
+                raise HTTPException(status_code=400, detail="Could not read image")
         image_id = str(uuid.uuid4())
         ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[ctype]
         path = f"{APP_NAME}/research/{e['study_id']}/{enrolment_id}/{tp_key}_{slot}_{image_id}.{ext}"
@@ -1094,8 +1118,14 @@ def build_router(db, get_current_user, user_from_token=None):
                  "width": width, "height": height, "source": "photo", "quality_grade": "C",
                  "acquisition_date": R._s(acquisition_date, 10) or None, "calibration": None, "measurements": {},
                  "uploaded_by": user.get("name", ""), "uploaded_at": R.now_iso()}
+        if dicom:
+            asset.update({"source": "dicom", "dicom": dicom["meta"], "acquisition_date": asset["acquisition_date"] or dicom["acquisition_date"]})
+            if dicom["px_per_mm"]:
+                asset["quality_grade"] = "A"
+                asset["calibration"] = {"p1": None, "p2": None, "reference_length_mm": None, "px_per_mm": dicom["px_per_mm"],
+                                        "method": "dicom_pixel_spacing", "spacing_tag": dicom["spacing_source"], "calibrated_by": "DICOM header", "at": R.now_iso()}
         form.setdefault("images", {})[asset["slot"]] = asset
-        return await _persist_form(st, e, form, user, "image_uploaded", f"{slot}")
+        return await _persist_form(st, e, form, user, "image_uploaded", f"{slot} ({asset['source']}, grade {asset['quality_grade']})")
 
     @router.get("/images/{enrolment_id}/{tp_key}/{slot}")
     async def get_form_image(enrolment_id: str, tp_key: str, slot: str, token: str = ""):
@@ -1127,15 +1157,19 @@ def build_router(db, get_current_user, user_from_token=None):
         if not asset:
             raise HTTPException(status_code=404, detail="Upload the radiograph first")
         cal = body.get("calibration") or asset.get("calibration")
-        if not cal or not cal.get("p1") or not cal.get("p2") or not R._num(cal.get("reference_length_mm")):
+        if cal and cal.get("p1") and cal.get("p2") and R._num(cal.get("reference_length_mm")):
+            px = math.dist(cal["p1"], cal["p2"])
+            if px < 5:
+                raise HTTPException(status_code=400, detail="Calibration points are too close together")
+            px_per_mm = px / float(cal["reference_length_mm"])
+            asset["calibration"] = {"p1": cal["p1"], "p2": cal["p2"], "reference_length_mm": float(cal["reference_length_mm"]), "px_per_mm": round(px_per_mm, 4),
+                                    "method": "known_implant_length", "calibrated_by": user.get("name", ""), "at": R.now_iso()}
+            asset["quality_grade"] = "B"
+        elif (asset.get("calibration") or {}).get("method") == "dicom_pixel_spacing" and (asset.get("calibration") or {}).get("px_per_mm"):
+            px_per_mm = float(asset["calibration"]["px_per_mm"])  # grade A — automatic from the DICOM header
+        else:
             raise HTTPException(status_code=400, detail="Calibrate first: mark implant shoulder → apex and enter the known implant length (BR-22).")
-        px = math.dist(cal["p1"], cal["p2"])
-        if px < 5:
-            raise HTTPException(status_code=400, detail="Calibration points are too close together")
-        px_per_mm = px / float(cal["reference_length_mm"])
-        asset["calibration"] = {"p1": cal["p1"], "p2": cal["p2"], "reference_length_mm": float(cal["reference_length_mm"]), "px_per_mm": round(px_per_mm, 4),
-                                "method": "known_implant_length", "calibrated_by": user.get("name", ""), "at": R.now_iso()}
-        asset["quality_grade"] = "B"
+        blinded = bool(body.get("blinded"))
         vars_by_key = {v["key"]: v for v in st.get("variables", [])}
         tp = next(t for t in st["timepoints"] if t["key"] == tp_key)
         for key, m in (body.get("measurements") or {}).items():
@@ -1146,12 +1180,12 @@ def build_router(db, get_current_user, user_from_token=None):
             if m.get("signed_negative"):
                 mm = -mm
             val = round(mm, var.get("decimals") if var.get("decimals") is not None else 2)
-            asset.setdefault("measurements", {})[key] = {"p1": m["p1"], "p2": m["p2"], "value_mm": val, "method": "manual",
-                                                         "examiner": user.get("name", ""), "at": R.now_iso()}
+            asset.setdefault("measurements", {})[key] = {"p1": m["p1"], "p2": m["p2"], "value_mm": val, "method": "manual_blinded" if blinded else "manual",
+                                                         "examiner": user.get("name", ""), "examiner_id": user["_id"], "at": R.now_iso()}
             form.setdefault("values", {})[key] = val
             form.setdefault("not_done", {}).pop(key, None)
         form["images"][slot] = asset
-        return await _persist_form(st, e, form, user, "image_measured", slot)
+        return await _persist_form(st, e, form, user, "image_measured_blinded" if blinded else "image_measured", slot)
 
     # ------------------------------------------------------------ data queries (S17)
     @router.get("/studies/{study_id}/queries")
@@ -1269,6 +1303,132 @@ def build_router(db, get_current_user, user_from_token=None):
         media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if fmt == "docx" else "application/pdf"
         return StreamingResponse(iter([data]), media_type=media,
                                  headers={"Content-Disposition": f'attachment; filename="{st["code"]}_synopsis.{fmt}"'})
+
+    # ------------------------------------------------------------ user guide PDF (content comes from the app's single source of truth)
+    _guide_cache: dict = {}
+
+    @router.post("/guide/pdf")
+    async def guide_pdf_prepare(body: dict, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        sections = body.get("sections")
+        if not isinstance(sections, list) or not sections:
+            raise HTTPException(status_code=400, detail="sections required")
+        token = str(uuid.uuid4())
+        for k in [k for k, v in _guide_cache.items() if v[0] < datetime.now(timezone.utc).timestamp() - 600]:
+            _guide_cache.pop(k, None)
+        _guide_cache[token] = (datetime.now(timezone.utc).timestamp(), R.build_guide_pdf(R._s(body.get("version"), 40), sections))
+        return {"token": token}
+
+    @router.get("/guide/pdf/{token}")
+    async def guide_pdf(token: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        item = _guide_cache.get(token)
+        if not item:
+            raise HTTPException(status_code=404, detail="PDF expired — tap Download again")
+        return StreamingResponse(iter([item[1]]), media_type="application/pdf",
+                                 headers={"Content-Disposition": 'attachment; filename="Implanr_Research_Module_User_Guide.pdf"'})
+
+    # ------------------------------------------------------------ protocol amendments (versions)
+    @router.get("/studies/{study_id}/amendments")
+    async def list_amendments(study_id: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        versions = st.get("protocol_versions") or []
+        pending = R.protocol_diff(versions[-1]["snapshot"], R.protocol_snapshot(st)) if versions else []
+        enr_counts: dict = {}
+        async for e in db.research_enrolments.find({"study_id": study_id}, {"protocol_version": 1}):
+            v = e.get("protocol_version", "1.0"); enr_counts[v] = enr_counts.get(v, 0) + 1
+        return {"current_version": st.get("protocol_version", "1.0"), "status": st.get("status"),
+                "versions": [{k: v for k, v in ver.items() if k != "snapshot"} | {"enrolments": enr_counts.get(ver["version"], 0)} for ver in versions],
+                "pending_changes": pending, "can_publish": "pi" in _member_roles(st, user) or "admin" in _member_roles(st, user)}
+
+    @router.get("/studies/{study_id}/amendments/{version}")
+    async def get_amendment(study_id: str, version: str, user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        ver = next((v for v in st.get("protocol_versions") or [] if v["version"] == version), None)
+        if not ver:
+            raise HTTPException(status_code=404, detail="Version not found")
+        return ver
+
+    @router.post("/studies/{study_id}/amendments")
+    async def publish_amendment(study_id: str, body: dict, user: dict = Depends(get_current_user)):
+        """PI publishes the current (edited) protocol as the next minor version with a summary + rationale.
+        Previous versions keep their full snapshot; enrolments/forms keep the version they were collected under."""
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        _require(st, user, ("pi",), "Only the PI can publish a protocol amendment.")
+        if st.get("status") == "draft":
+            raise HTTPException(status_code=400, detail="Draft protocols are edited freely — amendments start after activation.")
+        if st.get("status") in ("data_locked", "archived"):
+            raise HTTPException(status_code=400, detail="Study is locked/archived.")
+        versions = st.get("protocol_versions") or []
+        if not versions:  # studies activated before versioning existed
+            versions = [{"version": st.get("protocol_version", "1.0"), "published_at": st.get("activated_at") or R.now_iso(), "published_by": st.get("pi_name", ""),
+                         "summary": "Initial protocol (activation)", "rationale": "", "changes": [], "snapshot": R.protocol_snapshot(st)}]
+            raise_if_clean = False
+        else:
+            raise_if_clean = True
+        changes = R.protocol_diff(versions[-1]["snapshot"], R.protocol_snapshot(st))
+        if raise_if_clean and not changes:
+            raise HTTPException(status_code=400, detail="No protocol changes since the last published version.")
+        summary = R._s(body.get("summary"), 300)
+        rationale = R._s(body.get("rationale"), 2000)
+        if not summary or not rationale:
+            raise HTTPException(status_code=400, detail="Give a one-line summary and the rationale for the amendment.")
+        new_v = R.bump_version(versions[-1]["version"]) if raise_if_clean else versions[-1]["version"]
+        if raise_if_clean:
+            versions.append({"version": new_v, "published_at": R.now_iso(), "published_by": user.get("name", ""), "published_by_id": user["_id"],
+                             "summary": summary, "rationale": rationale, "changes": changes, "iec_amendment_ref": R._s(body.get("iec_amendment_ref"), 80),
+                             "snapshot": R.protocol_snapshot(st)})
+        update = {"$set": {"protocol_version": new_v, "protocol_versions": versions, "updated_at": R.now_iso()}}
+        _audit(update, user, "amendment_published", f"v{new_v}: {summary}", rationale)
+        await db.research_studies.update_one({"_id": st["_id"]}, update)
+        for uid in {m["user_id"] for m in st.get("members", [])} - {user["_id"]}:
+            await _notify(uid, f"Protocol amendment v{new_v} published for {st['code']}: {summary}", study_id)
+        return await list_amendments(study_id, user)
+
+    # ------------------------------------------------------------ blinded measurement queue
+    @router.get("/studies/{study_id}/blind-queue")
+    async def blind_queue(study_id: str, user: dict = Depends(get_current_user)):
+        """Radiographs of the study in a per-examiner shuffled order, without patient, subject or timepoint labels."""
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        _require(st, user, DATA_ROLES, "Only investigators / data collectors measure radiographs.")
+        vars_by_key = {v["key"]: v for v in st.get("variables", [])}
+        tps = {t["key"]: t for t in st.get("timepoints", [])}
+        items = []
+        async for e in db.research_enrolments.find({"study_id": study_id, "status": {"$in": ["enrolled", "active", "completed"]}}):
+            for f in e.get("forms", []):
+                tp = tps.get(f["timepoint_key"])
+                if not tp:
+                    continue
+                mm_vars = [vars_by_key[k] for k in tp["variables"] if k in vars_by_key and vars_by_key[k]["source"] == "study"
+                           and vars_by_key[k]["data_type"] in ("decimal", "integer") and (vars_by_key[k].get("unit") or "").lower() == "mm"]
+                for slot, asset in (f.get("images") or {}).items():
+                    if not mm_vars:
+                        continue
+                    measured = set((asset.get("measurements") or {}).keys())
+                    items.append({"enrolment_id": str(e["_id"]), "timepoint_key": f["timepoint_key"], "slot": slot,
+                                  "image": {k: asset.get(k) for k in ("width", "height", "quality_grade", "calibration", "measurements", "source", "uploaded_at", "image_id")},
+                                  "variables": mm_vars, "locked": bool(f.get("locked_at")),
+                                  "pending": [v["key"] for v in mm_vars if v["key"] not in measured],
+                                  "implant_length": None})
+        # Stable shuffle per examiner so the order survives refreshes but differs between examiners.
+        seed = int(hashlib.sha256(f"{study_id}:{user['_id']}".encode()).hexdigest(), 16)
+        random.Random(seed).shuffle(items)
+        for i, it in enumerate(items, 1):
+            it["blind_label"] = f"Image {i:02d}"
+            it["position"] = i
+        return {"total": len(items), "pending": sum(1 for i in items if i["pending"] and not i["locked"]), "items": items}
+
+    # ------------------------------------------------------------ visit reminders
+    @router.post("/reminders/run")
+    async def run_reminders_now(user: dict = Depends(get_current_user)):
+        _deny_nurse(user)
+        if user.get("role") not in FACULTY_ADMIN and not await db.research_studies.find_one({"pi_user_id": user["_id"]}):
+            raise HTTPException(status_code=403, detail="Only faculty or a study PI can trigger reminders.")
+        return await run_visit_reminders(db)
 
     @router.get("/my-tasks")
     async def my_tasks(user: dict = Depends(get_current_user)):

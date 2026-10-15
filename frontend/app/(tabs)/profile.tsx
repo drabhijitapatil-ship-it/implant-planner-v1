@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import BackToDashboard from '../../components/BackToDashboard';
 import AssistantLogbookCard from '../../components/AssistantLogbookCard';
+import { requestCoachTour } from '../../components/CoachMarks';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function ProfileScreen() {
@@ -241,6 +242,16 @@ export default function ProfileScreen() {
           >
             <Ionicons name="stats-chart-outline" size={22} color="#1565C0" />
             <Text style={styles.legalRowText}>Analytics guide</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.legalRow}
+            onPress={() => { router.push('/(tabs)/dashboard'); requestCoachTour(); }}
+            data-testid="link-replay-tour"
+            testID="link-replay-tour"
+          >
+            <Ionicons name="walk-outline" size={22} color="#1565C0" />
+            <Text style={styles.legalRowText}>Replay app tour</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
           <TouchableOpacity

@@ -3,7 +3,7 @@
  * enrolled cases, team. Deeper editors live on sibling routes.
  */
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, RefreshControl, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, StyleSheet, RefreshControl, TextInput, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
@@ -74,6 +74,15 @@ export default function StudyDetail() {
   const isGuide = (study as any).guide_user_id === user?.id;
   const needsGuide = (study as any).needs_guide_approval;
   const otherChecklistOk = study.activation_checklist.filter(i => i.label !== 'Guide approval recorded').every(i => i.ok);
+  const protocolVersion: string = (study as any).protocol_version || '1.0';
+  const pendingChanges: string[] = (study as any).protocol_pending_changes || [];
+  const reminders = (study as any).reminders || { enabled: true, days_before: 3, overdue_repeat_days: 7, notify_guide_overdue: false };
+  const saveReminders = async (patch: any) => {
+    const next = { ...reminders, ...patch };
+    setStudy(st => (st ? { ...st, reminders: next } as any : st));
+    try { const r = await api.put(`/research/studies/${id}`, { reminders: next }); setStudy(r.data); }
+    catch (e) { Alert.alert('Not saved', errText(e)); load(); }
+  };
 
   const NavRow = ({ icon, label, sub, route, count }: { icon: IoniconsIconName; label: string; sub: string; route: string; count?: number }) => (
     <TouchableOpacity style={s.navRow} onPress={() => router.push(route as any)} testID={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}>
@@ -168,12 +177,52 @@ export default function StudyDetail() {
                 <NavRow icon="search-outline" label="Screen & enrol cases" sub="Retrospective pull of your cases with per-rule pass / fail / needs-review." route={`/research/${id}/screening`} />
               )}
               <NavRow icon="flag-outline" label="Data queries" sub="Flagged values and their resolution threads." route={`/research/${id}/queries`} />
+              {study.status !== 'draft' && canEnterData && (
+                <NavRow icon="eye-off-outline" label="Blinded measurement" sub="Shuffled radiographs without patient or timepoint labels — measure bone levels without bias." route={`/research/${id}/blind-queue`} />
+              )}
+              {study.status !== 'draft' && (
+                <NavRow icon="git-compare-outline" label="Protocol amendments" sub={pendingChanges.length ? `${pendingChanges.length} unpublished change${pendingChanges.length === 1 ? '' : 's'} since v${protocolVersion} — publish v${nextMinor(protocolVersion)} with a reason.` : `Protocol v${protocolVersion} · version history and change notes.`} route={`/research/${id}/amendments`} count={pendingChanges.length || undefined} />
+              )}
               <NavRow icon="school-outline" label="Synopsis / dissertation" sub="University-format DOCX & PDF with methods and criteria generated from the protocol." route={`/research/${id}/synopsis`} />
               <NavRow icon="stats-chart-outline" label="Results & export" sub="Recruitment flow, follow-up compliance, descriptive statistics, de-identified CSV." route={`/research/${id}/results`} />
               {isPI && (
                 <NavRow icon="shield-checkmark-outline" label="Ethics & consent" sub={study.iec_ref ? `IEC ${study.iec_ref} · consent ${study.consent_form_version || '—'}` : 'IEC reference, approval date, consent form version, CTRI.'} route={`/research/${id}/ethics`} />
               )}
             </Card>
+
+            {isPI && study.status !== 'draft' && (
+              <Card testID="reminders-card">
+                <SectionTitle title="Visit reminders" icon="alarm-outline" right={<Switch value={!!reminders.enabled} onValueChange={v => saveReminders({ enabled: v })} testID="reminders-enabled" />} />
+                <Text style={u.kv}>Data collectors are alerted when a visit window is about to open and while it is open; you{reminders.notify_guide_overdue ? ' and the guide' : ''} are alerted when forms go overdue (repeated every {reminders.overdue_repeat_days} days until done).</Text>
+                {reminders.enabled && (
+                  <>
+                    <Text style={[u.label, { marginTop: 10 }]}>Alert collectors before the window opens</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {[0, 1, 3, 7, 14].map(d => (
+                        <TouchableOpacity key={d} onPress={() => saveReminders({ days_before: d })} style={[u.pill, reminders.days_before === d && { backgroundColor: RC.primary, borderColor: RC.primary }]} testID={`reminder-days-${d}`}>
+                          <Text style={[u.pillTxt, reminders.days_before === d && { color: '#FFF' }]}>{d === 0 ? 'On the day' : `${d} day${d === 1 ? '' : 's'}`}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <Text style={[u.label, { marginTop: 10 }]}>Repeat overdue alerts every</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {[3, 7, 14, 30].map(d => (
+                        <TouchableOpacity key={d} onPress={() => saveReminders({ overdue_repeat_days: d })} style={[u.pill, reminders.overdue_repeat_days === d && { backgroundColor: RC.primary, borderColor: RC.primary }]} testID={`reminder-repeat-${d}`}>
+                          <Text style={[u.pillTxt, reminders.overdue_repeat_days === d && { color: '#FFF' }]}>{d} days</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {!!(study as any).guide_user_id && (
+                      <TouchableOpacity style={[u.row, { marginTop: 10 }]} onPress={() => saveReminders({ notify_guide_overdue: !reminders.notify_guide_overdue })} testID="reminder-guide-toggle">
+                        <Ionicons name={reminders.notify_guide_overdue ? 'checkbox' : 'square-outline'} size={20} color={RC.primary} />
+                        <Text style={[u.kv, { marginLeft: 6, marginTop: 0 }]}>Also notify the guide ({(study as any).guide_name}) about overdue forms</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+                {!!(study as any).last_reminder_run && <Text style={[u.hint, { marginTop: 8 }]}>Last reminder check: {String((study as any).last_reminder_run).slice(0, 16).replace('T', ' ')} UTC · runs every 6 hours.</Text>}
+              </Card>
+            )}
 
             {isPI && (
               <Card>
@@ -195,6 +244,15 @@ export default function StudyDetail() {
           <>
             {!protocolEditable && <Text style={s.notice}>{isPI ? 'Protocol is locked.' : 'Only the PI edits the protocol — read-only view.'}</Text>}
             {study.status === 'active' && protocolEditable && <Text style={s.notice}>Active protocol: you can add variables/timepoints but not remove or rename them (BR-06).</Text>}
+            {study.status !== 'draft' && (
+              <TouchableOpacity style={[s.versionBar, pendingChanges.length > 0 && { backgroundColor: RC.amberSoft, borderColor: '#FFE0B2' }]} onPress={() => router.push(`/research/${id}/amendments`)} testID="protocol-version-bar">
+                <Ionicons name="git-compare-outline" size={16} color={pendingChanges.length ? RC.amber : RC.primary} />
+                <Text style={[s.versionTxt, pendingChanges.length > 0 && { color: RC.amber }]}>
+                  Protocol v{protocolVersion}{pendingChanges.length ? ` · ${pendingChanges.length} unpublished change${pendingChanges.length === 1 ? '' : 's'} — publish amendment` : ' · published'}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={RC.muted} />
+              </TouchableOpacity>
+            )}
             <Card>
               <SectionTitle title="Eligibility" icon="funnel-outline" right={protocolEditable ? <EditBtn onPress={() => router.push(`/research/${id}/eligibility`)} testID="edit-eligibility" /> : null} />
               {study.eligibility.length === 0 ? <Text style={u.kv}>No rules yet.</Text> : study.eligibility.map((r, i) => (
@@ -312,6 +370,10 @@ export function sourceColor(src: string) {
   if (src === 'derived') return { c: RC.purple, b: RC.purpleSoft };
   return { c: RC.green, b: RC.greenSoft };
 }
+function nextMinor(v: string) {
+  const [a, b] = (v || '1.0').split('.');
+  return `${Number(a) || 1}.${(Number(b) || 0) + 1}`;
+}
 export function describeQuery(q: any, study?: { variables: any[] }, registry?: Record<string, string>): string {
   if (!q || typeof q !== 'object') return '';
   if (q.all) return '(' + q.all.map((c: any) => describeQuery(c, study, registry)).join(' AND ') + ')';
@@ -324,6 +386,8 @@ export function describeQuery(q: any, study?: { variables: any[] }, registry?: R
 }
 
 const s = StyleSheet.create({
+  versionBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 14, marginTop: 12, backgroundColor: RC.primarySoft, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#BBDEFB', minHeight: 44 },
+  versionTxt: { flex: 1, marginLeft: 8, fontSize: 12, fontWeight: '700', color: RC.primary },
   guideBox: { backgroundColor: '#FAF5FC', borderRadius: 10, padding: 10, marginTop: 10, borderWidth: 1, borderColor: '#E1BEE7' },
   guideComment: { fontSize: 12, color: RC.red, marginTop: 6, fontStyle: 'italic' },
   question: { fontSize: 14, color: RC.text, lineHeight: 20, fontStyle: 'italic' },

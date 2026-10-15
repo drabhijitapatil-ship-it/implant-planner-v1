@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Tabs, useRouter, router } from 'expo-router';
 import Ionicons, { type IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import {
@@ -11,6 +11,7 @@ import {
   Platform,
   Image,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -18,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePushNotifications } from '../../utils/usePushNotifications';
 import ImplantIcon from '../../components/ImplantIcon';
+import CoachMarks, { type CoachStep, type Rect4, hasSeenCoachTour, markCoachTourSeen, onCoachTourRequest } from '../../components/CoachMarks';
 import api from '../../utils/api';
 
 // ── Tile-Grid Menu ──────────────────────────────────────────
@@ -472,6 +474,40 @@ export default function TabsLayout() {
 
   const roleName = (role || '').replace(/_/g, ' ');
 
+  // ── Coach-mark tour (3 steps, once per user after first login; replay from Profile → Help) ──
+  const { width: winW, height: winH } = useWindowDimensions();
+  const tabInsets = useSafeAreaInsets();
+  const hamburgerRef = useRef<any>(null);
+  const [tourVisible, setTourVisible] = useState(false);
+  const [menuRect, setMenuRect] = useState<Rect4 | null>(null);
+  const openTour = useCallback(() => {
+    const show = () => setTourVisible(true);
+    const node = hamburgerRef.current;
+    if (node?.measureInWindow) {
+      node.measureInWindow((x: number, y: number, w: number, h: number) => { if (w && h) setMenuRect({ x, y, w, h }); show(); });
+    } else show();
+  }, []);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    hasSeenCoachTour(user.id).then(seen => {
+      if (seen || cancelled) return;
+      setTimeout(() => { if (!cancelled) openTour(); }, 1400);
+    });
+    return () => { cancelled = true; };
+  }, [user?.id, openTour]);
+  useEffect(() => onCoachTourRequest(() => setTimeout(openTour, 400)), [openTour]);
+  const finishTour = () => { setTourVisible(false); if (user?.id) markCoachTourSeen(user.id); };
+  const tabBarH = 70 + tabInsets.bottom;
+  const tourSteps: CoachStep[] = [
+    { icon: 'grid-outline', title: 'Everything starts in the menu', rect: menuRect, radius: 12,
+      body: isNurse ? 'Tap the grid to reach your profile, the discussion forum and help.' : 'Tap the grid for Research, Analytics, the Forum, Archived cases, your profile and help guides.' },
+    { icon: 'albums-outline', title: 'Your daily workflow', rect: { x: 0, y: winH - tabBarH, w: winW, h: tabBarH }, radius: 0,
+      body: isNurse ? 'Home shows today\'s schedule; Cases lists every case you assist; Alerts keeps you up to date.' : 'Home → New case → Implant selection → Cases → Alerts. Create a case, pick the implant, then follow it through each phase and approval.' },
+    { icon: 'sparkles-outline', title: 'Ask Implanr AI', rect: { x: winW - 18 - 56, y: winH - tabBarH - 24 - 56, w: 56, h: 56 }, radius: 28,
+      body: 'Stuck on a protocol, a complication or where a feature lives? The floating assistant on Home answers from your cases and the app\'s guides.' },
+  ];
+
   const handleNavigate = (route: string) => {
     setTimeout(() => router.push(route as any), 100);
   };
@@ -484,6 +520,7 @@ export default function TabsLayout() {
   // What's-new entries (cleared on ack via GET /whatsnew returning empty).
   const HeaderLeft = () => (
     <TouchableOpacity
+      ref={hamburgerRef}
       onPress={() => { tapLight(); setDrawerOpen(true); }}
       style={{ marginLeft: 14 }}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -641,6 +678,7 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
+      <CoachMarks visible={tourVisible} steps={tourSteps} onDone={finishTour} />
     </>
   );
 }

@@ -1,0 +1,33 @@
+{
+  "summary": "Research Phase 2 end-to-end validation: Backend pytest `test_research_phase2.py` 6/6 PASS and `test_research_module.py` 5/6 PASS (1 pre-existing seeded-data drift, not related to Phase 2). Backend edge cases verified via curl: non-member student → 403 on GET /blind-queue, GET /amendments, POST /studies/{id}/amendments and POST /reminders/run. Frontend A–F all working. A: Coach tour triggers after login once localStorage key cleared, shows 3 correct steps (Everything starts in the menu → Your daily workflow → Ask Implanr AI), Next advances, Got it closes, tour does NOT reappear after reload, Profile → Help → Replay app tour re-opens it on dashboard. B: Study detail (CBL-IMM-MXA) overview shows Blinded measurement & Protocol amendments NavRows (sub text 'Protocol v1.0 · version history and change notes.'); reminders-card with reminders-enabled Switch and all pills reminder-days-{0,1,3,7,14} + reminder-repeat-{3,7,14,30}; tapping reminder-days-7 persists (verified via GET /api/research/studies/{id} → reminders.days_before=7). Protocol tab shows protocol-version-bar 'Protocol v1.0 · published' routing to amendments page. C: Blinded queue header 'Blinded measurement', filter pills, blind-item-1/2 with 'Image 01/02' and NO subject or patient data; tapping blind-item-1 opens modal with rx-blind-banner, header 'Image 01 · 1/2', content 'Grade A · DICOM · 50.00 px/mm', '1 · Calibrate ✓' and '2 · Measure' active; measuring Bone level mesial + save → queue reload shows 'Image 01: 1/4 variables measured, 3 pending'. D: Amendments page shows chip 'v1.0', pending card 'Unpublished changes (0)', version-1.0 row 'Initial protocol (activation)'. Adding pes_score (Whole number) via Variables → amendments shows pending-change-0 'Variable added: Pink esthetic score (pes_score)'; filling summary+rationale and tapping publish-amendment produced success, chip became v1.1, version-1.1 row with summary present, pending back to 0, and study overview shows 'Protocol v1.1'. E: POST /api/research/reminders/run as admin returned {'studies':1,'upcoming':0,'due':0,'overdue':0,'notifications':0} — no notifications generated because no forms are in window today (as the review request allowed; nothing to force). F: Research home auto-opens guide with 'v1.1 · June 2026'; section titles 'Radiographs and bone-level measurement' and 'Changing, pausing and closing a study' present (DICOM/blinded/amendment copy is inside collapsed sections and verified in /app/frontend/constants/researchGuide.ts).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "pytest tests/test_research_module.py::test_candidates_enrol_form_dashboard_export", "issue": "Pre-existing test assertion mismatch: expects subject_code 'T48900-P001-I01' but seeded demo now returns 'CBL-IMM-MXA-P001-I01' — unrelated to Phase 2 (seed drift from the demo study). Not touched per review-request instruction to not purge research data."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_research_phase2.py",
+    "/app/backend/tests/test_research_module.py"
+  ],
+  "action_items": [
+    "Optional: refresh test_research_module.py expected subject_code to match current demo study (or ignore — tests pass against a freshly seeded non-demo study).",
+    "E (visit reminders → notifications) could not be observed end-to-end because the seeded enrolments have no forms in the current window; schedule a window-open or overdue scenario to visualise purple 'research_visit' notifications in Alerts."
+  ],
+  "critical_code_review_comments": [
+    "RadiographMeasure default `mode` ('calibrate' or 'measure') is state-dependent — on a brand-new DICOM asset the modal auto-opens in Measure mode because pxPerMm is already set from DICOM, which means the testable `rx-dicom-cal` box is only visible after manually switching to Calibrate. Not a bug (works per spec), but reviewers scripting a strict 'open modal → see rx-dicom-cal' flow need to click `rx-mode-calibrate` first."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "95% (11/12 pytest + 4/4 edge-case curls)", "frontend": "100% of flows A–D & F (E not forceable)"},
+  "seed_data_creation": "Added one study variable 'pes_score' (Pink esthetic score, Whole number) to study 6ad07eb890c380516294b7d8 and published protocol amendment v1.1 with summary 'Add PES score variable' / rationale 'Capture esthetic outcomes'. Study is now at protocol_version 1.1 as instructed by the review request. Also set reminders.days_before=7 on this study while testing the pills (reminder-days-7 selected). Did NOT delete or archive the demo study or its enrolments.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Study 6ad07eb890c380516294b7d8 (CBL-IMM-MXA) is now at protocol v1.1 (published during this run), has 27 variables including the newly-added study-specific pes_score (Whole number), and 2 enrolments with DICOM baseline radiographs. reminders.days_before=7, reminders.overdue_repeat_days=7, enabled=true. The coach-tour localStorage key is user-scoped (coach_tour_seen_<userId>); clear any key starting with 'coach_tour_seen_' and reload to force the 3-step tour. Image 01 in the blind queue now has 1 of 4 variables measured (Bone level mesial), 3 pending. Any future Phase-3 testing can rely on these fixtures. If re-running the amendment test, pick a different variable key (e.g. pes_score_v2) because pes_score is already in the active protocol.",
+  "rca_of_issue": "N/A — no blocking bug found in Phase 2 for the areas tested."
+}

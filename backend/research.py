@@ -12,6 +12,7 @@ Studies live in db.research_studies, enrolments in db.research_enrolments
 """
 from __future__ import annotations
 
+import copy
 import io
 import math
 import re
@@ -681,6 +682,54 @@ PROTOCOL_KEYS = ("eligibility", "variables", "timepoints", "research_question", 
 
 
 # --------------------------------------------------------------------------
+# Protocol versions / amendments
+# --------------------------------------------------------------------------
+def protocol_snapshot(study: dict) -> dict:
+    return {k: copy.deepcopy(study.get(k)) for k in PROTOCOL_KEYS}
+
+
+def bump_version(v: str) -> str:
+    try:
+        major, minor = (str(v or "1.0").split(".") + ["0"])[:2]
+        return f"{int(major)}.{int(minor) + 1}"
+    except Exception:
+        return "1.1"
+
+
+def protocol_diff(old: dict, new: dict) -> list[str]:
+    """Human-readable list of what changed between two protocol snapshots."""
+    old, new = old or {}, new or {}
+    out: list[str] = []
+    for k, label in (("title", "Title"), ("research_question", "Research question"), ("study_type", "Study design"), ("target_n", "Target sample size")):
+        if (old.get(k) or "") != (new.get(k) or ""):
+            out.append(f"{label} changed" + (f": {old.get(k)} → {new.get(k)}" if k in ("target_n", "study_type") else ""))
+    if sorted(old.get("primary_units") or []) != sorted(new.get("primary_units") or []):
+        out.append(f"Unit of analysis: {', '.join(old.get('primary_units') or ['—'])} → {', '.join(new.get('primary_units') or ['—'])}")
+    for coll, label in (("variables", "Variable"), ("timepoints", "Timepoint")):
+        o = {x["key"]: x for x in old.get(coll) or []}
+        n = {x["key"]: x for x in new.get(coll) or []}
+        for key in n.keys() - o.keys():
+            out.append(f"{label} added: {n[key].get('label')} ({key})")
+        for key in o.keys() - n.keys():
+            out.append(f"{label} removed: {o[key].get('label')} ({key})")
+        for key in o.keys() & n.keys():
+            if o[key] != n[key]:
+                changed = [f for f in n[key] if n[key].get(f) != o[key].get(f)]
+                out.append(f"{label} edited: {n[key].get('label')} ({key}) — {', '.join(changed)}")
+    def _rule_txt(r):
+        return f"{r.get('kind')}: " + (describe_condition(r.get("query")) if r.get("mode") == "query" else str(r.get("checklist_text")))
+    o_rules = [_rule_txt(r) for r in old.get("eligibility") or []]
+    n_rules = [_rule_txt(r) for r in new.get("eligibility") or []]
+    for r in n_rules:
+        if r not in o_rules:
+            out.append(f"Eligibility rule added — {r}")
+    for r in o_rules:
+        if r not in n_rules:
+            out.append(f"Eligibility rule removed — {r}")
+    return out
+
+
+# --------------------------------------------------------------------------
 # Schedule engine
 # --------------------------------------------------------------------------
 def build_forms(study: dict, proc: dict, implant: Optional[dict], enrolled_at: str, existing: Optional[list] = None,
@@ -1174,5 +1223,52 @@ def build_synopsis_pdf(st: dict, dash: Optional[dict] = None) -> bytes:
     t = Table(rows, repeatRows=1)
     t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.grey), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E3F2FD")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(t)
+    doc.build(story)
+    return buf.getvalue()
+
+
+# --------------------------------------------------------------------------
+# User guide PDF — rendered from the structured content the app ships
+# --------------------------------------------------------------------------
+def build_guide_pdf(version: str, sections: list[dict]) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, ListFlowable, ListItem
+    from xml.sax.saxutils import escape
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm, bottomMargin=18 * mm,
+                            title="Implanr Research Module — User Guide")
+    ss = getSampleStyleSheet()
+    body = ParagraphStyle("b", parent=ss["Normal"], fontSize=10, leading=14, spaceAfter=4)
+    small = ParagraphStyle("s", parent=body, fontSize=8.5, leading=11)
+    h1 = ParagraphStyle("h1", parent=ss["Heading1"], fontSize=14, spaceBefore=12, spaceAfter=4, textColor=colors.HexColor("#1A2332"))
+    tip = ParagraphStyle("tip", parent=body, backColor=colors.HexColor("#FFF3E0"), borderPadding=5, textColor=colors.HexColor("#7A4100"))
+    later = ParagraphStyle("later", parent=small, backColor=colors.HexColor("#F3E5F5"), borderPadding=4, textColor=colors.HexColor("#6A1B9A"))
+    story = [Paragraph("Implanr Research Module — User Guide", ParagraphStyle("t", parent=ss["Title"], fontSize=20)),
+             Paragraph(escape(f"{version} · generated {today().isoformat()} · reflects the released app"), ParagraphStyle("c", parent=small, alignment=1)), Spacer(1, 8),
+             Paragraph("Contents", h1)]
+    story += [Paragraph(escape(f"{i + 1}. {s.get('title', '')}"), body) for i, s in enumerate(sections)]
+    for i, s in enumerate(sections):
+        story.append(Paragraph(escape(f"{i + 1}. {s.get('title', '')}"), h1))
+        for b in s.get("blocks", []):
+            t = b.get("type")
+            if t == "p":
+                story.append(Paragraph(escape(b.get("text", "")), body))
+            elif t == "tip":
+                story.append(Paragraph("Tip: " + escape(b.get("text", "")), tip)); story.append(Spacer(1, 4))
+            elif t == "later":
+                story.append(Paragraph("Coming in a later version — " + escape(b.get("text", "")), later)); story.append(Spacer(1, 4))
+            elif t in ("steps", "bullets"):
+                story.append(ListFlowable([ListItem(Paragraph(escape(x), body), leftIndent=12) for x in b.get("items", [])],
+                                          bulletType="1" if t == "steps" else "bullet", start="1" if t == "steps" else None, leftIndent=14, bulletFontSize=9))
+            elif t == "table":
+                cols = b.get("columns", [])
+                data = [[Paragraph(f"<b>{escape(str(c))}</b>", small) for c in cols]] + [[Paragraph(escape(str(c)), small) for c in r] for r in b.get("rows", [])]
+                tbl = Table(data, repeatRows=1, colWidths=[(doc.width) / max(1, len(cols))] * len(cols))
+                tbl.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CFD8DC")), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E3F2FD")),
+                                         ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
+                story.append(tbl); story.append(Spacer(1, 6))
     doc.build(story)
     return buf.getvalue()
