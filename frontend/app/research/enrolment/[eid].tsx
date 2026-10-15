@@ -55,10 +55,10 @@ export default function FormEntry() {
   const vars: Record<string, Variable> = Object.fromEntries(study.variables.map((v: Variable) => [v.key, v]));
   const tpDef = study.timepoints.find((t: any) => t.key === tpKey);
   const keys: string[] = tpDef?.variables || [];
-  const isPI = study.my_roles.includes('pi') || study.my_roles.includes('admin');
-  const canEdit = ['pi', 'admin', 'co_investigator', 'data_collector'].some(r => study.my_roles.includes(r)) && study.status !== 'data_locked' && ['enrolled', 'active', 'completed'].includes(enr.status);
+  const isPI = study.my_roles.includes('pi');
+  const canEdit = ['pi', 'co_investigator', 'data_collector'].some(r => study.my_roles.includes(r)) && study.status !== 'data_locked' && ['enrolled', 'active', 'completed'].includes(enr.status);
   const locked = !!form.locked_at;
-  const canRaise = ['pi', 'admin', 'guide', 'statistician'].some(r => study.my_roles.includes(r));
+  const canRaise = ['pi', 'guide', 'statistician'].some(r => study.my_roles.includes(r));
   const formQueries = queries.filter(q => q.timepoint_key === tpKey);
   const hasMmVars = keys.some(k => vars[k]?.source === 'study' && (vars[k].unit || '').toLowerCase() === 'mm');
   const raiseQuery = async () => {

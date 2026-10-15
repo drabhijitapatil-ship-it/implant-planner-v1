@@ -26,7 +26,7 @@ export default function StudyQueries() {
 
   if (!study || !queries) return <Loading />;
   const roles: string[] = study.my_roles;
-  const canReopen = ['pi', 'admin', 'guide', 'statistician'].some(r => roles.includes(r));
+  const canReopen = ['pi', 'guide', 'statistician'].some(r => roles.includes(r));
   const list = queries.filter(q => filter === 'all' || q.status === filter);
   const count = (st: string) => queries.filter(q => q.status === st).length;
 
@@ -38,7 +38,7 @@ export default function StudyQueries() {
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 60 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
         {list.length === 0 ? <Empty icon="flag-outline" title="No queries" body="Guides, statisticians and the PI can flag a value from any form; data collectors answer here or on the form." /> :
-          list.map(q => <QueryThread key={q.id} q={q} compact canClose={roles.includes('pi') || roles.includes('admin') || q.raised_by_id === study.pi_user_id} canReopen={canReopen}
+          list.map(q => <QueryThread key={q.id} q={q} compact canClose={roles.includes('pi') || q.raised_by_id === study.pi_user_id} canReopen={canReopen}
             onChanged={nq => setQueries(qs => qs!.map(x => (x.id === nq.id ? nq : x)))} />)}
       </ScrollView>
     </SafeAreaView>

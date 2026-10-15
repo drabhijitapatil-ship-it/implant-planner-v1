@@ -42,7 +42,7 @@ export default function Screening() {
 
   if (!data || !study) return <Loading />;
   const checklist = study.eligibility.filter((r: any) => r.mode === 'checklist');
-  const isPI = study.my_roles.includes('pi') || study.my_roles.includes('admin');
+  const isPI = study.my_roles.includes('pi');
   const rows = data.rows.filter((r: any) => filter === 'all' || r.decision === filter);
 
   const openSheet = (row: any, m: 'enrol' | 'exclude') => {

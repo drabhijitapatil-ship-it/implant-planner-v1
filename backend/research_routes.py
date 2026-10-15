@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import json
 import math
 import random
 import uuid
@@ -18,7 +19,7 @@ from typing import Any, Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 import research as R
 from research_reminders import sanitize_reminders, run_visit_reminders, DEFAULTS as REMINDER_DEFAULTS
@@ -52,8 +53,8 @@ def build_router(db, get_current_user, user_from_token=None):
         roles = {m["role"] for m in study.get("members", []) if m.get("user_id") == user["_id"]}
         if study.get("pi_user_id") == user["_id"]:
             roles.add("pi")
-        if user.get("role") in FACULTY_ADMIN:
-            roles.add("admin")
+        if not roles and user.get("role") in FACULTY_ADMIN:
+            roles.add("observer")  # Admin / Implant In-charge oversight: read-only until added to the team
         return roles
 
     def _can_view(study, user):
@@ -61,7 +62,7 @@ def build_router(db, get_current_user, user_from_token=None):
 
     def _require(study, user, allowed: tuple, msg: str):
         roles = _member_roles(study, user)
-        if "admin" in roles or roles & set(allowed):
+        if roles & set(allowed):
             return roles
         raise HTTPException(status_code=403, detail=msg)
 
@@ -83,14 +84,36 @@ def build_router(db, get_current_user, user_from_token=None):
             return {"$or": [{"supervisor_id": user["_id"]}, {"created_by_id": user["_id"]}]}
         return {"_id": None}
 
-    def _audit(study_update: dict, user: dict, action: str, detail: str = "", reason: str = ""):
-        study_update.setdefault("$push", {})["audit_log"] = {
+    def _audit(study_update: dict, user: dict, action: str, detail: str = "", reason: str = "", changes: Optional[list] = None):
+        entry = {
             "action": action, "detail": detail[:400], "reason": reason[:400],
             "by_id": user["_id"], "by_name": user.get("name", ""), "by_role": user.get("role", ""), "at": R.now_iso(),
         }
+        if changes:
+            entry["changes"] = changes[:60]
+        study_update.setdefault("$push", {})["audit_log"] = entry
 
-    def _study_summary(st: dict, counts: dict) -> dict:
+    def _field_changes(old: dict, new: dict) -> list:
+        """Before→after list for a study update. Protocol collections are summarised via protocol_diff."""
+        out = []
+        proto_old = {k: old.get(k) for k in R.PROTOCOL_KEYS}
+        proto_new = {**proto_old, **{k: v for k, v in new.items() if k in R.PROTOCOL_KEYS}}
+        for line in R.protocol_diff(proto_old, proto_new):
+            out.append({"field": "protocol", "summary": line})
+        for k, v in new.items():
+            if k in R.PROTOCOL_KEYS and k in ("eligibility", "variables", "timepoints"):
+                continue
+            if old.get(k) != v:
+                out.append({"field": k, "old": old.get(k), "new": v})
+        return out
+
+    def _study_summary(st: dict, counts: dict, user: Optional[dict] = None) -> dict:
+        roles = sorted(_member_roles(st, user)) if user else []
+        gr = st.get("guide_review") or {}
         return {
+            "my_roles": roles, "view_only": roles == ["observer"],
+            "guide_review_status": gr.get("status"),
+            "awaiting_my_approval": bool(user) and gr.get("status") == "pending" and st.get("guide_user_id") == user["_id"],
             "id": str(st["_id"]), "code": st.get("code"), "title": st.get("title"), "status": st.get("status"),
             "study_type": st.get("study_type"), "primary_unit": st.get("primary_unit"), "target_n": st.get("target_n"),
             "pi_name": st.get("pi_name"), "is_dissertation": st.get("is_dissertation", False),
@@ -190,7 +213,7 @@ def build_router(db, get_current_user, user_from_token=None):
         q: dict = {} if user["role"] in FACULTY_ADMIN else {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}]}
         studies = [s async for s in db.research_studies.find(q).sort("updated_at", -1)]
         counts = await _form_counts([s["_id"] for s in studies])
-        return [_study_summary(s, counts.get(str(s["_id"]), {})) for s in studies]
+        return [_study_summary(s, counts.get(str(s["_id"]), {}), user) for s in studies]
 
     @router.post("/studies")
     async def create_study(body: dict, user: dict = Depends(get_current_user)):
@@ -255,10 +278,15 @@ def build_router(db, get_current_user, user_from_token=None):
     async def update_study(study_id: str, body: dict, user: dict = Depends(get_current_user)):
         _deny_nurse(user)
         st = await _get_study(study_id, user)
-        _require(st, user, ("pi",), "Only the PI can edit the protocol.")
+        roles = _require(st, user, ("pi", "guide"), "Only the PI (or the guide, while the protocol is in draft) can edit the study.")
+        is_guide_edit = "pi" not in roles
+        if is_guide_edit and st.get("status") != "draft":
+            raise HTTPException(status_code=403, detail="After activation only the PI edits the protocol (via amendments).")
         if st.get("status") in ("data_locked", "archived"):
             raise HTTPException(status_code=400, detail="Study is locked/archived — protocol cannot be edited.")
         upd = _sanitize_study_fields(body, st)
+        if is_guide_edit and "reminders" in upd:
+            raise HTTPException(status_code=403, detail="Only the PI changes reminder settings.")
         if "code" in upd and upd["code"] != st.get("code"):
             if st.get("status") != "draft":
                 raise HTTPException(status_code=400, detail="Code cannot change after activation.")
@@ -275,12 +303,15 @@ def build_router(db, get_current_user, user_from_token=None):
         update: dict = {"$set": {**upd, "updated_at": R.now_iso()}}
         changed = ", ".join(sorted(upd.keys()))
         gr = st.get("guide_review") or {}
-        if R.needs_guide_approval(st) and st.get("status") == "draft" and gr.get("status") in ("pending", "approved") \
+        # A PI edit after submission re-opens the review; the guide's own edits do not (the guide is the approver).
+        if not is_guide_edit and R.needs_guide_approval(st) and st.get("status") == "draft" and gr.get("status") in ("pending", "approved") \
                 and any(k in upd and upd[k] != st.get(k) for k in R.PROTOCOL_KEYS):
             update["$set"]["guide_review"] = {**gr, "status": "not_submitted", "reset_reason": f"Protocol edited ({changed})", "reset_at": R.now_iso(),
                                               "history": (gr.get("history") or []) + [{"action": "reset_after_edit", "by": user.get("name", ""), "at": R.now_iso(), "detail": changed}]}
             update["$set"]["guide_approved_at"] = None
-        _audit(update, user, "protocol_updated", changed)
+        protocol_touched = any(k in upd for k in R.PROTOCOL_KEYS)
+        _audit(update, user, "protocol_updated" if protocol_touched else "study_updated", changed + (" (by guide)" if is_guide_edit else ""),
+               changes=_field_changes(st, upd))
         await db.research_studies.update_one({"_id": st["_id"]}, update)
         if st.get("status") != "draft" and "timepoints" in upd:
             await _reschedule_all(st["_id"])
@@ -290,7 +321,7 @@ def build_router(db, get_current_user, user_from_token=None):
     async def set_members(study_id: str, body: dict, user: dict = Depends(get_current_user)):
         _deny_nurse(user)
         st = await _get_study(study_id, user)
-        _require(st, user, ("pi",), "Only the PI (or admin) can manage the team.")
+        _require(st, user, ("pi",), "Only the PI can manage the team.")
         members, seen = [], set()
         for m in body.get("members") or []:
             uid, role = str(m.get("user_id") or ""), m.get("role")
@@ -312,8 +343,16 @@ def build_router(db, get_current_user, user_from_token=None):
         if R.needs_guide_approval(st) and (guide["user_id"] if guide else None) != st.get("guide_user_id") and gr.get("status") in ("pending", "approved", "changes_requested"):
             update["$set"]["guide_review"] = {**gr, "status": "not_submitted", "history": (gr.get("history") or []) + [{"action": "guide_changed", "by": user.get("name", ""), "at": R.now_iso()}]}
             update["$set"]["guide_approved_at"] = None
-        _audit(update, user, "members_updated", f"{len(members)} members")
+        old_set = {(m["user_id"], m["role"]) for m in st.get("members", [])}
+        new_set = {(m["user_id"], m["role"]) for m in members}
+        names = {m["user_id"]: m["name"] for m in members + st.get("members", [])}
+        team_changes = [{"field": "member_added", "new": f"{names.get(u, u)} as {r}"} for u, r in sorted(new_set - old_set)] + \
+                       [{"field": "member_removed", "old": f"{names.get(u, u)} as {r}"} for u, r in sorted(old_set - new_set)]
+        _audit(update, user, "members_updated", f"{len(members)} members · +{len(new_set - old_set)} / −{len(old_set - new_set)}", changes=team_changes)
         await db.research_studies.update_one({"_id": st["_id"]}, update)
+        for u, r in new_set - old_set:
+            if u != user["_id"]:
+                await _notify(u, f"You were added to research study {st['code']} as {r.replace('_', ' ')} by {user.get('name', '')}", study_id)
         return await get_study(study_id, user)
 
     @router.get("/users")
@@ -357,7 +396,7 @@ def build_router(db, get_current_user, user_from_token=None):
     async def guide_review(study_id: str, body: dict, user: dict = Depends(get_current_user)):
         _deny_nurse(user)
         st = await _get_study(study_id, user)
-        if st.get("guide_user_id") != user["_id"] and user.get("role") != "administrator":
+        if st.get("guide_user_id") != user["_id"]:
             raise HTTPException(status_code=403, detail="Only the assigned guide can review this protocol.")
         action, comments = body.get("action"), R._s(body.get("comments"), 2000)
         gr = st.get("guide_review") or {}
@@ -381,13 +420,15 @@ def build_router(db, get_current_user, user_from_token=None):
 
     def _can_see_iec_letter(st: dict, user: dict) -> bool:
         roles = _member_roles(st, user)
-        return bool(roles & {"pi", "guide", "admin"})
+        return bool(roles & {"pi", "guide", "observer"})
 
     @router.post("/studies/{study_id}/iec-letter")
     async def upload_iec_letter(study_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
         _deny_nurse(user)
         st = await _get_study(study_id, user)
-        _require(st, user, ("pi",), "Only the PI can upload the IEC approval letter.")
+        roles = _require(st, user, ("pi", "guide"), "Only the PI or guide can upload the IEC approval letter.")
+        if "pi" not in roles and st.get("status") != "draft":
+            raise HTTPException(status_code=403, detail="After activation only the PI manages ethics documents.")
         ctype = (file.content_type or "").lower()
         if ctype not in ("application/pdf", "image/jpeg", "image/png", "image/webp"):
             raise HTTPException(status_code=400, detail="Upload a PDF, JPG or PNG of the IEC approval letter.")
@@ -412,7 +453,9 @@ def build_router(db, get_current_user, user_from_token=None):
     async def delete_iec_letter(study_id: str, user: dict = Depends(get_current_user)):
         _deny_nurse(user)
         st = await _get_study(study_id, user)
-        _require(st, user, ("pi",), "Only the PI can remove the IEC approval letter.")
+        roles = _require(st, user, ("pi", "guide"), "Only the PI or guide can remove the IEC approval letter.")
+        if "pi" not in roles and st.get("status") != "draft":
+            raise HTTPException(status_code=403, detail="After activation only the PI manages ethics documents.")
         update = {"$set": {"iec_letter": None, "updated_at": R.now_iso()}}
         _audit(update, user, "iec_letter_removed")
         await db.research_studies.update_one({"_id": st["_id"]}, update)
@@ -580,7 +623,7 @@ def build_router(db, get_current_user, user_from_token=None):
         ev = R.evaluate_eligibility(st, proc, site["implant"])
         override = R._s(body.get("override_reason"), 400)
         if ev["overall"] != "eligible":
-            if "pi" not in _member_roles(st, user) and "admin" not in _member_roles(st, user):
+            if "pi" not in _member_roles(st, user):
                 raise HTTPException(status_code=400, detail=f"Case is '{ev['overall'].replace('_', ' ')}' — only the PI can override eligibility.")
             if not override:
                 raise HTTPException(status_code=400, detail="Eligibility is not fully met — an override reason is required.")
@@ -746,7 +789,7 @@ def build_router(db, get_current_user, user_from_token=None):
             raise HTTPException(status_code=404, detail="Timepoint not found")
         action = body.get("action", "save")
         reason = R._s(body.get("reason"), 400)
-        is_pi = bool(roles & {"pi", "admin"})
+        is_pi = "pi" in roles
         if form.get("locked_at") and action != "unlock":
             raise HTTPException(status_code=400, detail="Form is locked — PI must unlock it first.")
         if action == "unlock":
@@ -765,7 +808,7 @@ def build_router(db, get_current_user, user_from_token=None):
         vars_by_key = {v["key"]: v for v in st.get("variables", [])}
         values_in = body.get("values") or {}
         not_done_in = body.get("not_done") or {}
-        errors, warnings, new_values, new_not_done, patient_vals, changes = [], [], {}, {}, {}, []
+        errors, warnings, new_values, new_not_done, patient_vals, changes, all_changes = [], [], {}, {}, {}, [], []
         for key in tp["variables"]:
             var = vars_by_key.get(key)
             if not var or var["source"] != "study":
@@ -782,9 +825,13 @@ def build_router(db, get_current_user, user_from_token=None):
             if clean is not None:
                 (patient_vals if var["level"] == "patient" else new_values)[key] = clean
             old = (form.get("values") or {}).get(key)
-            if old != clean and form.get("completed_at"):
-                changes.append({"field": key, "old": old, "new": clean})
+            if old != clean:
+                all_changes.append({"field": var["label"], "old": old, "new": clean})
+                if form.get("completed_at"):
+                    changes.append({"field": key, "old": old, "new": clean})
         visit_date = R._to_date(body.get("visit_date"))
+        if (visit_date.isoformat() if visit_date else None) != form.get("visit_date"):
+            all_changes.append({"field": "Visit date", "old": form.get("visit_date"), "new": visit_date.isoformat() if visit_date else None})
         if body.get("visit_date") and not visit_date:
             errors.append("Visit date must be YYYY-MM-DD")
         if visit_date and visit_date > R.today():
@@ -842,15 +889,15 @@ def build_router(db, get_current_user, user_from_token=None):
             form["linked_snapshot"] = snap
             form["locked_at"], form["locked_by"], form["status"] = R.now_iso(), user.get("name", ""), "locked"
             audit_action = "form_locked"
-        return await _persist_form(st, e, form, user, audit_action, reason, warnings)
+        return await _persist_form(st, e, form, user, audit_action, reason, warnings, all_changes)
 
-    async def _persist_form(st, e, form, user, action, reason="", warnings=None):
+    async def _persist_form(st, e, form, user, action, reason="", warnings=None, changes=None):
         form.setdefault("protocol_version", st.get("protocol_version", "1.0"))  # data keeps the version it was collected under
         forms = [form if f["timepoint_key"] == form["timepoint_key"] else f for f in e["forms"]]
         new_status = "active" if any(f.get("completed_at") for f in forms) and e["status"] == "enrolled" else e["status"]
         await db.research_enrolments.update_one({"_id": e["_id"]}, {"$set": {"forms": forms, "status": new_status, "updated_at": R.now_iso()}})
         upd: dict = {"$set": {"updated_at": R.now_iso()}}
-        _audit(upd, user, action, f"{e['subject_code']} / {form['timepoint_key']}", reason)
+        _audit(upd, user, action, f"{e['subject_code']} / {form['timepoint_key']}", reason, changes=changes)
         await db.research_studies.update_one({"_id": st["_id"]}, upd)
         out = await get_enrolment(str(e["_id"]), user)
         out["warnings"] = warnings or []
@@ -863,7 +910,7 @@ def build_router(db, get_current_user, user_from_token=None):
         proc = await db.procedures.find_one({"_id": _oid(procedure_id), **_case_scope(user)})
         if not proc:
             raise HTTPException(status_code=404, detail="Case not found")
-        q = {} if user["role"] in FACULTY_ADMIN else {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}]}
+        q = {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}]}  # tasks only for real team members
         studies = {str(s["_id"]): s async for s in db.research_studies.find({**q, "status": "active"})}
         enrolled, eligible = [], []
         async for e in db.research_enrolments.find({"procedure_id": procedure_id}):
@@ -1257,11 +1304,11 @@ def build_router(db, get_current_user, user_from_token=None):
         setv: dict = {"updated_at": now}
         entry = {"by_id": user["_id"], "by": user.get("name", ""), "text": text, "at": now, "kind": action}
         if action == "close":
-            if not (roles & {"pi", "admin"}) and q["raised_by_id"] != user["_id"]:
+            if "pi" not in roles and q["raised_by_id"] != user["_id"]:
                 raise HTTPException(status_code=403, detail="Only the raiser or PI can close a query.")
             setv.update({"status": "closed", "closed_by": user.get("name", ""), "closed_at": now})
         elif action == "reopen":
-            if not (roles & {"pi", "admin", "guide", "statistician"}):
+            if not (roles & {"pi", "guide", "statistician"}):
                 raise HTTPException(status_code=403, detail="Only PI/guide/statistician can reopen.")
             setv["status"] = "open"
         elif action == "answer":
@@ -1340,7 +1387,7 @@ def build_router(db, get_current_user, user_from_token=None):
             v = e.get("protocol_version", "1.0"); enr_counts[v] = enr_counts.get(v, 0) + 1
         return {"current_version": st.get("protocol_version", "1.0"), "status": st.get("status"),
                 "versions": [{k: v for k, v in ver.items() if k != "snapshot"} | {"enrolments": enr_counts.get(ver["version"], 0)} for ver in versions],
-                "pending_changes": pending, "can_publish": "pi" in _member_roles(st, user) or "admin" in _member_roles(st, user)}
+                "pending_changes": pending, "can_publish": "pi" in _member_roles(st, user)}
 
     @router.get("/studies/{study_id}/amendments/{version}")
     async def get_amendment(study_id: str, version: str, user: dict = Depends(get_current_user)):
@@ -1430,10 +1477,76 @@ def build_router(db, get_current_user, user_from_token=None):
             raise HTTPException(status_code=403, detail="Only faculty or a study PI can trigger reminders.")
         return await run_visit_reminders(db)
 
+    # ------------------------------------------------------------ audit trail
+    AUDIT_GROUPS = {
+        "protocol": ("created", "protocol_updated", "study_updated", "status_changed", "amendment_published", "iec_letter_uploaded", "iec_letter_removed", "synopsis_updated"),
+        "team": ("members_updated", "submitted_to_guide", "guide_approve", "guide_request_changes"),
+        "data": ("enrolled", "enrolment_status", "form_saved", "form_completed", "form_locked", "form_unlocked", "form_edited_after_complete",
+                 "image_uploaded", "image_measured", "image_measured_blinded"),
+        "queries": ("query_raised", "query_reply", "query_closed", "query_reopened"),
+        "exports": ("export", "export_long", "export_wide", "synopsis_exported"),
+    }
+
+    def _audit_group(action: str) -> str:
+        for g, acts in AUDIT_GROUPS.items():
+            if action in acts or any(action.startswith(a) for a in acts):
+                return g
+        if action.startswith("query"):
+            return "queries"
+        if "export" in action:
+            return "exports"
+        if action.startswith("guide"):
+            return "team"
+        if action.startswith("form") or action.startswith("image") or "enrol" in action:
+            return "data"
+        return "protocol"
+
+    def _fmt_change(c: dict) -> str:
+        if c.get("summary"):
+            return c["summary"]
+        def _v(x):
+            if x is None or x == "":
+                return "—"
+            if isinstance(x, (dict, list)):
+                return json.dumps(x, ensure_ascii=False)[:120]
+            return str(x)[:120]
+        if "old" in c and "new" in c:
+            return f"{c['field']}: {_v(c['old'])} → {_v(c['new'])}"
+        if "new" in c:
+            return f"{c['field']}: {_v(c['new'])}"
+        return f"{c['field']}: {_v(c.get('old'))} removed"
+
+    @router.get("/studies/{study_id}/audit")
+    async def audit_trail(study_id: str, format: str = "json", group: Optional[str] = None, user: dict = Depends(get_current_user)):
+        """Every change made to the study by anyone — newest first. CSV for IEC / dissertation records."""
+        _deny_nurse(user)
+        st = await _get_study(study_id, user)
+        entries = []
+        for i, a in enumerate(st.get("audit_log") or []):
+            g = _audit_group(a.get("action", ""))
+            if group and g != group:
+                continue
+            entries.append({**a, "id": i, "group": g, "changes_text": [_fmt_change(c) for c in (a.get("changes") or [])]})
+        entries.sort(key=lambda x: x.get("at") or "", reverse=True)
+        counts: dict = {g: 0 for g in AUDIT_GROUPS}
+        for a in st.get("audit_log") or []:
+            counts[_audit_group(a.get("action", ""))] += 1
+        if format == "csv":
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["timestamp_utc", "group", "action", "by", "platform_role", "detail", "reason", "changes"])
+            for e in entries:
+                w.writerow([e.get("at"), e["group"], e.get("action"), e.get("by_name"), e.get("by_role"), e.get("detail"), e.get("reason"), " | ".join(e["changes_text"])])
+            await db.research_studies.update_one({"_id": st["_id"]}, {"$push": {"audit_log": {
+                "action": "audit_exported", "detail": f"{len(entries)} entries", "reason": "", "by_id": user["_id"], "by_name": user.get("name", ""), "by_role": user.get("role", ""), "at": R.now_iso()}}})
+            return Response(content=buf.getvalue(), media_type="text/csv",
+                            headers={"Content-Disposition": f"attachment; filename={st.get('code', 'study')}_audit_trail.csv"})
+        return {"study_code": st.get("code"), "total": len(entries), "counts": counts, "entries": entries}
+
     @router.get("/my-tasks")
     async def my_tasks(user: dict = Depends(get_current_user)):
         _deny_nurse(user)
-        q = {} if user["role"] in FACULTY_ADMIN else {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}]}
+        q = {"$or": [{"pi_user_id": user["_id"]}, {"members.user_id": user["_id"]}]}  # tasks only for real team members
         studies = {str(s["_id"]): s async for s in db.research_studies.find({**q, "status": "active"})}
         tasks = []
         async for e in db.research_enrolments.find({"study_id": {"$in": list(studies.keys())}, "status": {"$in": ["enrolled", "active"]}}):

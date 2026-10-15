@@ -74,6 +74,8 @@ export default function ResearchHome() {
           {item.due_now > 0 && <Chip label={`${item.due_now} due`} color={RC.primary} bg={RC.primarySoft} small />}
           {item.overdue > 0 && <View style={{ marginLeft: 6 }}><Chip label={`${item.overdue} overdue`} color={RC.amber} bg={RC.amberSoft} small /></View>}
           {item.is_dissertation && <View style={{ marginLeft: 6 }}><Chip label="Dissertation" color={RC.purple} bg={RC.purpleSoft} small /></View>}
+          {item.awaiting_my_approval && <View style={{ marginLeft: 6 }}><Chip label="Needs your approval" color={RC.purple} bg={RC.purpleSoft} small /></View>}
+          {item.view_only && <View style={{ marginLeft: 6 }}><Chip label="View only" color={RC.sub} bg={RC.greySoft} small /></View>}
         </View>
       </TouchableOpacity>
     );
@@ -106,6 +108,20 @@ export default function ResearchHome() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={RC.muted} />
           </TouchableOpacity>
+        {(() => { const approvals = studies.filter(st => st.awaiting_my_approval); return approvals.length > 0 ? (
+          <View style={[s.taskStrip, { borderColor: '#E1BEE7', backgroundColor: RC.purpleSoft }]} testID="guide-approvals-strip">
+            <View style={u.row}>
+              <Ionicons name="ribbon" size={16} color={RC.purple} />
+              <Text style={[s.taskTitle, { color: RC.purple }]}>  {approvals.length} protocol{approvals.length === 1 ? '' : 's'} awaiting your approval as guide</Text>
+            </View>
+            {approvals.map(st => (
+              <TouchableOpacity key={st.id} style={s.taskRow} onPress={() => router.push(`/research/${st.id}?tab=protocol`)} testID={`approve-row-${st.code}`}>
+                <Text style={s.taskTxt} numberOfLines={1}>{st.code} · {st.title} · PI {st.pi_name}</Text>
+                <Text style={[s.taskDue, { color: RC.purple }]}>Review →</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null; })()}
         {tasks.length > 0 ? (
           <View style={s.taskStrip} testID="research-tasks-strip">
             <View style={u.row}>

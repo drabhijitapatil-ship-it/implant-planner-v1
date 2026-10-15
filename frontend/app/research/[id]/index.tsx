@@ -36,10 +36,12 @@ export default function StudyDetail() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   if (!study) return <Loading />;
-  const isPI = study.my_roles.includes('pi') || study.my_roles.includes('admin');
+  const isPI = study.my_roles.includes('pi');
+  const isObserver = study.my_roles.length === 1 && study.my_roles[0] === 'observer';
+  const guideCanEdit = study.my_roles.includes('guide') && study.status === 'draft';
   const canEnterData = isPI || study.my_roles.includes('co_investigator') || study.my_roles.includes('data_collector');
   const canExport = isPI || study.my_roles.includes('guide') || study.my_roles.includes('statistician');
-  const protocolEditable = isPI && !['data_locked', 'archived'].includes(study.status);
+  const protocolEditable = (isPI || guideCanEdit) && !['data_locked', 'archived'].includes(study.status);
   const st = studyStatusStyle(study.status);
 
   const setStatus = (status: string, confirmTitle: string, confirmBody: string) => {
@@ -104,6 +106,12 @@ export default function StudyDetail() {
         <Segmented value={tab} onChange={setTab} testID="study-tab"
           options={[{ key: 'overview', label: 'Overview' }, { key: 'protocol', label: 'Protocol' }, { key: 'cases', label: `Cases (${enrolments.length})` }, { key: 'team', label: 'Team' }]} />
       </View>
+      {isObserver && (
+        <View style={s.observerBar} testID="observer-banner">
+          <Ionicons name="eye-outline" size={16} color={RC.sub} />
+          <Text style={s.observerTxt}>View only — oversight access. You are not on this study's team, so editing, enrolment and data entry are disabled. Ask the PI ({study.pi_name}) to add you as guide or co-investigator.</Text>
+        </View>
+      )}
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
         {tab === 'overview' && (
           <>
@@ -185,7 +193,8 @@ export default function StudyDetail() {
               )}
               <NavRow icon="school-outline" label="Synopsis / dissertation" sub="University-format DOCX & PDF with methods and criteria generated from the protocol." route={`/research/${id}/synopsis`} />
               <NavRow icon="stats-chart-outline" label="Results & export" sub="Recruitment flow, follow-up compliance, descriptive statistics, de-identified CSV." route={`/research/${id}/results`} />
-              {isPI && (
+              <NavRow icon="receipt-outline" label="Audit trail" sub="Every change by every user — protocol, team, data, queries, exports — with before/after values. CSV download." route={`/research/${id}/audit`} />
+              {(isPI || guideCanEdit) && (
                 <NavRow icon="shield-checkmark-outline" label="Ethics & consent" sub={study.iec_ref ? `IEC ${study.iec_ref} · consent ${study.consent_form_version || '—'}` : 'IEC reference, approval date, consent form version, CTRI.'} route={`/research/${id}/ethics`} />
               )}
             </Card>
@@ -242,7 +251,8 @@ export default function StudyDetail() {
 
         {tab === 'protocol' && (
           <>
-            {!protocolEditable && <Text style={s.notice}>{isPI ? 'Protocol is locked.' : 'Only the PI edits the protocol — read-only view.'}</Text>}
+            {!protocolEditable && <Text style={s.notice}>{isPI ? 'Protocol is locked.' : study.my_roles.includes('guide') ? 'Guide edits are allowed only while the protocol is in draft — after activation the PI publishes amendments.' : 'Only the PI (and the guide, in draft) edit the protocol — read-only view.'}</Text>}
+            {guideCanEdit && !isPI && <Text style={s.notice}>As guide you can edit the protocol and ethics while it is in draft; your edits are audited and do not reset the approval status.</Text>}
             {study.status === 'active' && protocolEditable && <Text style={s.notice}>Active protocol: you can add variables/timepoints but not remove or rename them (BR-06).</Text>}
             {study.status !== 'draft' && (
               <TouchableOpacity style={[s.versionBar, pendingChanges.length > 0 && { backgroundColor: RC.amberSoft, borderColor: '#FFE0B2' }]} onPress={() => router.push(`/research/${id}/amendments`)} testID="protocol-version-bar">
@@ -386,6 +396,8 @@ export function describeQuery(q: any, study?: { variables: any[] }, registry?: R
 }
 
 const s = StyleSheet.create({
+  observerBar: { flexDirection: 'row', alignItems: 'flex-start', marginHorizontal: 14, marginTop: 10, backgroundColor: RC.greySoft, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: RC.border },
+  observerTxt: { flex: 1, marginLeft: 8, fontSize: 12, color: RC.sub, lineHeight: 16 },
   versionBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 14, marginTop: 12, backgroundColor: RC.primarySoft, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#BBDEFB', minHeight: 44 },
   versionTxt: { flex: 1, marginLeft: 8, fontSize: 12, fontWeight: '700', color: RC.primary },
   guideBox: { backgroundColor: '#FAF5FC', borderRadius: 10, padding: 10, marginTop: 10, borderWidth: 1, borderColor: '#E1BEE7' },

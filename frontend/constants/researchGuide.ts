@@ -116,7 +116,15 @@ export const RESEARCH_GUIDE: GuideSection[] = [
     id: 'step5', title: 'Step 5 — Team', icon: 'people-outline',
     blocks: [
       { type: 'p', text: 'Study → Team tab → Edit → Add member. Search by name, then set the study role: Guide (Supervisors and Implant In-charges only), Co-investigator, Data collector or Statistician. Nurses cannot be added.' },
-      { type: 'bullets', items: ['Student-created studies must name a Guide before the protocol can be submitted for approval.', 'Add the Statistician early so they can check variables and sample size.', 'Membership never widens clinical access: a collector sees patient names only for cases they could already open; otherwise only the subject code.'] },
+      { type: 'bullets', items: ['Student-created studies must name a Guide before the protocol can be submitted for approval. For studies created by Admin, Implant In-charge or Supervisor the Guide is optional and no approval step applies.', 'Add the Statistician early so they can check variables and sample size.', 'Membership never widens clinical access: a collector sees patient names only for cases they could already open; otherwise only the subject code.'] },
+      { type: 'table', columns: ['Who', 'Can see', 'Can do'], rows: [
+        ['PI', 'Own study', 'Everything: protocol, team, ethics, activate, enrol, data, lock, amendments, exports'],
+        ['Guide', 'Studies they are guide of', 'Edit protocol & ethics while in draft; approve / request changes; queries; exports; read data'],
+        ['Co-investigator / Data collector', 'Studies they are on', 'Screen & enrol cases, enter visit data, upload & measure radiographs, raise queries'],
+        ['Statistician', 'Studies they are on', 'Read data, queries, exports'],
+        ['Admin / Implant In-charge (not on team)', 'All studies — view only', 'Nothing until the PI adds them as guide or co-investigator'],
+        ['Anyone else', 'Only studies they are PI or member of', '—'] ] },
+      { type: 'p', text: 'Audit trail: Overview → Audit trail lists every change made by every user — protocol and detail edits with before→after values, team changes, approvals, enrolments, visit-form values, radiographs, queries and exports — newest first, filterable, with a CSV download for IEC / dissertation records.' },
     ],
   },
   {
@@ -130,7 +138,7 @@ export const RESEARCH_GUIDE: GuideSection[] = [
         ['Consent form version', 'e.g. v1.0 (English / Marathi / Hindi)', 'Always'],
         ['Planned start / end, notes', '—', 'Optional'] ] },
       { type: 'steps', items: [
-        'Guide approval (student-created studies): once every other item in the Activation checklist is green, tap Submit to guide for approval. The guide is notified and taps Approve protocol or Request changes (with comments). Editing the protocol afterwards resets the approval. Studies created by a Supervisor or Implant In-charge are approved automatically.',
+        'Guide approval (student-created studies): once every other item in the Activation checklist is green, tap Submit to guide for approval. The guide gets an alert and sees the study under "awaiting your approval" on the Research home; opening it → Protocol tab shows the purple Guide approval box with Approve protocol / Request changes (with comments). A PI edit afterwards resets the approval; the guide may edit the draft protocol themselves without resetting it. Studies created by Admin, Supervisor or Implant In-charge are approved automatically.',
         'Activate study — the checklist must be fully green: research question, ≥1 inclusion rule, ≥1 variable, exactly one baseline, PI and unit set, IEC reference & date, consent version, CTRI for RCTs, guide approval where needed.',
         'After activation the protocol keys are locked: you may add variables / timepoints but not remove or rename them. Version 1.0 of the protocol is recorded at activation.'] },
       { type: 'later', text: 'Form preview before activation and consent-form upload are planned.' },

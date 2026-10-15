@@ -26,7 +26,7 @@ export default function Results() {
   useEffect(() => { load(); }, [load]);
 
   if (!study || !dash) return <Loading />;
-  const canExport = ['pi', 'admin', 'guide', 'statistician'].some(r => study.my_roles.includes(r));
+  const canExport = ['pi', 'guide', 'statistician'].some(r => study.my_roles.includes(r));
   const catVars = study.variables.filter((v: any) => ['single_select', 'boolean', 'text'].includes(v.data_type) && v.source !== 'derived');
   const pct = study.target_n ? Math.min(100, Math.round((dash.flow.enrolled / study.target_n) * 100)) : 0;
 

@@ -7831,3 +7831,10 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - Guide bumped to v1.1 with DICOM/blinded/reminders/amendment content. Tests: `backend/tests/test_research_phase2.py` (6) + fixed order-dependent assertion in `test_research_module.py`; `_research_cleanup.py` purges test studies. Report `/app/test_reports/iteration_445.json` (all frontend flows PASS).
 - Demo data: active study `CBL-IMM-MXA` (6ad07eb890c380516294b7d8, PI Abhijit.patil) at protocol v1.1 with 2 enrolments + DICOM baseline images.
 - Backlog: server.py modularisation (user skipped); Excel/SPSS export; RCT arms & randomisation; consent-form upload; form preview.
+
+## Iteration 449 (Jun 2026) — Research access model, guide draft-editing, audit trail
+- **Visibility**: implicit "admin" research role removed. Administrators / Implant In-charges not on a team now get `observer` (read-only oversight: list + detail + audit, no edit/enrol/data/export/approve). Everyone else sees only studies where they are PI or member. `my-tasks` and case card use membership only. List rows carry `my_roles`, `view_only`, `guide_review_status`, `awaiting_my_approval`.
+- **Guide editing**: `PUT /studies/{id}` and IEC letter upload/remove allowed for the guide while status = draft (not reminders, not team). Guide edits do not reset guide_review; PI edits still do. After activation PI-only (amendments).
+- **Audit**: `_audit(..., changes=[...])` now stores before→after (`_field_changes`: protocol_diff summaries + scalar old/new; team member_added/removed; visit-form value + visit-date changes on every save). New `GET /studies/{id}/audit?group=&format=csv` (groups protocol/team/data/queries/exports; CSV download is itself audited). Screen `/research/[id]/audit` (Overview → Audit trail) with filters + CSV.
+- UI: observer banner on study detail; "awaiting your approval" strip + "Needs your approval"/"View only" chips on Research home; guide copy updated (roles table, audit, where the guide approves). Team additions notify the added user.
+- Tests: `backend/tests/test_research_access.py` (4) — all research suites 16/16 pass.

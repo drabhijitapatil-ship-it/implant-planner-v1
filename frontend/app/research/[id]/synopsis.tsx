@@ -29,7 +29,7 @@ export default function SynopsisEditor() {
 
   useEffect(() => { api.get(`/research/studies/${id}`).then(r => { setStudy(r.data); setSyn(r.data.synopsis || {}); }).catch(e => Alert.alert('Error', errText(e))); }, [id]);
   if (!study) return <Loading />;
-  const canEdit = ['pi', 'admin', 'guide', 'co_investigator'].some(r => study.my_roles.includes(r));
+  const canEdit = ['pi', 'guide', 'co_investigator'].some(r => study.my_roles.includes(r));
   const set = (k: string) => (v: string) => setSyn(s => ({ ...s, [k]: v }));
 
   const save = async () => {
