@@ -20,6 +20,7 @@ import {
   DRILLING_TYPE_OPTIONS,
   PROSTHETIC_COMPONENT_OPTIONS,
   GUIDED_SURGERY_TYPES, STATIC_GUIDE_TYPES, SLEEVE_TYPES, DYNAMIC_NAV_SYSTEMS,
+  SITE_PREP_TECHNIQUES, needsSitePrepTechnique,
   normalizeSurgeryApproach, isGuidedApproach,
   getProstheticOptions, PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
 } from '../../../constants/checklist';
@@ -63,6 +64,9 @@ export default function Phase2SubmissionScreen() {
   const [flapOpen, setFlapOpen] = useState(false);
   const [drillingType, setDrillingType] = useState('');
   const [drillingOpen, setDrillingOpen] = useState(false);
+  // iter-Jun-2026: Implant Site Preparation Technique (Free Hand / Combination only)
+  const [sitePrepTechnique, setSitePrepTechnique] = useState('');
+  const [sitePrepOpen, setSitePrepOpen] = useState(false);
   // iter-391: Drilling Type cascade (mirrors Phase 1 Procedure Type cascade)
   const [guidedSurgeryType, setGuidedSurgeryType] = useState('');
   const [guidedOpen, setGuidedOpen] = useState(false);
@@ -73,7 +77,7 @@ export default function Phase2SubmissionScreen() {
   const [dynamicNavSystem, setDynamicNavSystem] = useState('');
   const [navOpen, setNavOpen] = useState(false);
   // Phase 1 plan snapshot for the plan-vs-actual comparison banner.
-  const [drillingPlan, setDrillingPlan] = useState<{ approach: string; guided: string; static_guide: string; sleeve: string; nav: string }>({ approach: '', guided: '', static_guide: '', sleeve: '', nav: '' });
+  const [drillingPlan, setDrillingPlan] = useState<{ approach: string; site_prep: string; guided: string; static_guide: string; sleeve: string; nav: string }>({ approach: '', site_prep: '', guided: '', static_guide: '', sleeve: '', nav: '' });
   const [implantSeated, setImplantSeated] = useState(true);
   const [implantSeatedComment, setImplantSeatedComment] = useState('');
   const [torqueValues, setTorqueValues] = useState<string[]>([]);
@@ -231,6 +235,7 @@ export default function Phase2SubmissionScreen() {
       // plan — the student only edits it when the protocol changed intra-op.
       const p1Plan = {
         approach: normalizeSurgeryApproach(procRes.data.procedure_surgery_type),
+        site_prep: procRes.data.site_prep_technique || '',
         guided: procRes.data.guided_surgery_type || '',
         static_guide: procRes.data.static_guide_type || '',
         sleeve: procRes.data.sleeve_type || '',
@@ -239,6 +244,7 @@ export default function Phase2SubmissionScreen() {
       setDrillingPlan(p1Plan);
       if (p1Plan.approach) {
         setDrillingType(p1Plan.approach);
+        setSitePrepTechnique(p1Plan.site_prep);
         setGuidedSurgeryType(p1Plan.guided);
         setStaticGuideType(p1Plan.static_guide);
         setSleeveType(p1Plan.sleeve);
@@ -484,6 +490,7 @@ export default function Phase2SubmissionScreen() {
     }
     if (!flapDesign) { Alert.alert('Missing', 'Please select Flap Design'); return; }
     if (!drillingType) { Alert.alert('Missing', 'Please select Drilling Type'); return; }
+    if (needsSitePrepTechnique(drillingType) && !sitePrepTechnique) { Alert.alert('Missing', 'Please select Implant Site Preparation Technique'); return; }
     if (isGuidedApproach(drillingType)) {
       if (!guidedSurgeryType) { Alert.alert('Missing', 'Please select Type of Guided Surgery'); return; }
       if (guidedSurgeryType === 'Static Guide') {
@@ -603,6 +610,7 @@ export default function Phase2SubmissionScreen() {
         anesthesia_details: anesthesiaAdequate === 'No' ? anesthesiaDetails : null,
         flap_design: flapDesign,
         drilling_type: drillingType,
+        drilling_site_prep_technique: needsSitePrepTechnique(drillingType) ? sitePrepTechnique || null : null,
         drilling_guided_surgery_type: isGuidedApproach(drillingType) ? guidedSurgeryType || null : null,
         drilling_static_guide_type: isGuidedApproach(drillingType) && guidedSurgeryType === 'Static Guide' ? staticGuideType || null : null,
         drilling_sleeve_type: isGuidedApproach(drillingType) && guidedSurgeryType === 'Static Guide' ? sleeveType || null : null,
@@ -681,6 +689,9 @@ export default function Phase2SubmissionScreen() {
     if (drillingType && drillingType !== drillingPlan.approach) {
       diffs.push({ field: 'Drilling Type', planned: drillingPlan.approach, actual: drillingType });
     }
+    if (needsSitePrepTechnique(drillingType) && sitePrepTechnique && sitePrepTechnique !== drillingPlan.site_prep) {
+      diffs.push({ field: 'Implant Site Preparation Technique', planned: drillingPlan.site_prep || '—', actual: sitePrepTechnique });
+    }
     if (isGuidedApproach(drillingType)) {
       if (guidedSurgeryType && guidedSurgeryType !== drillingPlan.guided) {
         diffs.push({ field: 'Type of Guided Surgery', planned: drillingPlan.guided || '—', actual: guidedSurgeryType });
@@ -698,7 +709,7 @@ export default function Phase2SubmissionScreen() {
       }
     }
     return diffs;
-  }, [drillingPlan, drillingType, guidedSurgeryType, staticGuideType, sleeveType, dynamicNavSystem]);
+  }, [drillingPlan, drillingType, sitePrepTechnique, guidedSurgeryType, staticGuideType, sleeveType, dynamicNavSystem]);
 
   const renderDropdown = (label: string, value: string, options: string[],
     open: boolean, setOpen: (v: boolean) => void, onSelect: (v: string) => void) => (
@@ -757,6 +768,7 @@ export default function Phase2SubmissionScreen() {
     const missSurgery: string[] = [];
     if (!flapDesign) missSurgery.push('Flap Design');
     if (!drillingType) missSurgery.push('Drilling Type');
+    if (needsSitePrepTechnique(drillingType) && !sitePrepTechnique) missSurgery.push('Implant Site Preparation Technique');
     if (isGuidedApproach(drillingType)) {
       if (!guidedSurgeryType) missSurgery.push('Type of Guided Surgery');
       else if (guidedSurgeryType === 'Static Guide') {
@@ -824,7 +836,7 @@ export default function Phase2SubmissionScreen() {
 
     // Notes pill is informational — never "missing" (notes are optional).
     return [missPreop, missSurgery, missRadiographs, missPostOp, []];
-  }, [isPreopUnlocked, flapDesign, drillingType, guidedSurgeryType, staticGuideType, sleeveType, dynamicNavSystem, torqueValues, prostheticComponent, prostheticComponents, usePerImplantProsthetic, implantPositions,
+  }, [isPreopUnlocked, flapDesign, drillingType, sitePrepTechnique, guidedSurgeryType, staticGuideType, sleeveType, dynamicNavSystem, torqueValues, prostheticComponent, prostheticComponents, usePerImplantProsthetic, implantPositions,
       prosthesisType, prosthesisTypeOther, iopaFiles, isFullArch, opgFile, postOpChecklist,
       needsOpg, needsIopa, zygPtrImplantPositions]);
   const stepDone = stepMissing.map(arr => arr.length === 0);
@@ -1091,14 +1103,18 @@ export default function Phase2SubmissionScreen() {
                 setDrillingType(v);
                 if (v === drillingPlan.approach) {
                   // Back on plan — restore the planned sub-selections.
+                  setSitePrepTechnique(drillingPlan.site_prep);
                   setGuidedSurgeryType(drillingPlan.guided);
                   setStaticGuideType(drillingPlan.static_guide);
                   setSleeveType(drillingPlan.sleeve);
                   setDynamicNavSystem(drillingPlan.nav);
                 } else {
-                  setGuidedSurgeryType(''); setStaticGuideType(''); setSleeveType(''); setDynamicNavSystem('');
+                  setSitePrepTechnique(''); setGuidedSurgeryType(''); setStaticGuideType(''); setSleeveType(''); setDynamicNavSystem('');
                 }
               })}
+            {/* iter-Jun-2026: Free Hand / Combination → Implant Site Preparation Technique, directly below Drilling Type */}
+            {needsSitePrepTechnique(drillingType) && renderDropdown('Implant Site Preparation Technique', sitePrepTechnique, SITE_PREP_TECHNIQUES,
+              sitePrepOpen, setSitePrepOpen, setSitePrepTechnique)}
             {isGuidedApproach(drillingType) && renderDropdown('Type of Guided Surgery', guidedSurgeryType, GUIDED_SURGERY_TYPES,
               guidedOpen, setGuidedOpen, (v: string) => {
                 setGuidedSurgeryType(v); setStaticGuideType(''); setSleeveType(''); setDynamicNavSystem('');

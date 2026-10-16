@@ -431,6 +431,8 @@ class ProcedureCreate(BaseModel):
     overdenture_type: Optional[str] = Field("", max_length=60)
     # iter-387: surgical-approach cascade (Procedure Type → guided details)
     procedure_surgery_type: Optional[str] = Field("", max_length=60)
+    # iter-Jun-2026: Free Hand / Combination → Implant Site Preparation Technique
+    site_prep_technique: Optional[str] = Field("", max_length=80)
     guided_surgery_type: Optional[str] = Field("", max_length=40)
     static_guide_type: Optional[str] = Field("", max_length=40)
     sleeve_type: Optional[str] = Field("", max_length=40)
@@ -627,6 +629,7 @@ class ProcedureUpdate(BaseModel):
     overdenture_type: Optional[str] = Field(None, max_length=60)
     # iter-387: surgical-approach cascade on the draft/update model too.
     procedure_surgery_type: Optional[str] = Field(None, max_length=60)
+    site_prep_technique: Optional[str] = Field(None, max_length=80)
     guided_surgery_type: Optional[str] = Field(None, max_length=40)
     static_guide_type: Optional[str] = Field(None, max_length=40)
     sleeve_type: Optional[str] = Field(None, max_length=40)
@@ -750,6 +753,8 @@ class Phase2Submit(BaseModel):
     anesthesia_details: Optional[str] = Field(None, max_length=500)  # If No
     flap_design: Optional[str] = Field(None, max_length=100)
     drilling_type: Optional[str] = Field(None, max_length=100)
+    # iter-Jun-2026: actual site-preparation technique (Free Hand / Combination)
+    drilling_site_prep_technique: Optional[str] = Field(None, max_length=80)
     # iter-391: Drilling Type cascade — actual intra-op protocol (mirrors the
     # Phase 1 plan cascade so plan-vs-actual deviations are auditable).
     drilling_guided_surgery_type: Optional[str] = Field(None, max_length=40)
@@ -5772,6 +5777,8 @@ async def generate_consent_template(
     _gs_rows = []
     if procedure.get("procedure_surgery_type"):
         _gs_rows.append(["Procedure Type:", procedure.get("procedure_surgery_type")])
+    if procedure.get("site_prep_technique"):
+        _gs_rows.append(["Site Preparation Technique:", procedure.get("site_prep_technique")])
     if procedure.get("guided_surgery_type"):
         _gs_rows.append(["Type of Guided Surgery:", procedure.get("guided_surgery_type")])
     if procedure.get("static_guide_type"):
@@ -6011,6 +6018,7 @@ async def get_consent_content(procedure_id: str, current_user: dict = Depends(ge
         proc_rows.append(["Type of Overdenture", procedure.get("overdenture_type")])
     for label, key in [
         ("Procedure Type (Surgical)", "procedure_surgery_type"),
+        ("Implant Site Preparation Technique", "site_prep_technique"),
         ("Type of Guided Surgery", "guided_surgery_type"),
         ("Type of Static Guide", "static_guide_type"),
         ("Type of Sleeve", "sleeve_type"),
@@ -11386,6 +11394,8 @@ def _build_case_context(proc: dict) -> str:
             parts.append(f"Flap Design: {p2.get('flap_design')}")
         if p2.get('drilling_type'):
             parts.append(f"Drilling Type: {p2.get('drilling_type')}")
+        if p2.get('drilling_site_prep_technique'):
+            parts.append(f"Site Preparation Technique: {p2.get('drilling_site_prep_technique')}")
         if p2.get('bone_graft_used'):
             parts.append(f"Bone Graft Used: Yes — {p2.get('bone_graft_details','')}")
         if p2.get('prosthetic_component'):
@@ -15061,6 +15071,8 @@ async def generate_case_report(
             add_field("Incision / Flap Design", p2["flap_design"])
         if p2.get("drilling_type"):
             add_field("Drilling Type", p2["drilling_type"])
+        if p2.get("drilling_site_prep_technique"):
+            add_field("Implant Site Preparation Technique", p2["drilling_site_prep_technique"])
         if p2.get("implant_seated_correctly") is not None:
             add_field("Implant Seated Correctly", "Yes" if p2["implant_seated_correctly"] else "No")
         if p2.get("implant_seated_comment"):
@@ -16799,6 +16811,7 @@ async def submit_phase2(
         "anesthesia_details": phase2_data.anesthesia_details,
         "flap_design": phase2_data.flap_design,
         "drilling_type": phase2_data.drilling_type,
+        "drilling_site_prep_technique": phase2_data.drilling_site_prep_technique,
         "drilling_guided_surgery_type": phase2_data.drilling_guided_surgery_type,
         "drilling_static_guide_type": phase2_data.drilling_static_guide_type,
         "drilling_sleeve_type": phase2_data.drilling_sleeve_type,
@@ -19317,6 +19330,9 @@ def _drilling_protocol_diffs(proc: Dict[str, Any]) -> Optional[List[Dict[str, st
     diffs: List[Dict[str, str]] = []
     if actual != planned:
         diffs.append({"field": "Drilling Type", "planned": planned, "actual": actual})
+    _sp_actual = p2.get("drilling_site_prep_technique")
+    if _sp_actual and str(_sp_actual) != str(proc.get("site_prep_technique") or ""):
+        diffs.append({"field": "Implant Site Preparation Technique", "planned": str(proc.get("site_prep_technique") or "—"), "actual": str(_sp_actual)})
     if _is_guided_approach(actual):
         pairs = [
             ("Type of Guided Surgery", proc.get("guided_surgery_type"), p2.get("drilling_guided_surgery_type")),

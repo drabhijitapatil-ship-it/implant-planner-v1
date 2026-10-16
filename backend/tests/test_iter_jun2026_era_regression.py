@@ -23,7 +23,7 @@ except Exception:
 
 sys.path.insert(0, "/app/backend")
 
-BASE_URL = (os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://dental-implant-hub-14.preview.emergentagent.com").rstrip("/")
+BASE_URL = (os.environ.get("EXPO_PUBLIC_BACKEND_URL") or "https://research-portal-105.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 STUDENT = {"identifier": "Gaurav.pandey", "password": "Student@123"}
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}

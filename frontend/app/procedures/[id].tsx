@@ -40,7 +40,7 @@ import {
   OCCLUSAL_SCHEME_OPTIONS, PARAFUNCTION_HABIT_OPTIONS, VERTICAL_DIMENSION_OPTIONS, TMJ_OPTIONS,
   SMILE_LINE_OPTIONS, GINGIVAL_BIOTYPE_OPTIONS,
   FLAP_DESIGN_OPTIONS, DRILLING_TYPE_OPTIONS, PROSTHETIC_COMPONENT_OPTIONS,
-  normalizeSurgeryApproach, isGuidedApproach,
+  normalizeSurgeryApproach, isGuidedApproach, needsSitePrepTechnique,
   FP_MATERIAL_OPTIONS, OVERDENTURE_ATTACHMENT_OPTIONS, CUSTOM_ABUTMENT_OPTIONS,
   MEDICAL_RISK_FACTORS, calculateMedicalRisk,
   getProstheticOptions,
@@ -2358,6 +2358,9 @@ export default function ProcedureDetailScreen() {
             {!!procedure.procedure_surgery_type && (
               <InfoRow icon="hand-left" label="Procedure Type" value={procedure.procedure_surgery_type} />
             )}
+            {!!procedure.site_prep_technique && (
+              <InfoRow icon="construct" label="Implant Site Preparation Technique" value={procedure.site_prep_technique} />
+            )}
             {!!procedure.guided_surgery_type && (
               <InfoRow icon="navigate" label="Type of Guided Surgery" value={procedure.guided_surgery_type} />
             )}
@@ -3209,6 +3212,9 @@ export default function ProcedureDetailScreen() {
                 <InfoRow icon="hardware-chip" label="Drilling Type" value={procedure.phase2_data.drilling_type} fieldKey="phase2_data.drilling_type" />
               )}
               {/* iter-391: actual drilling cascade + plan-vs-actual comparison */}
+              {needsSitePrepTechnique(procedure.phase2_data.drilling_type) && procedure.phase2_data.drilling_site_prep_technique && (
+                <InfoRow icon="construct" label="Implant Site Preparation Technique (actual)" value={procedure.phase2_data.drilling_site_prep_technique} />
+              )}
               {isGuidedApproach(procedure.phase2_data.drilling_type) && procedure.phase2_data.drilling_guided_surgery_type && (
                 <InfoRow icon="navigate" label="Type of Guided Surgery (actual)" value={procedure.phase2_data.drilling_guided_surgery_type} />
               )}
@@ -3227,6 +3233,7 @@ export default function ProcedureDetailScreen() {
                 if (!plannedApproach || !p2.drilling_type) return null;
                 const diffs: string[] = [];
                 if (p2.drilling_type !== plannedApproach) diffs.push(`Drilling Type: ${plannedApproach} → ${p2.drilling_type}`);
+                if (needsSitePrepTechnique(p2.drilling_type) && p2.drilling_site_prep_technique && p2.drilling_site_prep_technique !== (procedure.site_prep_technique || '')) diffs.push(`Site Preparation Technique: ${procedure.site_prep_technique || '—'} → ${p2.drilling_site_prep_technique}`);
                 if (isGuidedApproach(p2.drilling_type)) {
                   if (p2.drilling_guided_surgery_type && p2.drilling_guided_surgery_type !== (procedure.guided_surgery_type || '')) diffs.push(`Guided Surgery: ${procedure.guided_surgery_type || '—'} → ${p2.drilling_guided_surgery_type}`);
                   if (p2.drilling_static_guide_type && p2.drilling_static_guide_type !== (procedure.static_guide_type || '')) diffs.push(`Static Guide: ${procedure.static_guide_type || '—'} → ${p2.drilling_static_guide_type}`);

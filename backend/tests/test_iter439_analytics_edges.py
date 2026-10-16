@@ -11,7 +11,7 @@ import os
 import pytest
 import requests
 
-BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://dental-implant-hub-14.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://research-portal-105.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api"
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}
 

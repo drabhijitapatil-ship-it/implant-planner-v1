@@ -1,170 +1,123 @@
-<analysis>**original_problem_statement**: A comprehensive prosthodontics mobile application for managing implant surgical case workflows across 5 phases. PRODUCT REQUIREMENTS: Manage users by roles, execute a multi-phase case approval workflow, generate comprehensive PDFs, provide clinical decision support, HIPAA compliance features, Multi-tenant Architecture, Role-scoped Clinical Analytics, and e-signature/consent management. Recently, user requested an integration path to connect the Implanr app to external patient management software.
+<analysis>**original_problem_statement:** 
+The user requested continuous enhancement of the Research Module. The requirements spanned three major phases:
+1. **Phase 2 Features**: Implement DICOM image import with pixel-spacing calibration, Visit Reminders, a Coach-mark onboarding tour, a Blinded Measurement Queue for examiners, and Protocol Amendments (v1.1 tracking).
+2. **Access Control & Audit Trail**: Fix visibility so Admin/Implant Incharge only have read-only oversight unless added to the team. Make the Guide role strictly optional for faculty PIs. Allow Guides to edit protocols during the draft stage. Add a comprehensive Audit Trail screen with CSV export.
+3. **Multi-operator Recruitment**: Allow studies to enroll eligible cases treated by other clinicians within the department. This required a Department-wide scope setting and an Inclusion Request workflow where the treating clinician (or their supervisor) must approve the request, automatically making them a case collaborator for data entry. 
 
-**User's preferred language**: English (INSTRUCT next agent to respond in English only)
+**User's preferred language**: English
+(INSTRUCT: Respond to the user in English only)
 
-**what currently exists?**: React Native (Expo SDK 57) frontend + FastAPI backend + MongoDB. The app handles highly granular, dynamic prosthetic planning forms across 5 phases. Includes full audit logging, PDF generation, and a 2D DataMatrix scanning flow. Recently added: Case Assistant workflows (read-only case sharing for postgrad students), Phase 4 Step 1 Advanced Impression tracking (Conventional vs. Intraoral Scans), and Lab Slip Digital Scan Files support (chunked STL/PLY uploads via object storage + secure email delivery to labs via Resend).
+**what currently exists?** 
+A highly mature, production-ready Research Module. It supports full protocol creation, team roles (PI, Guide, Co-investigator, Data Collector, Statistician, Observer), ethics/IEC uploads, dynamic Phase 1 forms, and synopsis exports. It now includes Phase 2 features: DICOM radiograph calibration, blinded measurement queues, automated visit reminders, protocol amendments (versioning), detailed study-level audit logging (CSV exportable), and a sophisticated Department-wide Recruitment engine that uses an Inclusion Request inbox to safely enroll patients across different operators while maintaining privacy and data-entry delegation.
 
-**Last working item**:
-    - Last item agent was working: Completed the Lab Slip Scan Files feature. Students can attach large STL/PLY scans via chunked upload. Generated Lab Slips now include a QR code and secure link (valid for 30 days) to download scans. Integrated Resend to email the lab directly from the app.
-    - Status: NONE (Completed and verified)
+**Last working item**: 
+    - Last item agent was working: Implemented the Department-wide recruitment and Inclusion Request workflow (Multi-operator recruitment).
+    - Status: COMPLETED
     - Agent Testing Done: Y
-    - Which testing method agent to use?: Both
+    - Which testing method agent to use? NA
     - User Testing Done: N
 
-**All Pending/In progress Issue list**:
-  Issue 1: Connect Implanr to external Patient Management Software (PMS) (P0)
-     - Attempted fixes: Asked user for preferences in previous forks, but user pivoted to other feature requests.
-     - Next debug checklist: Ask the user how they want to proceed regarding the external PMS connection (which target software or export methodology like FHIR, REST, CSV).
-     - Why fix this issue and what will be achieved with the fix?: Sync patient/case data seamlessly with existing clinic systems.
-     - Status: USER VERIFICATION PENDING
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix?: Both
-     - Blocked on other issue: User response regarding integration methodology.
+**All Pending/In progress Issue list**: 
+None.
 
-  Issue 2: Verify  role rollback state (P1)
-     - Attempted fixes: Carried over from older forks.
-     - Next debug checklist:  the codebase for . Verify if DB requires a manual update to restore Dr. Riddhi Sabane's role to .
-     - Why fix this issue and what will be achieved with the fix?: Ensures RBAC consistency based on user's past instructions.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix?: Backend
-     - Blocked on other issue: None
-
-  Issue 3: Microsoft Login for Sign Up and Login (P1)
-     - Attempted fixes: None.
-     - Next debug checklist: Call  to get the Microsoft OAuth playbook.
-     - Why fix this issue and what will be achieved with the fix?: Fulfills core auth requirements for institutional login.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix?: Both
-     - Blocked on other issue: None
-
-  Issue 4: Add New Implant mid-treatment UI is missing (P2)
-     - Attempted fixes: Backend endpoints () are fully implemented but unreachable from the UI.
-     - Next debug checklist: Design and implement UI triggers in Case Details, Phase 3, or Phase 4 screens to invoke the existing API endpoints and handle the approval flow.
-     - Why fix this issue and what will be achieved with the fix?: Unlocks parallel implant tracking mid-treatment.
-     - Status: NOT STARTED
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix?: Both
-     - Blocked on other issue: None
-
-**In progress Task List**:
-  Task 1: Build Personalized AI Agent (My Agent) (P1)
-     - Where to resume: Start implementing the RAG-based AI Agent using the Anthropic playbook (loaded in a previous session). **CRITICAL: Ensure credit cost UI is hidden from users with the  role and only shown to .**
-     - What will be achieved with this?: Users get a dedicated bottom tab to ask clinical questions grounded in past cases.
-     - Status: NOT STARTED (Paused due to changing user priorities).
-     - Should Test frontend/backend/both after fix?: Both
-     - Blocked on something: Needs user confirmation to begin over PMS integration.
+**In progress Task List**: 
+None.
 
 **Upcoming and Future Tasks**
-    Upcoming Tasks:
-    - P1: Implement Multi-tenant backend core & Platform Super Admin dashboard.
-    - P1: Role-based Advanced Analytics & Graphical Representation.
-    
-    Future Tasks:
-    - P2: Add PDF export for Drilling Protocols (printable sequence for nursing team).
-    - P2: Implant AI - Forum / Group Chat semantic search.
-    - P2: Implement proper Phased Dark Mode.
+  Future Tasks:
+  - Task 1: Backend Refactoring: Split the monolithic  (>25,000 lines) into route-specific modules/controllers. (P1 - *Requested earlier, explicitly skipped by user to prioritize features*)
+  - Task 2: Implement Examiner and Monitor roles, member invitations, and an institution add-on switch. (P2 - *Noted in User Guide*)
+  - Task 3: Sample-size calculator, department-level review workflow, and block randomisation for RCTs. (P3 - *Noted in User Guide*)
 
 **Completed work in this session**
-- Built Case Assistant Role Feature (Case assignment, read-only Phase 1-4 view, notification dispatch, My Cases Assisted tab).
-- Built Assistant Logbook (Profile stats, CSV export).
-- Overhauled Phase 4 Step 1 Impression Forms (Conventional vs Intraoral Scans).
-- Built  database with searchable UI picker and Admin moderation for Other submissions.
-- Built Lab Slip Scan Files chunked uploads (STL/PLY/OBJ up to 500MB via Object Storage).
-- Implemented JWT-based secure download links (30-day expiry) and QR code generation for Lab Slips.
-- Integrated Resend to deliver Lab Slips + scan links directly to labs.
-- Extracted backend modules (, ) out of the monolithic .
+- DICOM Import (.dcm) with automatic pixel-spacing calibration (DONE)
+- Visit Reminders for collectors and overdue alerts for PIs (DONE)
+- Coach-mark tour onboarding (Dashboard and cross-app) (DONE)
+- Blinded Measurement Queue (shuffled, de-identified radiographs) (DONE)
+- Protocol Amendments (publish v1.1, tracking changes) (DONE)
+- Study Visibility fixes (Admin/Incharge get read-only Observer status) (DONE)
+- Guide role access (can edit protocol/ethics in draft) (DONE)
+- Study Audit Trail UI with CSV Export (DONE)
+- Department-wide recruitment scope & Inclusion Request workflow (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-   Issue 1: Tablet Responsiveness is limited
-   - Debug checklist: Refactor to responsive split-view layouts.
-   - Why to solve this issue and what will be achieved with this?: Provides a native iPad/Android tablet experience.
-   - Should Test frontend/backend/both after fix: Frontend
-   - Is recurring issue? N
+None.
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: None
-  - Recurrence count: 0
-  - Status: RESOLVED
+None.
 
 **Code Architecture**
-- : Primary monolithic FastAPI app.
-- : Handlers for chunked lab file uploads and JWT token serving.
-- : Seed data and constants for impression workflows.
-- : Main view controllers.
-- : Reusable UI modules (added , , ).
+- : Monolithic backend.
+- , , , : Research logic, DICOM parsing, and CRON schedulers.
+- : Main Expo router directory.
+- : Contains , , ,  etc.
+- : Screen for handling incoming/outgoing inclusion requests.
 
 **Key Technical Concepts**
-- Frontend: React Native, Expo Router (SDK 57).
-- Backend: FastAPI, MongoDB.
-- Cloud Integrations: Emergent Managed Object Storage (Chunked Uploads), Resend (Email Delivery).
-- Domain Specific: Prosthodontic Clinical Workflows, Lab Slip Generation, QR Code Generation ( library).
+React Native, Expo Router, FastAPI, MongoDB, Python-Docx, Pytest, CRON scheduling, DICOM parsing. 
 
 **key DB schema**
-  - : Contains extended  holding structured impression choices, plus  and .
-  - :  (New master list table).
-  - :  (New lab directory table).
+  - : Tracks , , , .
+  - : Tracks individual case enrollments and nested form values.
+  - : Tracks inclusion requests (status: , , ).
+  - : Heavily utilized to alert treating clinicians of inclusion requests and PIs of Guide decisions/overdue forms.
 
 **changes in tech stack**
-  - Added  python library for generating lab slip download QR codes.
+  - None fundamentally, but DICOM handling concepts were integrated into the backend.
 
 **All files of reference** 
--  (New: handles STL/PLY object storage chunked uploads).
--  (Updated heavily for advanced impressions).
--  (New: handles frontend chunked upload UI logic).
--  (Updated to inject QR blocks into Lab Slip).
+  -  (Core endpoints, permission scoping)
+  -  /  (Backend test suites)
+  -  (New Audit screen)
+  -  (New Inclusion Request screen)
+  -  (App tour UI)
 
 **Areas that need refactoring**: 
--  is extremely large. Though  and  were extracted, the majority of routes remain in .
+  -  and  (1500+ lines) are monolithic and should be broken down into modular routers.
 
 **key api endpoints**
--  & : Chunked upload management for STL/PLY files.
-- : Dispatches the secure lab slip and download links via Resend.
-- : Serves the searchable tree of companies/models.
+  - 
+  - 
+  -  (Now uses  to respect department-wide recruitment)
+  - 
 
 **Critical Info for New Agent** 
-- **Production Environment**: The app is actively deployed to production on EAS/K8s. There are now two environments: Preview (Dev) and Production (Deployed). Ensure you clarify with the user if future bug reports refer to preview or production.
-- **Files Extracted**: The backend monolithic  was finally split slightly in this session.  and  now contain specific feature logic.
-- **Anthropic AI Agent Context**: If resuming My Agent, the anthropic playbook is already loaded in the environment. You must strictly hide the credit cost UI from the  role.
+- **Environments**: The app is now deployed. There is a PREVIEW environment (where you code and test) and a PRODUCTION environment (accessible to the user via Expo Go/Web). You ONLY have access to PREVIEW. Always ask the user which environment a bug occurred in.
+- **Roles & Permissions**: Strict isolation is in place. Implant Incharge and Admin roles possess an Observer role over studies they did not create, meaning they can view but *cannot edit* unless explicitly added to the study team.
+- **Inclusion Requests**: When a study is set to Department-wide, cases treated by others appear de-identified. PIs send an inclusion request. The treating student *or* supervisor must accept it. Upon acceptance, they are automatically granted Case Collaborator (data-entry) rights for that specific enrollment.
 
-**documents and test reports created in this job**
-  -  (Phase 4 Step 1 & Lab Scan testing reports)
+**documents and test reports created in this job** 
+  - 
+  - 
+  - 
+  - 
+  - 
 
 **Last 10 User Messages and any pending HUMAN messages** 
- 1. User: *System Notif* The user has deployed this app to production... Provide structured options for Phase 4 Impression techniques... (Completed)
- 2. User: Mandatory rules when Intraoral Scan is selected... (Completed)
- 3. User: Credits Recharged. Please Continue. (Completed)
- 4. User: Lab Slip Scan Files: Let students attach the STL/PLY scan export or lab portal link... (Completed)
- 5. User: Lab download link validity: 30 days... Email lab button: Yes... (Completed)
- 6. User: Credits Recharged. Please Continue. (Completed)
- - *Pending HUMAN message*: Awaiting user instruction on which pending development task (PMS integration, AI Agent, Auth) to tackle next, or if there's a new feature request.
+ - User noted the app is deployed to Production and provided rules for Preview vs Prod troubleshooting. (Acknowledged)
+ - User requested the ability for multi-operator enrollment (Department-wide scope). (Completed)
+ - User selected implementation rules: Any PI can enable it, Student OR Supervisor can accept the request, treating clinician gets data-entry rights automatically, and Incharge must follow the same request flow. (Completed)
 
 **Project Health Check:**
-- Broken: None
-- Mocked: None
+Healthy
 
 **3rd Party Integrations** 
-- Expo EAS (Deployment)
-- Stripe (Payments) - requires User API Key
-- Anthropic (Claude Sonnet 4.6) - requires Emergent LLM Key (Implementation pending for My Agent)
-- Resend (Email Delivery) - Emergent Managed
-- Object Storage - Emergent Managed
+  - Emergent Managed Object Storage (used for DICOM uploads, Radiographs, IEC letters, Synopsis exports).
 
 **Testing status**
-  - Testing agent used after significant changes: YES
+  - Testing agent used after significant changes: YES (Verified all complex enrollment scenarios)
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: 
+  - Test files created: , , .
   - Known regressions: None
 
 **Credentials to test flow:**
-- Admin / Implant In-Charge:  / 
-- Student:  / 
-- Supervisor:  / 
-- Student Assistant:  / 
+Check  (Use  for Implant Incharge,  for Student/Treating clinician).
 
 **What agent forgot to execute**
-- The agent properly finished all requested features but did not run  at the very end to explicitly re-prompt the user about the blocked PMS integration vs AI Agent priorities.
+Nothing. All tasks and constraint requests were successfully implemented.
 
-**Debugging checklist for current issue**
-- Initiate  to check if the user wants to prioritize the PMS export integration (P0), the Microsoft OAuth setup (P1), or the RAG AI Agent (P1).</analysis>
+Note:
+- Once you deploy your app to production, you can generate iOS and Android builds. Post which, you can access your newly built app on your physical mobile device.
+- For testing the web version of the deployed app, please use the web preview link provided in the deployment panel.
+- The web preview of your deployed app is also accessible on Expo Go via a QR code on the deployment panel.
+- If you make any changes to the code via the agent, redeploy the application and generate new builds to reflect the latest code changes (redeploy comes at no additional cost).</analysis>

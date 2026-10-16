@@ -288,6 +288,18 @@ export const normalizeSurgeryApproach = (v?: string | null): string => {
 };
 export const isGuidedApproach = (v?: string | null): boolean =>
   ['Guided Surgery', 'Combination of Guided and Free Hand Sequential Drilling', 'Combination of Free hand and Guided Surgery'].includes(String(v || ''));
+// iter-Jun-2026: Free Hand / Combination approaches capture the osteotomy
+// technique used to prepare the implant site (Phase 1 plan + Phase 2 actual).
+export const SITE_PREP_TECHNIQUES = [
+  'Conventional Drilling',
+  'Conventional Osteotome Technique (Bone Condensation & Expansion)',
+  'Osseodensification',
+  'Piezoelectric (Ultrasonic) Osteotomy',
+  'Magneto-dynamic Surgical Device',
+];
+export const needsSitePrepTechnique = (v?: string | null): boolean =>
+  ['Free Hand Sequential Drilling', 'Combination of Guided and Free Hand Sequential Drilling',
+    'Free Hand Surgery', 'Combination of Free hand and Guided Surgery'].includes(String(v || ''));
 export const GUIDED_SURGERY_TYPES = ['Static Guide', 'Dynamic Navigation'];
 export const STATIC_GUIDE_TYPES = [
   'Tooth Supported Guide',

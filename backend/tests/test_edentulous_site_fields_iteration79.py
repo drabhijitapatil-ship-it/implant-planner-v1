@@ -17,7 +17,7 @@ import random
 from datetime import datetime, timedelta
 import fitz  # pymupdf for PDF verification
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://dental-implant-hub-14.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://research-portal-105.preview.emergentagent.com')
 
 # Generate unique base offset to avoid slot conflicts
 UNIQUE_OFFSET = random.randint(50, 150)

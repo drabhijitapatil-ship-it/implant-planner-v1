@@ -1,6 +1,6 @@
 import requests
 
-BASE = "https://dental-implant-hub-14.preview.emergentagent.com/api"
+BASE = "https://research-portal-105.preview.emergentagent.com/api"
 
 def login(u, p):
     r = requests.post(f"{BASE}/auth/login", json={"identifier": u, "password": p})

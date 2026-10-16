@@ -19,7 +19,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://dental-implant-hub-14.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://research-portal-105.preview.emergentagent.com')
 
 # Test credentials
 STUDENT_EMAIL = "gaurav.pandey@student.dental.edu"

@@ -21,7 +21,7 @@ from datetime import datetime
 
 BASE_URL = os.environ.get(
     "EXPO_PUBLIC_BACKEND_URL",
-    "https://dental-implant-hub-14.preview.emergentagent.com",
+    "https://research-portal-105.preview.emergentagent.com",
 ).rstrip("/")
 
 ADMIN = {"identifier": "Abhijit.patil", "password": "Admin@123"}

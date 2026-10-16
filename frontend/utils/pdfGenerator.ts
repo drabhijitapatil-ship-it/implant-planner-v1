@@ -159,6 +159,7 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
               <tr><td class="info-label">Procedure Type:</td><td class="info-value">${procedure.implant_procedure_type}</td></tr>
               ${procedure.overdenture_type ? `<tr><td class="info-label">Type of Overdenture:</td><td class="info-value">${procedure.overdenture_type}</td></tr>` : ''}
               ${procedure.procedure_surgery_type ? `<tr><td class="info-label">Surgical Approach:</td><td class="info-value">${procedure.procedure_surgery_type}</td></tr>` : ''}
+              ${procedure.site_prep_technique ? `<tr><td class="info-label">Implant Site Preparation Technique:</td><td class="info-value">${procedure.site_prep_technique}</td></tr>` : ''}
               ${procedure.guided_surgery_type ? `<tr><td class="info-label">Type of Guided Surgery:</td><td class="info-value">${procedure.guided_surgery_type}</td></tr>` : ''}
               ${procedure.static_guide_type ? `<tr><td class="info-label">Type of Static Guide:</td><td class="info-value">${procedure.static_guide_type}</td></tr>` : ''}
               ${procedure.sleeve_type ? `<tr><td class="info-label">Type of Sleeve:</td><td class="info-value">${procedure.sleeve_type}</td></tr>` : ''}
@@ -324,6 +325,7 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
               ${procedure.phase2_data.anesthesia_details ? `<tr><td class="info-label">Anaesthesia Notes:</td><td class="info-value">${procedure.phase2_data.anesthesia_details}</td></tr>` : ''}
               ${procedure.phase2_data.flap_design ? `<tr><td class="info-label">Incision / Flap Design:</td><td class="info-value">${procedure.phase2_data.flap_design}</td></tr>` : ''}
               ${procedure.phase2_data.drilling_type ? `<tr><td class="info-label">Drilling Type:</td><td class="info-value">${procedure.phase2_data.drilling_type}</td></tr>` : ''}
+              ${procedure.phase2_data.drilling_site_prep_technique ? `<tr><td class="info-label">Implant Site Preparation Technique:</td><td class="info-value">${procedure.phase2_data.drilling_site_prep_technique}</td></tr>` : ''}
               ${procedure.phase2_data.implant_seated_correctly !== undefined ? `<tr><td class="info-label">Implant Seated Correctly:</td><td class="info-value">${procedure.phase2_data.implant_seated_correctly ? 'Yes' : 'No'}</td></tr>` : ''}
               ${procedure.phase2_data.implant_seated_comment ? `<tr><td class="info-label">Seating Notes:</td><td class="info-value">${procedure.phase2_data.implant_seated_comment}</td></tr>` : ''}
               ${procedure.phase2_data.torque_values?.length ? `<tr><td class="info-label">Torque Values:</td><td class="info-value" style="font-weight:bold;color:#E65100;">${procedure.phase2_data.torque_values.map((tv: number, i: number) => 'Implant ' + (i + 1) + ': ' + tv + ' Ncm').join(', ')}</td></tr>` : ''}

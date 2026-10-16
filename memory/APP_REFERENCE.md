@@ -559,7 +559,7 @@ CORS_ORIGINS="*"
 
 ### Frontend (`/app/frontend/.env`)
 ```
-EXPO_PUBLIC_BACKEND_URL=https://dental-implant-hub-14.preview.emergentagent.com
+EXPO_PUBLIC_BACKEND_URL=https://research-portal-105.preview.emergentagent.com
 ```
 
 ---

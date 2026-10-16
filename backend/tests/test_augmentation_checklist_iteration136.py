@@ -18,7 +18,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 API_URL = os.environ.get(
     "API_URL",
-    "https://dental-implant-hub-14.preview.emergentagent.com",
+    "https://research-portal-105.preview.emergentagent.com",
 ).rstrip("/")
 STUDENT = {"identifier": "Gaurav.pandey", "password": "Student@123"}
 SUPERVISOR = {"identifier": "Paresh.gandhi", "password": "Supervisor@123"}

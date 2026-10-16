@@ -27,6 +27,7 @@ import {
   PROCEDURE_TYPES,  LOADING_TYPES,
   PROCEDURES_WITH_NUM_IMPLANTS_QUESTION,
   SURGERY_APPROACH_TYPES, GUIDED_SURGERY_TYPES, STATIC_GUIDE_TYPES, SLEEVE_TYPES, DYNAMIC_NAV_SYSTEMS,
+  SITE_PREP_TECHNIQUES, needsSitePrepTechnique,
   normalizeSurgeryApproach, isGuidedApproach,
   getInvalidSinusLiftTeeth,
   CHECKLIST_DATA,
@@ -405,6 +406,7 @@ export default function NewProcedureScreen() {
     overdenture_type: '',
     // iter-387: surgical-approach cascade (hidden for Existing Implant)
     procedure_surgery_type: '',
+    site_prep_technique: '',
     guided_surgery_type: '',
     static_guide_type: '',
     sleeve_type: '',
@@ -744,6 +746,7 @@ export default function NewProcedureScreen() {
                 bone_graft_material_details: proc.bone_graft_material_details || '',
                 overdenture_type: proc.overdenture_type || '',
                 procedure_surgery_type: normalizeSurgeryApproach(proc.procedure_surgery_type) || '',
+                site_prep_technique: proc.site_prep_technique || '',
                 guided_surgery_type: proc.guided_surgery_type || '',
                 static_guide_type: proc.static_guide_type || '',
                 sleeve_type: proc.sleeve_type || '',
@@ -1339,6 +1342,10 @@ export default function NewProcedureScreen() {
         Alert.alert('Missing Field', 'Please select the Procedure Type (Free Hand / Combination / Guided Surgery).');
         return;
       }
+      if (needsSitePrepTechnique(sanitized.procedure_surgery_type) && !sanitized.site_prep_technique) {
+        Alert.alert('Missing Field', 'Please select the Implant Site Preparation Technique.');
+        return;
+      }
       if (isGuidedApproach(sanitized.procedure_surgery_type)) {
         if (!sanitized.guided_surgery_type) {
           Alert.alert('Missing Field', 'Please select the Type of Guided Surgery.');
@@ -1932,7 +1939,8 @@ export default function NewProcedureScreen() {
       }
       // iter-387: surgical-approach cascade requirements
       if (!formData.procedure_surgery_type) missImplantDetails.push('Procedure Type');
-      else if (isGuidedApproach(formData.procedure_surgery_type)) {
+      else if (needsSitePrepTechnique(formData.procedure_surgery_type) && !formData.site_prep_technique) missImplantDetails.push('Implant Site Preparation Technique');
+      if (isGuidedApproach(formData.procedure_surgery_type)) {
         if (!formData.guided_surgery_type) missImplantDetails.push('Type of Guided Surgery');
         else if (formData.guided_surgery_type === 'Static Guide') {
           if (!formData.static_guide_type) missImplantDetails.push('Type of Static Guide');
@@ -2372,6 +2380,7 @@ export default function NewProcedureScreen() {
             }
             if (v === 'Existing Implant') {
               updateForm('procedure_surgery_type', '');
+              updateForm('site_prep_technique', '');
               updateForm('guided_surgery_type', '');
               updateForm('static_guide_type', '');
               updateForm('sleeve_type', '');
@@ -2403,6 +2412,7 @@ export default function NewProcedureScreen() {
             options={SURGERY_APPROACH_TYPES}
             onChange={v => {
               updateForm('procedure_surgery_type', v);
+              updateForm('site_prep_technique', '');
               updateForm('guided_surgery_type', '');
               updateForm('static_guide_type', '');
               updateForm('sleeve_type', '');
@@ -2410,6 +2420,19 @@ export default function NewProcedureScreen() {
             }}
             required
             data-testid="procedure-surgery-type-dropdown"
+          />
+        )}
+        {/* iter-Jun-2026: Free Hand / Combination → osteotomy technique used
+            to prepare the implant site. Rendered directly below Procedure Type. */}
+        {needsSitePrepTechnique(formData.procedure_surgery_type) &&
+          formData.implant_procedure_type !== 'Existing Implant' && (
+          <Dropdown
+            label="Implant Site Preparation Technique"
+            value={formData.site_prep_technique}
+            options={SITE_PREP_TECHNIQUES}
+            onChange={v => updateForm('site_prep_technique', v)}
+            required
+            data-testid="site-prep-technique-dropdown"
           />
         )}
         {isGuidedApproach(formData.procedure_surgery_type) &&

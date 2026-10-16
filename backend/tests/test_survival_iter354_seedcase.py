@@ -35,7 +35,7 @@ def _load_env():
 _load_env()
 BASE_URL = os.environ.get(
     "REACT_APP_BACKEND_URL",
-    "https://dental-implant-hub-14.preview.emergentagent.com",
+    "https://research-portal-105.preview.emergentagent.com",
 ).rstrip("/")
 _client = MongoClient(os.environ["MONGO_URL"])
 db = _client[os.environ["DB_NAME"]]
