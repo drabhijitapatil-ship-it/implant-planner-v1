@@ -62,7 +62,7 @@ export const RESEARCH_GUIDE: GuideSection[] = [
       { type: 'p', text: 'Study → Protocol tab → Eligibility → Edit. Write criteria as rules the app can check against the case record wherever possible, and as checklist items only for what the record cannot show.' },
       { type: 'steps', items: [
         'Tap + Include rule or + Exclude rule.',
-        'Tap the field box to pick a case field from the Case Field Registry (grouped by phase: age, medical history, HbA1c, cigarettes/day, bisphosphonates, procedure type, implant site/system/size/torque, bone type, socket type, baseline probing depths, survival…).',
+        'Tap the field box to pick a case field from the Case Field Registry (grouped by phase: age, medical history, HbA1c, cigarettes/day, bisphosphonates, procedure type, implant site/system/size/torque, bone type, socket type, site preparation technique, baseline probing depths, survival…).',
         'Choose the operator (=, ≠, in list, >, ≥, <, ≤, between, is recorded, is not recorded, contains) and the value.',
         'Add more conditions inside the rule and set Match ALL (AND) or ANY (OR).',
         'Tap + Checklist item for clinical judgements, e.g. "Patient willing to attend recall up to 24 months".',

@@ -7854,3 +7854,7 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - Readback: case detail Phase 1 + Phase 2 InfoRows, HTML case report + backend PDF/text builders.
 - Catalogue: `constants/checklist.ts` → `SITE_PREP_TECHNIQUES`, `needsSitePrepTechnique()`.
 - Tests: `backend/tests/test_iter451_site_prep_technique.py` (1/1: create → update → Phase 2 submit persistence). UI verified via screenshot on both forms (show/hide on approach switch).
+
+## Iteration 452 (Jun 2026) — Research registry: `site.preparation_technique`
+- `backend/research.py` registry gains `site.preparation_technique` (level site, single_select with the 5 technique options, phase 2). Getter prefers the Phase 2 actual (`phase2_data.drilling_site_prep_technique`) and falls back to the Phase 1 plan (`site_prep_technique`). Usable in eligibility rules, linked study variables, dashboard group-by and exports (frontend reads the registry dynamically — no UI change needed). Guide field list updated.
+- Tests: `backend/tests/test_iter452_registry_site_prep.py` (4) + research module suite still green (10/10).

@@ -171,6 +171,11 @@ _REG: list[tuple] = [
     # site level
     ("site.socket_type", "Extraction socket type (Elian)", "site", "single_select", None, _opts(["Type I", "Type II", "Type III"]), 1,
      lambda p, i: _str((p.get("socket_types") or {}).get(_tooth_key(i)))),
+    # iter-452: osteotomy technique — Phase 2 actual, falling back to the Phase 1 plan
+    ("site.preparation_technique", "Implant site preparation technique", "site", "single_select", None,
+     _opts(["Conventional Drilling", "Conventional Osteotome Technique (Bone Condensation & Expansion)",
+            "Osseodensification", "Piezoelectric (Ultrasonic) Osteotomy", "Magneto-dynamic Surgical Device"]), 2,
+     lambda p, i: _str((p.get("phase2_data") or {}).get("drilling_site_prep_technique") or p.get("site_prep_technique"))),
     ("site.baseline_pd_mesial", "Baseline PD mesial", "site", "decimal", "mm", None, 4, lambda p, i: _pd(p, i, "mesial")),
     ("site.baseline_pd_distal", "Baseline PD distal", "site", "decimal", "mm", None, 4, lambda p, i: _pd(p, i, "distal")),
     ("site.baseline_pd_vestibular", "Baseline PD vestibular", "site", "decimal", "mm", None, 4, lambda p, i: _pd(p, i, "vestibular")),
