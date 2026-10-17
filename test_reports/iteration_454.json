@@ -1,0 +1,24 @@
+{
+  "summary": "iter-454 ASA Classification bottom-sheet clipping fix verified (frontend only). T1 (390x844): opened asa-info-routine sheet; 'Decision rules for implant planning' header, 'E modifier' paragraph, and ALL 5 rows (I/II/III/IV/'V, VI' with correct Surgery + Required action) are present. V,VI row bbox {y:715, h:16} → bottom 731 ≤ Got it button y=772 ≤ viewport 844 → row fully visible WITHOUT scrolling, above asa-sheet-close-routine. T2 (390x667): V,VI row exists in DOM, initial y=623 (within viewport since sheet maxHeight 94%≈627, but very near fold); after scroll_into_view, V,VI at y=538, h=16, bottom=554, Got it btn at y=595 → fully visible, not overlapped. Closed via asa-sheet-close-routine successfully. T3 regression: opened asa-dropdown-routine, asa-option-info-V-routine → sheet shows ASA V definition 'A moribund patient not expected to survive without the operation', decision 'Not applicable', action 'Exclude from elective care'; closed; selected asa-option-I-routine → asa-chip-routine renders 'ASA I · Proceed with elective implant surgery' with body 'None beyond standard history'. All three tests PASS. No deprecated-package or SafeAreaView issues detected in the ASA component. Did not modify app code (confirmed clipping fix in /app/frontend/components/AsaClassificationSection.tsx: ScrollView flexGrow:0/flexShrink:1 + sheet maxHeight 94%).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_454.json"],
+  "action_items": [
+    "No action required — clipping fix verified on both 390x844 and 390x667 viewports and T3 regression intact."
+  ],
+  "critical_code_review_comments": [
+    "AsaClassificationSection.tsx line 113: ScrollView uses showsVerticalScrollIndicator + style={{flexGrow:0, flexShrink:1}} + contentContainerStyle paddingBottom:16, and sheet (line 202) uses maxHeight:'94%' with paddingBottom:28 — this correctly caps the sheet, lets the ScrollView size to content, and prevents the final row from being clipped behind the Got it button on tall viewports while remaining scrollable on short ones. Fix is sound and minimal."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (3/3: T1, T2, T3)"},
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login testIDs on the auth screen are login-email-input / login-password-input / login-submit-btn (NOT login-identifier-input / login-submit-button). ASA sheet has data-testid=asa-sheet-{suffix}, close btn asa-sheet-close-{suffix}; per-class info opener is asa-option-info-{cls}-{suffix}; selecting is asa-option-{cls}-{suffix}. The V,VI row is a plain Text cell with text 'V, VI' — locate via document.querySelectorAll('div, span') text filter.",
+  "rca_of_issue": "Original bug: ScrollView inside the ASA info sheet had maxHeight:560 while the sheet maxHeight was 88%, causing the inner scroll area to be shorter than its content and clipping the final 'V, VI' table row behind the Got it button on 390x844. Fix: replace fixed maxHeight with {flexGrow:0, flexShrink:1} so the ScrollView sizes naturally within the sheet, show the vertical scroll indicator for short viewports, add contentContainerStyle paddingBottom:16, and raise sheet maxHeight to 94%. Verified: on 390x844 the entire 5-row table fits above the Got it button without scrolling; on 390x667 the ScrollView is scrollable and the V,VI row becomes fully visible after scrolling."
+}

@@ -110,7 +110,7 @@ export default function AsaClassificationSection({ value, onChange, testidSuffix
           <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => { /* swallow */ }}
             testID={`asa-sheet-${testidSuffix}`} data-testid={`asa-sheet-${testidSuffix}`}>
             <View style={styles.sheetHandle} />
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 560 }}>
+            <ScrollView showsVerticalScrollIndicator style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
               {sheet?.kind === 'overview' && (
                 <>
                   <View style={styles.sheetTitleRow}>
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   chipTitle: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
   chipBody: { fontSize: 12, color: '#455A64', marginTop: 2, lineHeight: 17 },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 28, maxHeight: '88%' },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 28, maxHeight: '94%' },
   sheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#CFD8DC', marginBottom: 14 },
   sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: '#0D47A1' },

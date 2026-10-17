@@ -7864,3 +7864,6 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - Stored as `medical_assessment.asa_class` ('I'…'VI'). Mandatory: hard Alert on Step 1 → Step 2 (all cases, incl. resumed drafts) + "ASA Classification" in the Phase 1 progress-pill missing list. Backend NOT gating (would break 20 regression suites); UI is the enforcement point.
 - Read-back: Case Details `asa-readonly` row with inline pill edit (edit-fields PATCH); HTML case report (`asaDisplay`); backend fpdf case-report ("ASA Classification: ASA III - Conditional…" coloured); Research registry `patient.medical.asa_class` (single_select I–VI).
 - Tests: `backend/tests/test_iter453_asa_classification.py` (2/2) + testing agent iteration_447 frontend 6/6 PASS (agent added missing `testID` props to the 3 case-detail edit controls).
+
+## Iteration 454 (Jun 2026) — Bug fix: ASA overview sheet clipped after class IV
+- Root cause: `AsaClassificationSection` sheet ScrollView had fixed `maxHeight: 560` → 'V, VI' decision-rule row hidden. Fix: ScrollView `flexGrow:0/flexShrink:1` + visible scroll indicator + bottom padding; sheet `maxHeight: 94%`. Full 5-row table fits on 390×844; scrollable on shorter phones. Testing agent iteration_454: 3/3 PASS. Needs redeploy to reach production.
