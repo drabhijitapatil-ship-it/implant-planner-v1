@@ -45,6 +45,7 @@ import {
   MEDICAL_RISK_FACTORS, calculateMedicalRisk,
   getProstheticOptions,
 } from '../../constants/checklist';
+import { ASA_CLASSES, getAsaInfo } from '../../constants/asa';
 import { format } from 'date-fns';
 import { generateProcedurePDF, printProcedurePDF, generateLabSlipPDF, generateTerminationSummaryPDF, printTerminationSummaryPDF, generatePhase3HandoffPDF, printPhase3HandoffPDF } from '../../utils/pdfGenerator';
 import EndTreatmentPendingBanner from '../../components/EndTreatmentPendingBanner';
@@ -2761,7 +2762,7 @@ export default function ProcedureDetailScreen() {
                 </View>
               )}
             </View>
-            {Object.entries(procedure.medical_assessment).filter(([key]) => !['hb','tlc','bleeding_time','clotting_time','prothrombin_time','inr','hba1c','cigarettes_per_day'].includes(key)).map(([key, value]) => {
+            {Object.entries(procedure.medical_assessment).filter(([key]) => !['hb','tlc','bleeding_time','clotting_time','prothrombin_time','inr','hba1c','cigarettes_per_day','asa_class'].includes(key)).map(([key, value]) => {
               const isNoRisk = (value as string) === 'No';
               const isHighRisk = ['Uncontrolled', 'Heavy (>10/day)'].some(h => (value as string).includes?.(h)) || 
                 (['osteoporosis', 'radiation'].includes(key) && (value as string) === 'Yes');
@@ -2849,6 +2850,78 @@ export default function ProcedureDetailScreen() {
                 </View>
               );
             })}
+            {/* iter-453: ASA Classification — mandatory Phase 1 field, editable inline */}
+            {(() => {
+              const asaKey = 'medical_assessment.asa_class';
+              const asaVal = (procedure.medical_assessment as any)?.asa_class || '';
+              const asaInfo = getAsaInfo(asaVal);
+              const asaEditing = editingField === asaKey;
+              const asaEditVal = editValues[asaKey] ?? asaVal;
+              const saveAsa = async () => {
+                if (!asaEditVal) { Alert.alert('Missing', 'Please select an ASA class'); return; }
+                const updatedMedical = { ...(procedure.medical_assessment || {}), asa_class: asaEditVal };
+                setSaving(true);
+                try {
+                  const res = await api.patch(`/procedures/${id}/edit-fields`, { fields: { medical_assessment: updatedMedical } });
+                  setProcedure(res.data);
+                  setEditingField(null);
+                  Alert.alert('Saved', 'ASA classification updated');
+                } catch (e: any) {
+                  Alert.alert('Error', e.response?.data?.detail || 'Failed to save');
+                } finally { setSaving(false); }
+              };
+              return (
+                <View style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' }} testID="asa-readonly" data-testid="asa-readonly">
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name={asaInfo ? (asaInfo.decision === 'Proceed' ? 'checkmark-circle' : asaInfo.decision === 'Conditional' ? 'alert-circle' : 'close-circle') : 'help-circle'}
+                      size={20} color={asaInfo?.color || '#F44336'} />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={{ fontSize: 12, color: '#666' }}>ASA Classification</Text>
+                      <Text style={{ fontSize: 14, color: '#1A1A1A', fontWeight: '500' }} data-testid="asa-readonly-value">
+                        {asaInfo ? `ASA ${asaInfo.cls} — ${asaInfo.definition}` : 'Not recorded'}
+                      </Text>
+                      {asaInfo && <Text style={{ fontSize: 11, color: asaInfo.color, marginTop: 2 }}>{asaInfo.decision} · {asaInfo.requiredAction}</Text>}
+                    </View>
+                    {!asaEditing && asaInfo && (
+                      <View style={{ backgroundColor: asaInfo.bg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginRight: 6 }}>
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: asaInfo.color }}>{asaInfo.decision.toUpperCase()}</Text>
+                      </View>
+                    )}
+                    {canEditField() && !asaEditing && (
+                      <TouchableOpacity onPress={() => startEdit(asaKey, asaVal)} style={{ padding: 4 }} testID="edit-medical-asa_class" data-testid="edit-medical-asa_class">
+                        <Ionicons name="pencil" size={14} color="#1565C0" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  {asaEditing && (
+                    <View style={{ marginTop: 8, marginLeft: 32 }}>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {ASA_CLASSES.map(c => {
+                          const sel = asaEditVal === c.cls;
+                          return (
+                            <TouchableOpacity key={c.cls} onPress={() => setEditValues(prev => ({ ...prev, [asaKey]: c.cls }))}
+                              style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: sel ? c.color : '#CFD8DC', backgroundColor: sel ? c.color : '#FFF' }}
+                              testID={`asa-edit-option-${c.cls}`} data-testid={`asa-edit-option-${c.cls}`}>
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: sel ? '#FFF' : '#37474F' }}>{c.cls}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+                        <TouchableOpacity onPress={saveAsa} disabled={saving} style={{ backgroundColor: '#4CAF50', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }} testID="asa-edit-save" data-testid="asa-edit-save">
+                          {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="checkmark" size={14} color="#FFF" />}
+                          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Save</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={cancelEdit} style={{ backgroundColor: '#F44336', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="close" size={14} color="#FFF" />
+                          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
             {/* Read-only Haematology Examination + HbA1c display block.
                 Phase-1 lab values captured at case-creation time. Not part
                 of the risk-scoring above; surfaced separately so reviewers

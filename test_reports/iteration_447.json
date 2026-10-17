@@ -1,0 +1,29 @@
+{
+  "summary": "iter-453 ASA Classification frontend testing (routine + existing-implant flows + Case Details inline edit). T1 ordering (asa-section-routine renders after haematology-routine), T1 overview sheet (Decision rules + E modifier), T2 dropdown with 6 options and per-class info sheets (IV: 'Severe systemic disease that is a constant threat to life' + 'Defer' confirmed), T2 chip selection (IV → 'Defer elective implant surgery'; III → 'Conditional — physician clearance required'), T4 Existing-Implant flow renders asa-section-existing after haematology-existing and chip for II shows 'Proceed with elective implant surgery' — ALL PASS. T5 Case Details asa-readonly row shows 'Not recorded' pre-edit; after fixing missing testID props the inline edit (edit-medical-asa_class → asa-edit-option-III → asa-edit-save) works and the row updates to 'ASA III — Severe systemic disease…' + 'CONDITIONAL' badge; GET /api/procedures/{id} confirms medical_assessment.asa_class == 'III' with original medical keys preserved (diabetes retained); restored via PATCH /edit-fields (200). T6 regression: Medical Risk badge ('Low Risk' chip) still renders; existing medical factor rows (Diabetes, Smoking, Anticoagulant, Osteoporosis, Radiation) still display; no raw 'asa_class' row in the generic medical list.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ASA inline-edit TouchableOpacity buttons", "issue": "Three TouchableOpacity controls in Case Details ASA inline edit used only data-testid (no testID), so on RN-web the data-testid attribute was NOT forwarded to the DOM and the controls were untestable (and would have been hard to target in general). Fixed by adding testID alongside data-testid on edit-medical-asa_class (line 2891), asa-edit-option-{cls} (line 2902), and asa-edit-save (line 2911).", "testID": "edit-medical-asa_class, asa-edit-option-{I..VI}, asa-edit-save", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Case Details screen (RN-web)", "issue": "Repeated console error 'Unexpected text node: . A text node cannot be a child of a <View>.' fires on /procedures/{id}?edit=true and in new-procedure Existing Implant flow. Likely a stray whitespace/empty string being rendered inside a <View> (not inside a <Text>). Not blocking functionality, but should be hunted down by the main agent. Reference: /app/frontend/app/procedures/[id].tsx and /app/frontend/app/(tabs)/new-procedure.tsx. iter-453 ASA components themselves looked clean on inspection; the warnings predate ASA selection but appear more frequently in Existing-Implant flow."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/iteration_447.json"],
+  "action_items": [
+    "No functional fixes required for iter-453 ASA feature — all 6 planned checks pass.",
+    "(Optional) Investigate the recurring RN-web warning 'Unexpected text node: . A text node cannot be a child of a <View>.' on Case Details and the Existing-Implant new-procedure flow — a stray string literal is being rendered outside of <Text>."
+  ],
+  "critical_code_review_comments": [
+    "frontend/app/procedures/[id].tsx — Several TouchableOpacity controls (edit-medical-asa_class, asa-edit-option-{cls}, asa-edit-save, and cancel button nearby) relied on data-testid without a matching testID. RN-web silently drops unknown DOM-ish props on TouchableOpacity, so these were effectively untestable. Pattern-wise, every new interactive element should declare BOTH testID and data-testid (as AsaClassificationSection.tsx already does)."
+  ],
+  "updated_files": ["/app/frontend/app/procedures/[id].tsx"],
+  "success_rate": {"backend": "n/a (frontend-only run)", "frontend": "100% (6/6 planned checks passing after a 3-line test-infra fix)"},
+  "seed_data_creation": "None. Picked existing procedure pid 6a6b6c41de8b0b9e3366fce9 ('Stacked Layout Patient', status augmentation_in_progress) for T5; its medical_assessment was restored to the original {diabetes:'No'} via PATCH /api/procedures/{id}/edit-fields after the test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "To activate inline-edit controls in Case Details, append ?edit=true to the URL AND login as implant_incharge or supervisor (admin). Procedure 6a6b6c41de8b0b9e3366fce9 is a reliable editable case for ASA edit tests (status: augmentation_in_progress). RN-web ignores data-testid on TouchableOpacity unless testID is also set — always add both for new interactive elements.",
+  "rca_of_issue": "RCA for inline-edit testID gap: In React Native Web, the standard way to produce a DOM data-testid is to pass the React Native testID prop; TouchableOpacity does not forward arbitrary data-* props from JSX to the underlying <div>. Three TouchableOpacity components added in iter-453 for the ASA inline edit path used only data-testid, which React treats as an unknown prop on the composite component. Playwright selectors therefore returned null even though the buttons were visually present and clickable. Fix: add testID alongside data-testid (consistent with AsaClassificationSection.tsx pattern). Reproduction: open /procedures/{editable_id}?edit=true as admin, inspect DOM of the ASA row — pre-fix the pencil TouchableOpacity has no data-testid attribute; post-fix it does."
+}

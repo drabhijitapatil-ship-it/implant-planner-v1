@@ -14771,6 +14771,14 @@ async def generate_case_report(
     # in their own block below the risk factors. Skip them when iterating risk
     # factors so the colour-coding heuristics don't fire on numeric strings.
     LAB_KEYS = {"hba1c", "hb", "tlc", "bleeding_time", "clotting_time", "prothrombin_time", "inr"}
+    # iter-453: ASA class → (decision for elective implant surgery, RGB colour)
+    ASA_DECISIONS = {
+        "I": ("Proceed", (46, 125, 50)), "II": ("Proceed", (85, 139, 47)),
+        "III": ("Conditional - physician clearance required", (239, 108, 0)),
+        "IV": ("Defer elective implant surgery", (198, 40, 40)),
+        "V": ("Not applicable - exclude from elective care", (106, 27, 154)),
+        "VI": ("Not applicable - exclude from elective care", (69, 90, 100)),
+    }
     if isinstance(med, dict) and med:
         risk = procedure.get("medical_risk_level", "")
         title = f"Medical Assessment — {risk}" if risk else "Medical Assessment"
@@ -14783,6 +14791,15 @@ async def generate_case_report(
         }
         for key, value in med.items():
             if key in LAB_KEYS:
+                continue
+            if key == "asa_class":
+                # iter-453: ASA Physical Status — rendered with its decision rule
+                _asa = ASA_DECISIONS.get(str(value), ("", (0, 0, 0)))
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.cell(60, 7, safe("ASA Classification:"), ln=False)
+                pdf.set_text_color(*_asa[1])
+                pdf.cell(0, 7, safe(f"ASA {value}" + (f" - {_asa[0]}" if _asa[0] else "")), ln=True)
+                pdf.set_text_color(0, 0, 0)
                 continue
             label = key.replace("_", " ").title()
             pdf.set_font("Helvetica", "B", 10)

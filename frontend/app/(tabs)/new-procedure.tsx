@@ -21,6 +21,7 @@ import ZygomaPterygoidPhase1Form, { ZygomaPterygoidPhase1Data } from '../../comp
 import GroupedDescDropdown from '../../components/GroupedDescDropdown';
 import AssistantPicker from '../../components/AssistantPicker';
 import AestheticRiskSection from '../../components/AestheticRiskSection';
+import AsaClassificationSection from '../../components/AsaClassificationSection';
 import { isAnteriorMaxillaCase, ERA_PATIENT_FACTORS, ERA_SITE_SELECTABLE, anteriorAreas, eraValue } from '../../utils/aestheticRisk';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
@@ -1336,6 +1337,11 @@ export default function NewProcedureScreen() {
       Alert.alert('Missing Field', 'Please select at least one loading type.');
       return;
     }
+    // iter-453: ASA Classification is mandatory for every Phase 1 record.
+    if (!formData.medical_assessment?.asa_class) {
+      Alert.alert('Missing Field', 'Please select the ASA Class (Medical Assessment → ASA Classification).');
+      return;
+    }
     // iter-387: surgical-approach cascade validation (not for Existing Implant)
     if (!isExistingImplantCase) {
       if (!sanitized.procedure_surgery_type) {
@@ -2028,9 +2034,11 @@ export default function NewProcedureScreen() {
       if (!ma.anticoagulant) missMedicalOrChecklist.push('Anticoagulant therapy');
       if (!ma.osteoporosis) missMedicalOrChecklist.push('Osteoporosis medication');
       if (!ma.radiation) missMedicalOrChecklist.push('Radiation therapy');
+      if (!ma.asa_class) missMedicalOrChecklist.push('ASA Classification');
     } else {
       if (!cbctFiles[0] || !cbctFiles[1]) missMedicalOrChecklist.push('Both CBCT Reports');
       if (!intraoralPhotos[0] || !intraoralPhotos[1]) missMedicalOrChecklist.push('Both Patient Intra-oral Photographs');
+      if (!formData.medical_assessment?.asa_class) missMedicalOrChecklist.push('ASA Classification');
       if (!formData.loading_type || formData.loading_type.length === 0) missMedicalOrChecklist.push('Type of Loading');
       // iter-Feb-2026 / -B / -C — Type of Provisional (any workflow group)
       if (getEffectiveWorkflow(formData.implant_procedure_type, formData.num_implants) !== null
@@ -3968,6 +3976,11 @@ export default function NewProcedureScreen() {
             </View>
           ))}
           {renderHaematologySection('routine')}
+          <AsaClassificationSection
+            value={formData.medical_assessment.asa_class || ''}
+            onChange={(v) => updateMedical('asa_class', v)}
+            testidSuffix="routine"
+          />
           {Object.keys(formData.medical_assessment).length > 0 && (() => {
             const risk = calculateMedicalRisk(formData.medical_assessment);
             return (
@@ -4035,6 +4048,11 @@ export default function NewProcedureScreen() {
               </View>
             ))}
             {renderHaematologySection('existing')}
+            <AsaClassificationSection
+              value={formData.medical_assessment.asa_class || ''}
+              onChange={(v) => updateMedical('asa_class', v)}
+              testidSuffix="existing"
+            />
             {Object.keys(formData.medical_assessment).length > 0 && (() => {
               const risk = calculateMedicalRisk(formData.medical_assessment);
               return (

@@ -7,6 +7,7 @@ import { impressionRows } from './impressionOptions';
 import api from './api';
 import { fmtBytes } from './scanUpload';
 import { computeEra, isAnteriorMaxillaCase, RISK_COLORS } from './aestheticRisk';
+import { asaDisplay } from '../constants/asa';
 
 /** Build the full HTML for the procedure case report (shared by download + print flows). */
 
@@ -236,7 +237,11 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
           <div class="section">
             <div class="section-title">Medical Assessment${procedure.medical_risk_level ? ` — ${procedure.medical_risk_level}` : ''}</div>
             <table>
-              ${Object.entries(procedure.medical_assessment).map(([key, value]) => `
+              ${Object.entries(procedure.medical_assessment).map(([key, value]) => key === 'asa_class' ? `
+              <tr>
+                <td class="info-label">ASA Classification:</td>
+                <td class="info-value"><span style="font-weight: bold;">${asaDisplay(value as string)}</span></td>
+              </tr>` : `
               <tr>
                 <td class="info-label" style="text-transform: capitalize;">${key.replace(/_/g, ' ')}:</td>
                 <td class="info-value">

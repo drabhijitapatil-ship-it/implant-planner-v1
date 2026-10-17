@@ -127,6 +127,9 @@ _REG: list[tuple] = [
     ("patient.medical.anticoagulant", "On anticoagulants", "patient", "single_select", None, YES_NO, 1, _med("anticoagulant")),
     ("patient.medical.osteoporosis", "Osteoporosis / bisphosphonates", "patient", "single_select", None, YES_NO, 1, _med("osteoporosis")),
     ("patient.medical.radiation", "Head & neck radiation", "patient", "single_select", None, YES_NO, 1, _med("radiation")),
+    # iter-453: ASA Physical Status (I–VI)
+    ("patient.medical.asa_class", "ASA physical status class", "patient", "single_select", None,
+     _opts(["I", "II", "III", "IV", "V", "VI"]), 1, _med("asa_class")),
     ("patient.medical.hba1c_pct", "HbA1c", "patient", "decimal", "%", None, 1, lambda p, i: _num((p.get("medical_assessment") or {}).get("hba1c"))),
     ("patient.medical.cigarettes_per_day", "Cigarettes per day", "patient", "integer", "/day", None, 1,
      lambda p, i: _num((p.get("medical_assessment") or {}).get("cigarettes_per_day"))),
