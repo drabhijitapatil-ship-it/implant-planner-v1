@@ -30,6 +30,7 @@ from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
 import aesthetic_risk as _era
+import diagnosis_engine as _dx
 import prescription as _rx
 from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -4171,6 +4172,10 @@ async def update_procedure(
         allowed = valid_transitions.get(current_status, set())
         if new_status not in allowed:
             raise HTTPException(status_code=400, detail=f"Cannot change status from '{current_status}' to '{new_status}'")
+        # iter-455: Phase 1 diagnosis is mandatory at submission — auto-generate
+        # the Atlas diagnosis if the record still has none (API clients / legacy drafts).
+        if new_status == "pending_phase1" and not ((procedure.get("phase1_diagnosis") or {}).get("text") or "").strip():
+            update_data["phase1_diagnosis"] = _dx.generate({**procedure, **update_data})
     
     update_data["updated_at"] = datetime.utcnow()
     
@@ -14893,6 +14898,27 @@ async def generate_case_report(
     # ── Phase 1: Diagnosis and Treatment Planning ─────────────
     pdf.add_page()
     add_section_title("Phase 1 - Diagnosis and Treatment Planning", 0, 122, 255)
+    # iter-455: Atlas-derived clinical diagnosis (clinician-edited narrative)
+    _dx_rec = procedure.get("phase1_diagnosis") or {}
+    if (_dx_rec.get("text") or "").strip():
+        _verdict = _dx_rec.get("verdict") or ""
+        _vcol = {"Proceed": (46, 125, 50), "Modify plan": (239, 108, 0), "Defer": (198, 40, 40)}.get(_verdict, (84, 110, 122))
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(21, 101, 192)
+        pdf.cell(0, 7, safe("Clinical Diagnosis"), ln=True)
+        if _verdict:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*_vcol)
+            pdf.cell(0, 6, safe(f"Overall assessment: {_verdict}"), ln=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.multi_cell(0, 5, safe(_dx_rec["text"]))
+        if _dx_rec.get("edited_by_name"):
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(0, 5, safe(f"Edited by {_dx_rec['edited_by_name']}"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
     checklist = procedure.get("checklist", {})
     if isinstance(checklist, dict):
         add_checklist_section("Pre-Surgical Checklist", checklist.get("pre_surgical"))
@@ -16497,6 +16523,75 @@ async def approve_procedure(
     return updated_procedure
 
 # ── Request Phase 1 Approval (Draft → Pending Phase 1) ───────────
+# ── iter-455: Phase 1 Clinical Diagnosis (Atlas rules engine) ─────────────
+def _dx_can_edit(proc: dict, user: dict) -> bool:
+    """Creator (student / in-charge) + assigned supervisor + implant in-charge + admin."""
+    uid = user["_id"]
+    role = user["role"]
+    if role in ("implant_incharge", "administrator"):
+        return True
+    if role == "supervisor":
+        return proc.get("supervisor_id") == uid or proc.get("created_by_id") == uid
+    if role == "student":
+        return proc.get("student_id") == uid or proc.get("created_by_id") == uid
+    return False
+
+
+class DiagnosisUpdate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=20000)
+
+
+@api_router.post("/procedures/{procedure_id}/diagnosis/generate")
+async def generate_phase1_diagnosis(
+    procedure_id: str,
+    force: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate (or refresh with ?force=true) the deterministic Phase 1 diagnosis
+    from the captured case data. Preserves user edits unless force is set."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _dx_can_edit(proc, current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    existing = proc.get("phase1_diagnosis") or {}
+    fresh = _dx.generate(proc)
+    if existing.get("text") and not force:
+        # Refresh structured findings but keep the clinician's edited narrative.
+        fresh["text"] = existing["text"]
+        fresh["edited_by"] = existing.get("edited_by")
+        fresh["edited_by_name"] = existing.get("edited_by_name")
+        fresh["edited_at"] = existing.get("edited_at")
+    fresh["version"] = int(existing.get("version") or 0) + 1
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"phase1_diagnosis": fresh, "updated_at": datetime.utcnow()}})
+    return fresh
+
+
+@api_router.put("/procedures/{procedure_id}/diagnosis")
+async def save_phase1_diagnosis(
+    procedure_id: str,
+    body: DiagnosisUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Save the clinician-edited diagnosis narrative."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _dx_can_edit(proc, current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if proc.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Cannot edit completed cases")
+    dx = proc.get("phase1_diagnosis") or _dx.generate(proc)
+    dx["text"] = body.text.strip()
+    dx["edited_by"] = current_user["_id"]
+    dx["edited_by_name"] = current_user.get("name")
+    dx["edited_at"] = datetime.now(timezone.utc).isoformat()
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"phase1_diagnosis": dx, "updated_at": datetime.utcnow()}})
+    return dx
+
+
 @api_router.post("/procedures/{procedure_id}/request-phase1-approval")
 async def request_phase1_approval(
     procedure_id: str,
@@ -16521,6 +16616,12 @@ async def request_phase1_approval(
         "phase1_requested_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
+    # iter-455: a Phase 1 clinical diagnosis is mandatory at submission. The UI
+    # generates/edits it in Step 2; if it is somehow missing (API clients,
+    # legacy drafts) we generate the deterministic Atlas diagnosis here so the
+    # record is never approved without one.
+    if not ((procedure.get("phase1_diagnosis") or {}).get("text") or "").strip():
+        update_fields["phase1_diagnosis"] = _dx.generate(procedure)
     # iter-359: When Implant In-Charge (or Administrator) submits their own
     # case for Phase 1 approval, we skip the `pending_phase1` waiting-room
     # and land directly in `phase1_approved`. All approval flags are already

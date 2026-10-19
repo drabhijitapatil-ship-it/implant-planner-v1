@@ -69,6 +69,7 @@ import AugmentationChecklist from '../../components/AugmentationChecklist';
 import ClinicalEvaluationBanner from '../../components/ClinicalEvaluationBanner';
 import PatientHistoryStrip from '../../components/PatientHistoryStrip';
 import AddImplantSection from '../../components/AddImplantSection';
+import ClinicalDiagnosisCard from '../../components/ClinicalDiagnosisCard';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
@@ -2955,6 +2956,25 @@ export default function ProcedureDetailScreen() {
                 </View>
               );
             })()}
+          </View>
+        )}
+
+        {/* iter-455: Phase 1 Clinical Diagnosis (Atlas engine) — editable by creator, supervisor, in-charge */}
+        {procedure.phase1_diagnosis?.text && (
+          <View style={{ marginHorizontal: -4, marginBottom: 12 }} testID="dx-section" data-testid="dx-section">
+            <ClinicalDiagnosisCard
+              procedureId={id as string}
+              initial={procedure.phase1_diagnosis}
+              autoGenerate={false}
+              compact
+              readOnly={
+                procedure.status === 'completed' ||
+                !(user?.role === 'implant_incharge' || user?.role === 'administrator' ||
+                  user?.id === procedure.student_id || user?.id === procedure.created_by_id ||
+                  (user?.role === 'supervisor' && user?.id === procedure.supervisor_id))
+              }
+              onChange={(dx) => setProcedure((p: any) => (p ? { ...p, phase1_diagnosis: dx } : p))}
+            />
           </View>
         )}
 

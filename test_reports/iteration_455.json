@@ -1,0 +1,23 @@
+{
+  "summary": "iter-455 Clinical Diagnosis — frontend-only test. All 7 scenarios (T1–T7) passed on mobile viewport 390x844. Phase 1 Step 2 renders the clinical-diagnosis-card above Submit for Approval; verdict 'Overall: Modify plan' with chip counts 2/1/3 (high/modify/favourable); required chips dx-chip-S-PHN (red: Thin, High scalloped), dx-chip-S-SML (red: High), dx-chip-M-RDG (amber: 11 Horizontal), dx-chip-S-MD (green: 11 8 mm) all present. 'Not assessed in Phase 1' block visible with ASA/plaque/periodontitis/bruxism/buccal plate/soft-tissue/keratinised items. dx-text-input begins with 'CLINICAL DIAGNOSIS — PHASE 1' and contains NO literature-reference tokens (ITI/SAC/Tarnow/Elian/Aparicio verified absent). T2 edit (append + dx-save-btn) persists through reload; header tag reads 'Edited by Dr. Gaurav Pandey'. T3 regenerate via POST /api/procedures/{id}/diagnosis/generate?force=true (web Alert confirm not triggered — expected RN-web behaviour) wipes clinician text and resets edited_at. T4 dx-toggle-findings hides (6→0 chips) and re-shows them. T5 admin (Abhijit.patil) on /procedures/{id}: dx-section + dx-text-readonly + dx-edit-btn visible; edit flow writes back and shows 'Edited by Dr. Abhijit Patil'; restored via force-regen. T6 Gaurav case-detail renders without crash on a non-owned phase1_approved case; edit button present (consistent with his assistant role on that case). T7 regression: PredictiveRiskCard (Historical Outcome Nudge) and Implant Planning section both remain above the diagnosis card; Submit for Approval button rendered at bottom (not pressed). Draft 6ab7f3ab84f8a4c56eb61fb0 status remains 'draft'; both clinician edits (student + admin) were cleared/restored via force regenerate.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_455.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ClinicalDiagnosisCard.tsx: on mount with existing initial.text, it fires generate(false) automatically to refresh findings while keeping clinician text. If a case has stale server-side generated_text, this is correct, but it causes an extra API round-trip every time the card mounts; consider gating by generated_at age.",
+    "GET /api/procedures listing returns created_by/creator_id as null (not populated), making client-side ownership checks impossible — minor API hygiene concern (unrelated to iter-455).",
+    "RN-web: regenerate confirm Alert.alert with buttons is a no-op on web (silently resolves to default). Consider swapping to window.confirm or a custom modal on web so the destructive-replace step is actually gated for web users."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "seed_data_creation": "No new seed data created. Test diagnosis was generated on existing case 6ab4bc777f87ae009bac3e6c (TEST_Assistant Case) via POST /diagnosis/generate; admin's test edit removed via force-regenerate (restored to engine output). Student's edit to draft 6ab7f3ab84f8a4c56eb61fb0 cleared via force-regenerate. Draft status unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend already covered by tests/test_iter455_diagnosis.py (5/5). On web, the Alert.alert confirm for Regenerate silently resolves without user action — use POST /api/procedures/{id}/diagnosis/generate?force=true to drive the destructive path in tests. The ERA Test Patient draft (6ab7f3ab84f8a4c56eb61fb0) produces 6 findings — 2 high (S-PHN, S-SML), 1 modify (M-RDG), 3 favourable (incl. S-MD, S-BCC bone-crest-to-contact, P-PER periodontal status). Verdict stays 'Modify plan'. 'Not assessed' list: ASA, plaque/bleeding, periodontitis stage/grade, bruxism, buccal plate, mesiodistal space (gets filled when provided), supracrestal soft tissue, keratinised mucosa width."
+}

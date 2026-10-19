@@ -140,6 +140,10 @@ _REG: list[tuple] = [
     ("case.procedure_type", "Procedure type", "patient", "single_select", None, _opts(_PROC_TYPES), 1, _p("implant_procedure_type")),
     ("case.arch", "Arch", "patient", "single_select", None, _opts(["Maxilla", "Mandible", "Both"]), 1, _p("arch")),
     ("case.status", "Case status", "patient", "text", None, None, 0, _p("status")),
+    # iter-455: Phase 1 Atlas diagnosis verdict
+    ("case.diagnosis_verdict", "Phase 1 diagnosis verdict", "patient", "single_select", None,
+     _opts(["Proceed", "Modify plan", "Defer", "Incomplete"]), 1,
+     lambda p, i: _str(((p.get("phase1_diagnosis") or {}).get("verdict")))),
     ("case.procedure_date", "Procedure (planned) date", "patient", "date", None, None, 1, _p("procedure_date")),
     ("case.periodontal_status", "Periodontal status", "patient", "text", None, None, 1, _p("periodontal_status")),
     ("case.gingival_biotype", "Gingival biotype", "patient", "single_select", None, _opts(["Thin", "Thick"]), 1, _p("gingival_biotype")),

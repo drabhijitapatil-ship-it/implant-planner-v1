@@ -251,6 +251,13 @@ export const buildProcedurePdfHtml = (procedure: any): string => {
             </table>
           </div>` : ''}
 
+          ${procedure.phase1_diagnosis?.text ? `
+          <div class="section">
+            <div class="section-title">Clinical Diagnosis — Phase 1${procedure.phase1_diagnosis.verdict ? ` · ${procedure.phase1_diagnosis.verdict}` : ''}</div>
+            <div style="font-size:11px;line-height:1.5;white-space:pre-wrap;">${String(procedure.phase1_diagnosis.text).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
+            ${procedure.phase1_diagnosis.edited_by_name ? `<div style="font-size:10px;color:#777;margin-top:4px;">Edited by ${procedure.phase1_diagnosis.edited_by_name}</div>` : ''}
+          </div>` : ''}
+
           ${procedure.implant_plans?.length ? `
           <div class="section">
             <div class="section-title">Implant Selection Details</div>

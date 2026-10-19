@@ -22,6 +22,7 @@ import GroupedDescDropdown from '../../components/GroupedDescDropdown';
 import AssistantPicker from '../../components/AssistantPicker';
 import AestheticRiskSection from '../../components/AestheticRiskSection';
 import AsaClassificationSection from '../../components/AsaClassificationSection';
+import ClinicalDiagnosisCard, { Phase1Diagnosis } from '../../components/ClinicalDiagnosisCard';
 import { isAnteriorMaxillaCase, ERA_PATIENT_FACTORS, ERA_SITE_SELECTABLE, anteriorAreas, eraValue } from '../../utils/aestheticRisk';
 import { validateImplantSelection, findMissingRuns, clusterLeader } from '../../utils/implantValidation';
 import {
@@ -305,6 +306,8 @@ export default function NewProcedureScreen() {
   const [supervisors, setSupervisors] = useState<any[]>([]);
   const [incharges, setIncharges] = useState<any[]>([]);
   const [createdProcedureId, setCreatedProcedureId] = useState<string | null>(null);
+  // iter-455: Phase 1 clinical diagnosis (Atlas engine) — mandatory before submit.
+  const [phase1Diagnosis, setPhase1Diagnosis] = useState<Phase1Diagnosis | null>(null);
   const [phase1Done, setPhase1Done] = useState(false);
   const [isDraftResume, setIsDraftResume] = useState(false);
   // iter-222: full procedure record when resuming an existing-implant draft.
@@ -719,6 +722,7 @@ export default function NewProcedureScreen() {
             const proc = res.data;
             if (proc.status === 'draft') {
               setCreatedProcedureId(params.draftId!);
+              setPhase1Diagnosis(proc.phase1_diagnosis?.text ? proc.phase1_diagnosis : null);
               setIsDraftResume(true);
               setFormData(prev => ({
                 ...prev,
@@ -1773,6 +1777,14 @@ export default function NewProcedureScreen() {
               }
             }}
           />
+          {/* iter-455: Atlas-derived Phase 1 Clinical Diagnosis — mandatory before submission */}
+          {!!createdProcedureId && (
+            <ClinicalDiagnosisCard
+              procedureId={createdProcedureId}
+              initial={phase1Diagnosis}
+              onChange={setPhase1Diagnosis}
+            />
+          )}
         </ScrollView>
         <View style={styles.submitContainer}>
           {phase1Done ? (
@@ -1788,6 +1800,11 @@ export default function NewProcedureScreen() {
           ) : (
           <TouchableOpacity style={styles.submitBtn} data-testid="submit-for-approval"
             onPress={async () => {
+              // iter-455: diagnosis must exist and be non-empty before submission.
+              if (!phase1Diagnosis?.text?.trim()) {
+                Alert.alert('Diagnosis required', 'Please generate and review the Clinical Diagnosis before submitting the case.');
+                return;
+              }
               // Final clinical-correlation summary before submission (Q2=c — also done live).
               try {
                 const planRes = await api.get(`/procedures/${createdProcedureId}/implant-plan`);
