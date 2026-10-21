@@ -56,7 +56,7 @@ export default function TermsScreen() {
           2. Upload data you do not have the right to share, including third-party PHI without lawful consent.{"\n"}
           3. Reverse-engineer, decompile, or disassemble the Service except where permitted by law.{"\n"}
           4. Probe, scan, or test the Service's security without written authorisation.{"\n"}
-          5. Bypass or disable rate limits, authentication, audit logs, screen-capture blocking, or any other safeguard.{"\n"}
+          5. Bypass or disable rate limits, authentication, audit logs, or any other safeguard.{"\n"}
           6. Use the Service to send spam, phishing, or malware.{"\n"}
           7. Impersonate any person or misrepresent affiliation.{"\n"}
           8. Resell, sublicense, or white-label the Service without written consent.{"\n"}

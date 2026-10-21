@@ -7874,3 +7874,6 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - UI: `components/ClinicalDiagnosisCard.tsx` — Step 2 of Phase 1 (above Submit): auto-generate, verdict banner with counts, grouped colour chips (tap → implication), not-assessed list, editable narrative, Save / Regenerate (web uses confirm()). Case Details compact card (dx-section) with Edit for permitted roles. HTML case report + backend fpdf case report include the diagnosis. Research registry `case.diagnosis_verdict`.
 - Tests: `backend/tests/test_iter455_diagnosis.py` 5/5; testing agent iteration_455 frontend 7/7 PASS.
 - Backlog from Atlas gap analysis: optional Phase 1 inputs for IAN clearance, RBH under sinus, buccal plate thickness, sagittal root position, inter-implant distance, AP spread, bruxism grade, plaque/bleeding scores, periodontitis stage/grade, dexterity, lip support/transition line for All-on-X.
+
+## Iteration 456 (Jun 2026) — Removed screenshot / screen-recording block
+- User request. Deleted `hooks/useScreenCaptureProtection.ts`, removed its wiring in `app/_layout.tsx` (ActivityTracker), removed the `expo-screen-capture` dependency (yarn remove), and dropped the "screen-capture blocking" phrase from the Terms screen. Screenshots and recordings are allowed again on all platforms after redeploy + new native builds.
