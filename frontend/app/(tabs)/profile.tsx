@@ -360,10 +360,6 @@ export default function ProfileScreen() {
             <Text style={styles.legalRowText}>Terms of Service</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
-          <View style={styles.legalFootnote}>
-            <Ionicons name="time-outline" size={12} color="#78909C" />
-            <Text style={styles.legalFootnoteText}>Auto-logout after 20 min of inactivity</Text>
-          </View>
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
@@ -528,16 +524,5 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1A1A1A',
     fontWeight: '500',
-  },
-  legalFootnote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingTop: 10,
-  },
-  legalFootnoteText: {
-    fontSize: 11,
-    color: '#78909C',
-    fontStyle: 'italic',
   },
 });

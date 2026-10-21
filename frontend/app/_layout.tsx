@@ -1,40 +1,14 @@
 import { Stack } from 'expo-router';
-import { View } from 'react-native';
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { AuthProvider } from '../contexts/AuthContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TabletFrame } from '../components/TabletFrame';
 import AttachPickerModalRoot from '../components/AttachPickerModal';
-
-/**
- * ActivityTracker wraps the Stack and captures any touch anywhere in the app to
- * reset the session inactivity timer used by AuthContext.
- *
- * iter-169: Touch/responder capture on the outer View doesn't fire when inner
- * ScrollView / TextInput consume the gesture, which caused mid-session
- * logouts. We now also record activity on every authenticated API call
- * (via `setOnActivity` in utils/api.ts) so the 15-min idle timer only fires
- * when the user has genuinely stopped interacting.
- */
-function ActivityTracker({ children }: { children: React.ReactNode }) {
-  const { recordActivity } = useAuth();
-  return (
-    <View
-      style={{ flex: 1 }}
-      onTouchStart={() => recordActivity()}
-      onStartShouldSetResponderCapture={() => { recordActivity(); return false; }}
-      onMoveShouldSetResponderCapture={() => { recordActivity(); return false; }}
-    >
-      {children}
-    </View>
-  );
-}
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <TabletFrame>
-          <ActivityTracker>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="auth/login" />
@@ -91,7 +65,6 @@ export default function RootLayout() {
               <Stack.Screen name="research/enrolment/[eid]" options={{ headerShown: false }} />
             </Stack>
             <AttachPickerModalRoot />
-          </ActivityTracker>
         </TabletFrame>
       </AuthProvider>
     </GestureHandlerRootView>

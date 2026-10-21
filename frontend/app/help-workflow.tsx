@@ -235,7 +235,7 @@ export default function HelpWorkflowScreen() {
             <FeatureCard
               icon="shield-checkmark-outline" tint="#546E7A"
               title="HIPAA Safeguards"
-              bullets={['15-min auto-logout on inactivity', 'Screen-capture blocking on Android', 'Append-only audit log']}
+              bullets={['Encrypted sessions with secure tokens', 'Role-based access control', 'Append-only audit log']}
             />
             <View style={{ flex: 1 }} />
           </View>

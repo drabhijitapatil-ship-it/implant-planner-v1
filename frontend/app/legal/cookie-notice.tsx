@@ -34,7 +34,6 @@ export default function CookieNoticeScreen() {
         <Section title="3. Strictly necessary cookies (always on)">
           • implanr_session — session authentication (HttpOnly, Secure, SameSite=Strict; ≤8h){"\n"}
           • csrf_token — CSRF protection (Secure, SameSite=Strict; session){"\n"}
-          • last_activity (localStorage) — drives the 15-minute auto-logout for HIPAA compliance{"\n"}
           • device_fingerprint_hash — brute-force protection on login (30 days){"\n\n"}
           You cannot opt out of these without breaking the Service.
         </Section>
@@ -58,7 +57,7 @@ export default function CookieNoticeScreen() {
           Our iOS and Android apps do NOT use the IDFA / AAID for tracking. We honour Apple's App Tracking Transparency framework and display "Data Not Linked to You" in our App Store privacy nutrition label.{"\n\n"}
           On-device only (encrypted by the OS):{"\n"}
           • Authentication token (iOS Keychain / Android Keystore){"\n"}
-          • Last-active timestamp (auto-logout){"\n"}
+
           • Device push notification token{"\n"}
           • Cached attachment thumbnails (purgeable from Settings)
         </Section>

@@ -1,6 +1,5 @@
-import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
-import { Alert } from 'react-native';
-import api, { getToken, setToken, removeToken, setOnAuthFailure, setOnActivity } from '../utils/api';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import api, { getToken, setToken, removeToken, setOnAuthFailure } from '../utils/api';
 import { BACKEND_URL } from '../utils/config';
 
 interface User {
@@ -25,7 +24,6 @@ interface AuthContextType {
   register: (name: string, email: string, password: string, role: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfilePhoto: (photoBase64: string) => Promise<void>;
-  recordActivity: () => void;
   /** Re-fetch /auth/me and update context (used after ack-workflow). */
   refreshUser: () => Promise<User | null>;
   /** Hit POST /auth/me/ack-workflow so onboarding + workflow help stop showing.
@@ -33,69 +31,18 @@ interface AuthContextType {
   ackWorkflow: (version?: number) => Promise<void>;
 }
 
-// Auto-logout after 15 minutes of inactivity. Clinic devices are often shared,
-// so a session timeout protects patient data when a user walks away.
-// 15 min aligns with HIPAA best-practice recommendations for workstation timeout.
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const lastActivityRef = useRef<number>(Date.now());
-  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const recordActivity = useCallback(() => {
-    lastActivityRef.current = Date.now();
-  }, []);
-
   useEffect(() => {
     loadStoredAuth();
     // Register auth failure callback so interceptor can trigger logout safely
     setOnAuthFailure(() => {
       setUser(null);
     });
-    // iter-169: Every authenticated API call records activity. Closes the HIPAA
-    // compliance gap where ScrollView / TextInput consumed touches before they
-    // reached the top-level responder, logging users out mid-session.
-    setOnActivity(() => {
-      lastActivityRef.current = Date.now();
-    });
   }, []);
-
-  // Session inactivity timer — auto-logout when no activity for SESSION_TIMEOUT_MS.
-  useEffect(() => {
-    if (!user) {
-      if (sessionTimerRef.current) {
-        clearInterval(sessionTimerRef.current);
-        sessionTimerRef.current = null;
-      }
-      return;
-    }
-    lastActivityRef.current = Date.now();
-    sessionTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - lastActivityRef.current;
-      if (elapsed > SESSION_TIMEOUT_MS) {
-        if (sessionTimerRef.current) {
-          clearInterval(sessionTimerRef.current);
-          sessionTimerRef.current = null;
-        }
-        logout().then(() => {
-          Alert.alert(
-            'Session Expired',
-            'You have been logged out after 15 minutes of inactivity. Please log in again.'
-          );
-        });
-      }
-    }, 30000); // check every 30 seconds
-    return () => {
-      if (sessionTimerRef.current) {
-        clearInterval(sessionTimerRef.current);
-        sessionTimerRef.current = null;
-      }
-    };
-  }, [user]);
 
   const loadStoredAuth = async () => {
     try {
@@ -179,7 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfilePhoto, recordActivity, refreshUser, ackWorkflow }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfilePhoto, refreshUser, ackWorkflow }}>
       {children}
     </AuthContext.Provider>
   );

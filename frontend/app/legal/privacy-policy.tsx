@@ -45,7 +45,7 @@ export default function PrivacyPolicyScreen() {
           • Payment data: billing contact, GSTIN, payment method tokens. Card numbers / UPI IDs are processed by Stripe and never stored on our servers.{"\n\n"}
           4.2 We collect automatically:{"\n"}
           • Device & usage data, crash logs, screen-view events, click events.{"\n"}
-          • Authentication telemetry (login attempts, sessions, auto-logout, IP, device fingerprint).{"\n"}
+          • Authentication telemetry (login attempts, sessions, IP, device fingerprint).{"\n"}
           • Audit logs (HIPAA-aligned): every PHI view / edit / export / PDF download / role change / safety override. Retention: 6 years minimum.{"\n"}
           • Cookies & local storage on web (session, CSRF, theme, last-active timestamp). See our Cookie Notice.{"\n\n"}
           4.3 From third parties:{"\n"}
@@ -62,7 +62,7 @@ export default function PrivacyPolicyScreen() {
         <Section title="5. How we use your information">
           • Provide and maintain the Service (account, cases, PDFs).{"\n"}
           • Clinical decision support (bridge / cantilever detection, biological safety, AI explanations).{"\n"}
-          • Authentication & security (password hashing, OTP, 15-min auto-logout, brute-force protection, audit logs).{"\n"}
+          • Authentication & security (password hashing, OTP, brute-force protection, audit logs).{"\n"}
           • Customer support and bug investigation.{"\n"}
           • Service improvements via aggregated, de-identified analytics.{"\n"}
           • Legal & regulatory compliance (subpoenas, tax filing, medical record retention).{"\n"}
@@ -111,7 +111,6 @@ export default function PrivacyPolicyScreen() {
         <Section title="10. Security measures">
           • TLS 1.2+ in transit; AES-256 at rest.{"\n"}
           • Role-based access; least-privilege; MFA for engineering staff.{"\n"}
-          • 15-minute inactivity auto-logout, audit-logged.{"\n"}
           • Screen-capture blocking on Android; iOS app-switcher blur.{"\n"}
           • Audit logging for every PHI view / export / override.{"\n"}
           • Quarterly third-party penetration tests; annual internal review (target SOC-2 Type II).{"\n"}
@@ -137,7 +136,7 @@ export default function PrivacyPolicyScreen() {
         </Section>
 
         <Section title="13. Cookies">
-          The web app uses a session cookie (HttpOnly, Secure, SameSite=Strict), a CSRF token cookie, and local storage for theme and last-active timestamp (auto-logout). We do not use third-party advertising cookies, retargeting pixels, or social-media trackers. See the separate Cookie Notice for full details.
+          The web app uses a session cookie (HttpOnly, Secure, SameSite=Strict), a CSRF token cookie, and local storage for theme. We do not use third-party advertising cookies, retargeting pixels, or social-media trackers. See the separate Cookie Notice for full details.
         </Section>
 
         <Section title="14. Changes to this policy">

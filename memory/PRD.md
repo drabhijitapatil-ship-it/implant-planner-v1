@@ -7877,3 +7877,4 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 
 ## Iteration 456 (Jun 2026) — Removed screenshot / screen-recording block
 - User request. Deleted `hooks/useScreenCaptureProtection.ts`, removed its wiring in `app/_layout.tsx` (ActivityTracker), removed the `expo-screen-capture` dependency (yarn remove), and dropped the "screen-capture blocking" phrase from the Terms screen. Screenshots and recordings are allowed again on all platforms after redeploy + new native builds.
+- Removed 15-min inactivity auto-logout (AuthContext timer, ActivityTracker, api activity hook) and related UI/legal copy.
