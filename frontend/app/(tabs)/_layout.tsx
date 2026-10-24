@@ -14,6 +14,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+// SDK 58 / Reanimated 4.7 on web leaves layout-breaking styles after entering
+// animations, so entry animations are native-only.
+const IS_WEB = Platform.OS === 'web';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
@@ -173,7 +176,7 @@ function DrawerMenu({
               gracefully from the top so the eye lands on the user before the
               tiles cascade. */}
           <Animated.View
-            entering={FadeInDown.duration(220)}
+            entering={IS_WEB ? undefined : FadeInDown.duration(220)}
             style={t.identityRow}
           >
             <View style={t.identityLeft}>
@@ -210,7 +213,7 @@ function DrawerMenu({
             {allItems.map((item) => (
               <Animated.View
                 key={item.key}
-                entering={FadeIn.duration(220).withInitialValues({
+                entering={IS_WEB ? undefined : FadeIn.duration(220).withInitialValues({
                   opacity: 0,
                   transform: [{ translateY: 6 }],
                 })}
@@ -238,7 +241,7 @@ function DrawerMenu({
           {/* Logout — separate visual section; same soft reveal as tiles so
               the whole sheet lands with one coherent motion. */}
           <Animated.View
-            entering={FadeIn.duration(220).withInitialValues({
+            entering={IS_WEB ? undefined : FadeIn.duration(220).withInitialValues({
               opacity: 0,
               transform: [{ translateY: 6 }],
             })}
@@ -660,21 +663,27 @@ export default function TabsLayout() {
           name="user-management"
           options={{
             title: 'Users',
-            href: null,
+            // SDK 58: href:null now makes the route unreachable; hide the tab button instead.
+            tabBarButton: () => null,
+            tabBarItemStyle: { display: 'none' },
           }}
         />
         <Tabs.Screen
           name="profile"
           options={{
             title: 'My Profile',
-            href: null,
+            // SDK 58: href:null now makes the route unreachable; hide the tab button instead.
+            tabBarButton: () => null,
+            tabBarItemStyle: { display: 'none' },
           }}
         />
         <Tabs.Screen
           name="archived"
           options={{
             title: 'Archived Cases',
-            href: null,
+            // SDK 58: href:null now makes the route unreachable; hide the tab button instead.
+            tabBarButton: () => null,
+            tabBarItemStyle: { display: 'none' },
           }}
         />
       </Tabs>

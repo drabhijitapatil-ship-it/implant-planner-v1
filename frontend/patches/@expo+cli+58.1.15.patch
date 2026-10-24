@@ -1,17 +1,17 @@
 diff --git a/node_modules/@expo/cli/build/src/start/server/AsyncNgrok.js b/node_modules/@expo/cli/build/src/start/server/AsyncNgrok.js
-index 4c42029..14d441b 100644
+index 37d0e4f..1afbb08 100644
 --- a/node_modules/@expo/cli/build/src/start/server/AsyncNgrok.js
 +++ b/node_modules/@expo/cli/build/src/start/server/AsyncNgrok.js
 @@ -93,7 +93,7 @@ function _interop_require_wildcard(obj, nodeInterop) {
+     return newObj;
  }
- const debug = require('debug')('expo:start:server:ngrok');
  const NGROK_CONFIG = {
 -    authToken: '5W1bR67GNbWcXqmxZzBG1_56GezNeaX6sSRvn8npeQ8',
 +    authToken: process.env.EXPO_NGROK_AUTH_TOKEN || '5W1bR67GNbWcXqmxZzBG1_56GezNeaX6sSRvn8npeQ8',
      domain: 'exp.direct'
  };
  const TUNNEL_TIMEOUT = 10 * 1000;
-@@ -181,6 +181,10 @@ class AsyncNgrok {
+@@ -197,6 +197,10 @@ class AsyncNgrok {
          return this._connectToNgrokAsync(options, attempts + 1);
      }
      async _getConnectionPropsAsync() {
@@ -22,7 +22,7 @@ index 4c42029..14d441b 100644
          const userDefinedSubdomain = _env.env.EXPO_TUNNEL_SUBDOMAIN;
          if (userDefinedSubdomain) {
              const subdomain = typeof userDefinedSubdomain === 'string' ? userDefinedSubdomain : await this._getProjectSubdomainAsync();
-@@ -237,7 +241,7 @@ class AsyncNgrok {
+@@ -258,7 +262,7 @@ class AsyncNgrok {
                  // Assert early if a custom subdomain is used since it cannot
                  // be changed and retried. If the tunnel subdomain is a boolean
                  // then we can reset the randomness and try again.

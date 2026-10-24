@@ -131,12 +131,12 @@ export default function ForumListScreen() {
             </View>
           )}
         </View>
-        {item.implant_procedure_type && (
+        {!!item.implant_procedure_type && (
           <Text style={s.procType} numberOfLines={1}>{item.implant_procedure_type}</Text>
         )}
         <View style={s.metaRow}>
-          {item.student_name && <Text style={s.meta}>Student: <Text style={s.metaVal}>{item.student_name}</Text></Text>}
-          {item.supervisor_name && <Text style={s.meta}>  •  Supervisor: <Text style={s.metaVal}>{item.supervisor_name}</Text></Text>}
+          {!!item.student_name && <Text style={s.meta}>Student: <Text style={s.metaVal}>{item.student_name}</Text></Text>}
+          {!!item.supervisor_name && <Text style={s.meta}>  •  Supervisor: <Text style={s.metaVal}>{item.supervisor_name}</Text></Text>}
         </View>
         <View style={s.stageRow}>
           <View style={s.stageBadge}>

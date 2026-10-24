@@ -1,10 +1,12 @@
 // @ts-nocheck
-import { ScrollViewStyleReset } from "expo-router/html";
+import { ScrollViewStyleReset, useServerDocumentContext } from "expo-router/html";
 import type { PropsWithChildren } from "react";
 
 export default function Root({ children }: PropsWithChildren) {
+  // SDK 58: headNodes/bodyNodes carry the JS bundle + styles for hydration.
+  const { headNodes, bodyNodes, htmlAttributes, bodyAttributes } = useServerDocumentContext();
   return (
-    <html lang="en" style={{ height: "100%" }}>
+    <html lang="en" {...htmlAttributes} style={{ height: "100%" }}>
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
@@ -27,8 +29,10 @@ export default function Root({ children }: PropsWithChildren) {
             `,
           }}
         />
+        {headNodes}
       </head>
       <body
+        {...bodyAttributes}
         style={{
           margin: 0,
           height: "100%",
@@ -38,6 +42,7 @@ export default function Root({ children }: PropsWithChildren) {
         }}
       >
         {children}
+        {bodyNodes}
       </body>
     </html>
   );

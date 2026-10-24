@@ -1,0 +1,44 @@
+{
+  "summary": "FRONTEND-only regression after the Expo SDK 58 upgrade (RN 0.88, React 19.3, expo-router 58.0.26, reanimated 4.7.1), tested at 390x844 with Abhijit.patil, Gaurav.pandey and Paresh.gandhi. No red screens, no crashes and no blank screens on the main flows. One CRITICAL regression was found and FIXED: in expo-router 58, Tabs.Screen `href: null` now sets `hidden: true`, which makes the route unreachable. So /profile, /archived and /user-management (the hamburger tiles and the dashboard avatar) silently fell back to /dashboard, and a direct /profile URL showed a blank Home. I replaced `href: null` with `tabBarButton: () => null` plus `tabBarItemStyle: { display: 'none' }`, then checked that all three routes open, the tab bar still shows 5 tabs, and the iOS bundle compiles (200, 17.2MB). Passed: login; dashboard (coach tour Skip); tab navigation Home/New Case/Implant/My Cases/Alerts; hamburger opens and closes; case 69cfb036 (scrolls, IIC P/I toggle shows TX7782/SN440012, iic-download-btn gives IIC-2026-00001.pdf, back works); New Case (text inputs, Male/Female, Supervisor and Procedure-type dropdowns, inline calendar sets 2026-10-28, step pills jump via window.confirm, the checklist-info Modal opens and closes); Profile with institution-setting, institution-name-input and institution-save-btn; student My Cases list and opening a case, with back returning to /procedures; Forum and Research (first visit auto-opens /research/guide); supervisor Profile, How it works and What's new. New visual regression on web: the hamburger tile sheet collapses to 107px and the tiles plus Logout spill outside the white sheet onto the dimmed backdrop, though they still work. Deprecated APIs: no InteractionManager, expo-av, expo-barcode-scanner, expo-background-fetch or Touchable usage. SafeAreaView is still imported from 'react-native' in 4 files (it still works in 0.88 but logs a deprecation warning).",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "GET /api/procedures/{id}/transfer/handoff", "issue": "Returns 404 on every case-detail load when there is no handoff, so a 'Failed to load resource 404' console error shows each time. This is pre-existing and harmless. Consider returning 200 with null."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DrawerMenu tile sheet (app/(tabs)/_layout.tsx:157-262)", "issue": "On web the sheet's white background is only 107px tall, so the 2x4 tiles and the Logout pill sit outside it over the dimmed dashboard. In the DOM the tile grid height is 0 and the Logout Animated.View has position:absolute. Most likely cause: Reanimated 4.7.1 web layout animations (`entering={FadeIn...withInitialValues}` / `FadeInDown`) leave inline position:absolute on the Animated.View wrappers inside the RN-web Modal. The tiles still respond to taps.", "testID": "tile-menu-sheet", "priority": "MEDIUM"},
+      {"component": "Forum list card (app/forum/index.tsx:134,138-139)", "issue": "Red LogBox toast 'Unexpected text node: . A text node cannot be a child of a <View>'. The '.' comes from RNW's message template, so the text node is an EMPTY STRING. RCA: `{item.supervisor_name && <Text/>}` (or student_name / implant_procedure_type) renders '' inside a View when the value is an empty string. Fix with `!!item.supervisor_name && ...`. This is pre-existing; the same pattern was flagged in iterations 443 and 447.", "testID": "forum-thread-*", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Hidden tab routes (profile/archived/user-management)", "issue": "FIXED by the testing agent. In SDK 58 `href: null` makes these routes unreachable: router.push('/profile') and the direct URL both redirected to /dashboard. The workaround is in place and verified.", "affected_testIDs": ["tile-profile", "tile-archived", "tile-users", "dashboard-profile-avatar"]}
+    ],
+    "design_issues": [
+      {"screen": "Hamburger menu", "issues": ["The tile sheet background does not contain the tiles or the Logout button (see ui_bugs)."]}
+    ],
+    "react_native_issues": [
+      {"component": "SafeAreaView from react-native (deprecated)", "issue": "Imported from 'react-native' instead of react-native-safe-area-context. It still works in RN 0.88 but logs a deprecation warning and will be removed. Reference: /app/frontend/app/admin/implant-compare.tsx:4, /app/frontend/app/help-workflow.tsx:8, /app/frontend/app/whatsnew.tsx:9, /app/frontend/app/onboarding.tsx"},
+      {"component": "expo-router 58 href:null semantics", "issue": "`href: null` now means hidden AND unreachable. It was changed to tabBarButton:()=>null. Reference: /app/frontend/app/(tabs)/_layout.tsx:660-685"},
+      {"component": "Reanimated 4.7.1 web entering animations", "issue": "Entering animations leave position:absolute on Animated.View in the RN-web Modal, which breaks the layout. Reference: /app/frontend/app/(tabs)/_layout.tsx:175,211-217,240-245"}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix the DrawerMenu sheet layout on web: drop `entering` on web (e.g. `entering={Platform.OS === 'web' ? undefined : FadeIn...}`) for the tile wrappers, the identity row and the logout wrapper, or add a static height. Then confirm the sheet's white background contains all tiles and Logout.",
+    "Keep the testing agent's _layout.tsx change (tabBarButton: () => null + tabBarItemStyle display none instead of href: null). Check on an iPhone in Expo Go that Profile, Archived and Users open from the menu.",
+    "Swap SafeAreaView imports from 'react-native' to 'react-native-safe-area-context' in implant-compare.tsx, help-workflow.tsx, whatsnew.tsx and onboarding.tsx.",
+    "Optional: change empty-string conditional renders like `{str && <Text/>}` to `{!!str && ...}` (forum/index.tsx:134,138,139) to silence the 'Unexpected text node' LogBox toast.",
+    "Optional: the 'Expo Router could not load the layout ./_layout.tsx to read unstable_settings.anchor ... Failed to fetch' warning appears once on cold load. The lazy _layout.bundle request is aborted by the index → /auth/login redirect. It is harmless and appears on web only."
+  ],
+  "critical_code_review_comments": [
+    "expo-router 58 TabsClient.processScreens maps href===null to options.hidden=true. Any other code that pushes to href:null tab routes would break; grep shows no other href:null usages now.",
+    "No InteractionManager, Touchable, expo-av, expo-barcode-scanner or expo-background-fetch usage found. The Modal statusBarTranslucent props in CoachMarks, CalendarPicker, implant-selection and forum/chat/create caused no web runtime errors.",
+    "Console noise only: 'shadow* style props are deprecated' (254 times) and 'props.pointerEvents is deprecated' (48 times). Both are pre-existing RNW warnings.",
+    "The react-native-calendars dashboard calendar renders testIDs as 'undefined.day_YYYY-MM-DD' because no testID prop is passed. This is cosmetic."
+  ],
+  "updated_files": ["/app/frontend/app/(tabs)/_layout.tsx (href: null → tabBarButton: () => null + tabBarItemStyle display none, for user-management, profile and archived; backup at /tmp/tabs_layout_backup.tsx)"],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "~92% (all requested flows pass after the hidden-tab fix; 1 open visual regression in the tile menu)"},
+  "seed_data_creation": "None. The New Case form was filled but not submitted (patient TEST_SDK58 Regression was not saved).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "SDK 58 web: always tap the coach-tour '-skip' button after login. Hidden tabs are reachable only because href:null was replaced in (tabs)/_layout.tsx. Step pills on New Case use window.confirm on web, so add a page.on('dialog') accept handler. The New Case calendar is inline: click the visible day text (get_by_text('28')); the 'undefined.day_*' testIDs belong to the mounted dashboard calendar. Research auto-redirects to /research/guide on first visit per browser session. Each browser session needs a fresh login.",
+  "rca_of_issue": "Profile, Archived and Users were not opening. Repro: log in, tap the hamburger, tap My Profile; the menu closes and the URL stays /dashboard (direct /profile also redirects). Root cause: node_modules/expo-router/build/layouts/TabsClient.js processScreens converts `href: null` into `hidden: true`, and SDK 58 treats hidden tab routes as unreachable and redirects to the first tab. Mitigation applied: hide only the tab button (tabBarButton: () => null, tabBarItemStyle display none). Verified on web for all 3 routes, and the iOS bundle compiles."
+}

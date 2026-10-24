@@ -7883,3 +7883,6 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 - backend/implant_card.py: GET /api/procedures/{id}/implant-card (lazy issue IIC-YYYY-NNNNN on completed cases), POST .../reissue (supervisor/incharge/admin), GET .../pdf (CR80 2-sided PDF w/ QR), public GET /api/iic/verify/{token} (no patient identity), GET/PUT /api/settings/institution (incharge/admin).
 - Auto-issued in phase4 step2 final approval hook. Missing lot/serial -> "Not recorded" + warnings; brand mismatch warning.
 - Frontend: components/ImplantInfoCard.tsx (case detail under Treatment Complete), components/InstitutionNameSetting.tsx (Profile > Compliance).
+
+## Expo SDK 58 upgrade
+- expo 58.0.19, RN 0.88, React 19.3, expo-router 58, gesture-handler 3.3, reanimated 4.7.1. patches/@expo+cli+58.1.15.patch (ngrok). app/+html.tsx must render useServerDocumentContext head/bodyNodes. Hidden tabs use tabBarButton:()=>null (href:null breaks routes in router 58). Menu entering animations disabled on web.
