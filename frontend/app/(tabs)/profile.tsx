@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import BackToDashboard from '../../components/BackToDashboard';
 import AssistantLogbookCard from '../../components/AssistantLogbookCard';
+import InstitutionNameSetting from '../../components/InstitutionNameSetting';
 import { requestCoachTour } from '../../components/CoachMarks';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -271,6 +272,7 @@ export default function ProfileScreen() {
         {(user?.role === 'implant_incharge' || user?.role === 'administrator') && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Compliance</Text>
+            <InstitutionNameSetting />
             <TouchableOpacity
               style={styles.legalRow}
               onPress={() => router.push('/admin/audit-log')}

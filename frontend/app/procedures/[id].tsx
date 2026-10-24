@@ -70,6 +70,7 @@ import ClinicalEvaluationBanner from '../../components/ClinicalEvaluationBanner'
 import PatientHistoryStrip from '../../components/PatientHistoryStrip';
 import AddImplantSection from '../../components/AddImplantSection';
 import ClinicalDiagnosisCard from '../../components/ClinicalDiagnosisCard';
+import ImplantInfoCard from '../../components/ImplantInfoCard';
 import PulsingDoubleArrow from '../../components/onboarding/primitives/PulsingDoubleArrow';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
@@ -1085,6 +1086,7 @@ export default function ProcedureDetailScreen() {
                 Auto-stamped on case completion. Subsequent edits are recorded in the case audit log.
               </Text>
             </View>
+            {user?.role !== 'nurse' && <ImplantInfoCard procedureId={String(id)} />}
           </>
         )}
 

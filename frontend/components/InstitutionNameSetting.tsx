@@ -1,0 +1,67 @@
+/** Institution name printed on top of every Implant Information Card (IIC). */
+import React, { useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import Ionicons from '@react-native-vector-icons/ionicons';
+import api from '../utils/api';
+
+export default function InstitutionNameSetting() {
+  const [name, setName] = useState('');
+  const [saved, setSaved] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get('/settings/institution').then(({ data }) => { setName(data.name || ''); setSaved(data.name || ''); }).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const { data } = await api.put('/settings/institution', { name: name.trim() });
+      setSaved(data.name);
+      setName(data.name);
+    } catch (e: any) {
+      Alert.alert('Could not save', e?.response?.data?.detail || 'Please try again');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const dirty = name.trim() !== saved && !!name.trim();
+
+  return (
+    <View style={styles.wrap} testID="institution-setting">
+      <View style={styles.labelRow}>
+        <Ionicons name="business-outline" size={20} color="#1565C0" />
+        <Text style={styles.label}>Institution name (Implant Information Card)</Text>
+      </View>
+      <View style={styles.inputRow}>
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. ABC Dental College & Hospital"
+          placeholderTextColor="#90A4AE"
+          maxLength={120}
+          testID="institution-name-input"
+        />
+        <TouchableOpacity style={[styles.btn, !dirty && styles.btnDisabled]} onPress={save} disabled={!dirty || saving} testID="institution-save-btn">
+          {saving ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.btnText}>Save</Text>}
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.hint}>{saved ? 'Shown at the top of every card.' : "Not set yet. Cards show 'Implanr' until you add a name."}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  label: { fontSize: 15, color: '#1A1A1A', fontWeight: '500', flex: 1 },
+  inputRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  input: { flex: 1, borderWidth: 1, borderColor: '#CFD8DC', borderRadius: 10, paddingHorizontal: 12, minHeight: 44, fontSize: 14, color: '#263238' },
+  btn: { backgroundColor: '#1565C0', borderRadius: 10, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  btnDisabled: { backgroundColor: '#B0BEC5' },
+  btnText: { color: '#FFF', fontWeight: '700' },
+  hint: { fontSize: 11, color: '#78909C', marginTop: 6 },
+});

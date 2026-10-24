@@ -7878,3 +7878,8 @@ Deployment: User needs to redeploy (Publish) so the widened gate + new row UI re
 ## Iteration 456 (Jun 2026) — Removed screenshot / screen-recording block
 - User request. Deleted `hooks/useScreenCaptureProtection.ts`, removed its wiring in `app/_layout.tsx` (ActivityTracker), removed the `expo-screen-capture` dependency (yarn remove), and dropped the "screen-capture blocking" phrase from the Terms screen. Screenshots and recordings are allowed again on all platforms after redeploy + new native builds.
 - Removed 15-min inactivity auto-logout (AuthContext timer, ActivityTracker, api activity hook) and related UI/legal copy.
+
+## Implant Information Card (IIC)
+- backend/implant_card.py: GET /api/procedures/{id}/implant-card (lazy issue IIC-YYYY-NNNNN on completed cases), POST .../reissue (supervisor/incharge/admin), GET .../pdf (CR80 2-sided PDF w/ QR), public GET /api/iic/verify/{token} (no patient identity), GET/PUT /api/settings/institution (incharge/admin).
+- Auto-issued in phase4 step2 final approval hook. Missing lot/serial -> "Not recorded" + warnings; brand mismatch warning.
+- Frontend: components/ImplantInfoCard.tsx (case detail under Treatment Complete), components/InstitutionNameSetting.tsx (Profile > Compliance).

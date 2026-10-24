@@ -18154,6 +18154,9 @@ async def approve_phase4_step2(
         )
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    # IIC: issue the Implant Information Card as soon as treatment completes.
+    if updated.get("status") == "completed" and not updated.get("implant_card"):
+        updated = await _iic_router.issue_card(updated, current_user)
     updated["_id"] = str(updated["_id"])
     updated["id"] = updated["_id"]
     return updated
@@ -25255,6 +25258,11 @@ async def _research_user_from_token(token: str):
 
 
 api_router.include_router(_research_routes.build_router(db, get_current_user, _research_user_from_token))
+
+# Implant Information Card (IIC) — issued on treatment completion.
+import implant_card as _implant_card
+_iic_router = _implant_card.build_router(db, get_current_user, _resolve_active_implants_inline, log_access)
+api_router.include_router(_iic_router)
 
 
 @app.on_event("startup")

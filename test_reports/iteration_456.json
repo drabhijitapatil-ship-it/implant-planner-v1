@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the Implant Information Card (IIC) feature on backend and frontend. Backend: 22/22 pytest tests pass. They cover lazy issue with the IIC-YYYY-NNNNN format and idempotency, the response shape, traceability lot/serial for site 14, 'Not recorded' plus warnings on the no-traceability case, 409 on a non-completed case, 404 on a bad id, and RBAC (nurse, non-owner student, unassigned supervisor and assistant-less student all get 403; the assigned supervisor gets 200). Reissue: student 403; supervisor bumps revision and sets reissued_at while card_number and verify token stay the same. PDF: application/pdf, 2 pages, MediaBox 242.65x153.07pt (85.6x54mm). I rendered both pages and checked the layout and QR by eye. Public verify page shows 'Valid card', the card number, lot and serial, and no patient name; a bad token shows 'could not be found'. Institution settings: student/supervisor PUT gets 403, an empty name gets 422, and a saved name shows on the card and the verify page. The completion hook was checked by code review only: server.py:18158 is the only place status is set to completed (line 18089). Frontend at 390x844: everything requested works. iic-section shows under the completion banner, the P/I toggle works, the I side shows Site 14 with TX7782/SN440012, iic-download-btn downloads IIC-2026-00001.pdf, iic-reissue-btn asks for confirmation and updates to '(rev 2)'. On case 6a6891 iic-warnings shows 'Implant 14: lot, serial not recorded' and the fields show 'Not recorded' in red italics. On Profile, the Compliance institution setting saved the name and the card header updated. The institution name was restored by deleting the doc. No deprecated Expo packages in the IIC components (they use expo-file-system/legacy and expo-sharing).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/procedures/{id}/implant-card(/pdf)", "issue": "verify_url is built from the request's x-forwarded-host/host header. The QR host depends on whatever host served the request, and a spoofed Host header goes straight into the QR. Consider a configured public base URL env var."},
+      {"endpoint": "GET /api/procedures/{id}/implant-card", "issue": "On test case 69cfb036 the company/name comes from the plan (Nobel Biocare Nobel Active) but the DataMatrix model is 'Straumann BLT 4.1x10 RC', so the card contradicts itself. Consider a warning when the traceability brand doesn't match the implant brand."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ImplantInfoCard / InstitutionNameSetting", "issue": "Errors are shown with Alert.alert, which does nothing on react-native-web. On web, failed downloads, reissues and institution saves fail silently. InstitutionNameSetting's initial GET also swallows errors (catch(() => {})).", "testID": "iic-download-btn, iic-reissue-btn, institution-save-btn", "priority": "low"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Procedure detail (IIC section)", "issues": ["The floating AI FAB (bottom-right) partly covers the card footer's 'Issued: …' text when the card sits at the bottom of the viewport. It can be scrolled clear, so this is minor."]},
+      {"screen": "Profile", "issues": ["The first-visit coach-mark tour overlay blocks the institution input until you tap Skip. This is expected onboarding behaviour, noted for testers."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_iter456_implant_card.py", "/app/test_reports/pytest/pytest_iter456.xml"],
+  "action_items": [
+    "Optional: show errors on web too (window.alert or inline error Text) in ImplantInfoCard and InstitutionNameSetting instead of Alert.alert alone.",
+    "Optional: build verify_url from a configured public base URL env var rather than the request Host header.",
+    "Optional: warn when the DataMatrix model brand differs from the recorded implant brand."
+  ],
+  "critical_code_review_comments": [
+    "Card issue is race-safe: conditional update with $exists:false, then re-read on a lost race. The counter uses find_one_and_update with upsert.",
+    "load() checks RBAC before the 409 and before issuing, so unauthorised calls can't mint card numbers.",
+    "The completion hook is in approve_phase4_step2 (server.py:18158), the only path that sets status=completed.",
+    "Supervisor access is limited to procedure.supervisor_id; earlier supervisors of transferred cases lose access. This may be intended."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter456_implant_card.py"],
+  "success_rate": {"backend": "100% (22/22)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "No new data. Side effects: both test cards are now revision 2 (69cfb036 reissued via UI, 6a6891 via pytest). The institution setting was restored to unset (app_settings doc deleted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Cards: 69cfb036a19e1d1819e0f6fd = IIC-2026-00001 (site 14, TX7782/SN440012), 6a6891eb702df4d66d11a897 = IIC-2026-00002 (no traceability). Nurse.1/Nurse@123 and Aaditya.patil/Student@123 log in. 69a06378781deba32c41edb7 is a completed case not owned by Gaurav or Paresh (good for 403 tests); 699fbfa15279dfa7819789b8 is not completed (409). The container clock reads Oct 2026. On Profile, dismiss the coach mark with 'Skip' before typing in the input.",
+  "rca_of_issue": ""
+}
