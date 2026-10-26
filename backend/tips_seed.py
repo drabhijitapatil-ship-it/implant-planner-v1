@@ -12,6 +12,9 @@ Category mix (rough target distribution):
   Soft Tissue         10%   Full Arch         10%
   Complications        5%   Digital Workflow   5%
   Evidence Updates     5%
+
+Bone Augmentation (28) — added from Haugen et al., J Periodontal Res 2026
+(doi:10.1111/jre.70087); "Planning" = before placement, "Surgery" = during.
 """
 
 TIP_LIBRARY = [
@@ -405,4 +408,212 @@ TIP_LIBRARY = [
      "publication_year": 2023,
      "tip_text": "Zirconia implants are no longer experimental — survival approaches titanium at 5 years in selected indications. They remain a special-case choice for documented titanium hypersensitivity and metal-free aesthetic demand.",
      "tags": ["zirconia implant", "ceramic"]},
+
+    # ─────────── Bone Augmentation (28) ───────────
+    # Source: Haugen HJ, Sanz J, Perale G, Saiz AM, Romandini M, Rahmati M.
+    # "Bone Grafts: Everything You Need to Know." J Periodontal Res 2026;
+    # doi:10.1111/jre.70087 (open access, CC BY). Primary trials / meta-analyses
+    # quoted inside a tip are the ones that review cites for that number.
+    # phase "Planning" = before implant placement, "Surgery" = during placement.
+
+    # ── Before placement: choosing the graft ──
+    {"tip_id": "HAUGEN26_001", "title": "Pick the Graft by the Biology Needed", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — Bone Grafts: Everything You Need to Know, Table 1",
+     "publication_year": 2026,
+     "tip_text": "Ask which mechanism the site needs. Socket preservation and standard sinus lifts need only osteoconduction and space maintenance, so a substitute alone works. Lateral or vertical ridge augmentation needs osteogenesis as well, so an autogenous component is essential.",
+     "tags": ["bone augmentation", "graft selection", "before placement"]},
+
+    {"tip_id": "HAUGEN26_002", "title": "Cell-Rich or Cell-Poor Site?", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4, linking mechanisms to clinical strategy",
+     "publication_year": 2026,
+     "tip_text": "A fresh socket or a lifted sinus is surrounded by vascular bone or membrane, so cells come from the host. A ridge covered by a membrane or mesh is cut off from the periosteum, so the graft must bring its own living cells. Decide this before ordering material.",
+     "tags": ["bone augmentation", "periosteum", "vascularity", "before placement"]},
+
+    {"tip_id": "HAUGEN26_003", "title": "The Graft Triad at a Glance", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — Figure 1, classification of bone grafts",
+     "publication_year": 2026,
+     "tip_text": "Autograft: osteogenic, osteoinductive and osteoconductive, but has donor-site morbidity and resorbs fast. Allograft: osteoconductive, weakly inductive, moderate resorption. Xenograft and synthetics: osteoconductive only, with no living cells or growth factors.",
+     "tags": ["bone augmentation", "autograft", "allograft", "xenograft", "alloplast"]},
+
+    {"tip_id": "HAUGEN26_004", "title": "Plan Around Resorption Speed", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.7 resorbable vs non-resorbable grafts",
+     "publication_year": 2026,
+     "tip_text": "Autograft resorbs fast, allograft moderately, deproteinised bovine bone very slowly, and β-TCP over several months; dense hydroxyapatite may never fully resorb. Choose a slow-resorbing graft where long-term contour matters, such as the aesthetic zone or sinus, and a resorbable one where you want full replacement by native bone.",
+     "tags": ["bone augmentation", "resorption", "DBBM", "β-TCP", "before placement"]},
+
+    {"tip_id": "HAUGEN26_005", "title": "Bovine or Porcine — Both Work", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.3, citing Wang 2025 meta-analysis and Galindo-Moreno 2022 RCT",
+     "publication_year": 2026,
+     "tip_text": "A meta-analysis of 202 grafted sites found no difference in new bone or radiographic gain between porcine and bovine xenografts in sinus and socket grafting. A split-mouth RCT showed matching histology and 100% implant survival at 6 months. Choose by availability and patient preference.",
+     "tags": ["bone augmentation", "xenograft", "porcine", "bovine"]},
+
+    {"tip_id": "HAUGEN26_006", "title": "Ask About Graft Origin at Consent", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.3 and §7, ethical and religious considerations",
+     "publication_year": 2026,
+     "tip_text": "Some patients object to animal-derived (bovine or porcine) or human-donor bone on religious or ethical grounds. Name the graft's origin during consent, offer a synthetic alternative when needed, and record the patient's choice.",
+     "tags": ["bone augmentation", "consent", "patient preference", "before placement"]},
+
+    {"tip_id": "HAUGEN26_007", "title": "Answering 'Is the Graft Safe?'", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.2–2.4, citing Kim 2013 systematic review",
+     "publication_year": 2026,
+     "tip_text": "Decades of use show no reported prion transmission from commercial deproteinised bovine grafts. Processed allografts carry only a small residual infection risk after screening and sterilisation. Synthetic grafts carry no disease-transmission risk at all.",
+     "tags": ["bone augmentation", "safety", "patient communication"]},
+
+    {"tip_id": "HAUGEN26_008", "title": "Know Your Allograft Prep", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.2 allografts",
+     "publication_year": 2026,
+     "tip_text": "Fresh-frozen allograft keeps more native proteins and may be more inductive, but has higher immune and disease risk and is harder to store. Freeze-dried bone (FDBA, DFDBA) keeps far longer and is less immunogenic, at the cost of lower osteogenic and mechanical strength.",
+     "tags": ["bone augmentation", "allograft", "FDBA", "DFDBA"]},
+
+    # ── Before placement: socket preservation ──
+    {"tip_id": "HAUGEN26_009", "title": "Socket Preservation Pays Off", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.2, citing Avila-Ortiz 2019 meta-analysis",
+     "publication_year": 2026,
+     "tip_text": "Across 22 RCTs (607 patients), grafted sockets kept on average 2.0 mm more width, 1.7 mm more mid-buccal height and 1.2 mm more mid-lingual height than spontaneous healing. Some remodelling still happens, so plan the implant for the ridge you will have, not the one you see at extraction.",
+     "tags": ["bone augmentation", "socket preservation", "ridge preservation", "before placement"]},
+
+    {"tip_id": "HAUGEN26_010", "title": "Socket Grafts: Skip the Autograft", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.2 and Table 1",
+     "publication_year": 2026,
+     "tip_text": "A socket is already lined by vascular bone, so the graft does not need to form bone itself. Use a particulate xenograft, allograft or β-TCP with a collagen membrane or sponge, which also suits flapless extraction. Autogenous bone is not a first-line choice here.",
+     "tags": ["bone augmentation", "socket preservation", "flapless", "before placement"]},
+
+    {"tip_id": "HAUGEN26_011", "title": "Socket Graft: Stability vs Vital Bone", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.2.2, citing Canullo 2022 network meta-analysis",
+     "publication_year": 2026,
+     "tip_text": "In 88 RCTs (3,073 sockets), xenografts gave the best dimensional stability but the lowest vital bone (28–35%); platelet concentrates gave the most new bone (around 43%). Implant survival was at least 97% at 12 months whatever the material, so choose by anatomy and timing of placement.",
+     "tags": ["bone augmentation", "socket preservation", "xenograft", "PRF"]},
+
+    {"tip_id": "HAUGEN26_012", "title": "Check Buccal Wall Thickness", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.2, citing Avila-Ortiz 2019",
+     "publication_year": 2026,
+     "tip_text": "Socket grafts with xenograft or allograft under a collagen membrane preserved up to 3.2 mm more ridge when the buccal wall was thicker than 1 mm. Measure the buccal plate on CBCT before extraction to set realistic expectations.",
+     "tags": ["bone augmentation", "buccal bone", "CBCT", "before placement"]},
+
+    # ── Before placement: sinus floor elevation ──
+    {"tip_id": "HAUGEN26_013", "title": "Staged Sinus Lift: Substitute Alone Is Enough", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.3 and Table 1",
+     "publication_year": 2026,
+     "tip_text": "The lifted Schneiderian membrane is itself osteogenic, so for a staged lift a xenograft or synthetic graft only has to hold the space. Add up to 30% autogenous chips only when you want healing in under 4 months, or for very large lifts.",
+     "tags": ["bone augmentation", "sinus lift", "xenograft", "before placement"]},
+
+    {"tip_id": "HAUGEN26_014", "title": "Sinus Grafts: Biologics Add Vital Bone", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.3, citing Trimmel 2021 network meta-analysis",
+     "publication_year": 2026,
+     "tip_text": "Across 34 RCTs (842 sinuses, 5–8 months' healing), bovine xenograft plus bone-marrow concentrate ranked best for new bone (SUCRA 81%), followed by bovine plus PRP (77%). Autogenous bone alone ranked twelfth. Consider an autologous adjunct in large lifts to shorten healing.",
+     "tags": ["bone augmentation", "sinus lift", "PRP", "bone marrow concentrate"]},
+
+    # ── Before placement: ridge augmentation & materials ──
+    {"tip_id": "HAUGEN26_015", "title": "Ridge Augmentation Needs Living Cells", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.4 and Table 1",
+     "publication_year": 2026,
+     "tip_text": "For lateral or vertical GBR, plan 30–70% autogenous chips (or a block) mixed with a slowly resorbing scaffold, protected by titanium-reinforced PTFE or mesh. The autograft starts bone formation; the xenograft stops the contour from resorbing away.",
+     "tags": ["bone augmentation", "GBR", "autograft", "composite graft", "before placement"]},
+
+    {"tip_id": "HAUGEN26_016", "title": "Three Ways to Build a Composite Graft", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.5 and Figure 4",
+     "publication_year": 2026,
+     "tip_text": "Scaffold plus autograft adds volume and biology (e.g. Bio-Oss with autograft). Scaffold plus a growth factor improves induction (e.g. β-TCP with rhBMP-2). Scaffold plus a platelet concentrate adds autologous growth factors (e.g. DBBM with PRF). Even a small amount of autograft noticeably improves a synthetic graft.",
+     "tags": ["bone augmentation", "composite graft", "PRF", "rhBMP-2"]},
+
+    {"tip_id": "HAUGEN26_017", "title": "rhBMP-2: Powerful, Use With Care", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.5 and §6.2",
+     "publication_year": 2026,
+     "tip_text": "rhBMP-2 on a calcium-phosphate carrier can match autograft bone formation without a donor site. At supraphysiological doses, though, it can cause ectopic bone, inflammation and oedema. Pay attention to dose, release and carrier, and reserve it for cases where the benefit is clear.",
+     "tags": ["bone augmentation", "rhBMP-2", "growth factors", "safety"]},
+
+    {"tip_id": "HAUGEN26_018", "title": "rhPDGF-BB Is a Recruiter, Not an Inducer", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.5",
+     "publication_year": 2026,
+     "tip_text": "rhPDGF-BB mainly drives angiogenesis and cell recruitment, which helps early wound and soft-tissue healing with less inflammation than rhBMP-2. Its bone-forming effect is milder, so don't expect BMP-level induction from it.",
+     "tags": ["bone augmentation", "rhPDGF-BB", "growth factors"]},
+
+    {"tip_id": "HAUGEN26_019", "title": "CAD-CAM Blocks for Complex Defects", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Advanced", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.6, citing Mangano 2022",
+     "publication_year": 2026,
+     "tip_text": "Custom HA/β-TCP onlay blocks designed from CBCT gave significant vertical and horizontal gains over 8 months with little trimming in surgery. They still only conduct bone, and they need imaging, cost and lead time. Consider adding an osteogenic component, and order early.",
+     "tags": ["bone augmentation", "CAD-CAM", "custom block", "CBCT", "before placement"]},
+
+    {"tip_id": "HAUGEN26_020", "title": "Log Every Graft Lot", "category": "Bone Augmentation",
+     "phase": "Planning", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §7.2 EU MDR post-market surveillance",
+     "publication_year": 2026,
+     "tip_text": "Most composite bone grafts are Class III devices under the EU MDR, which stresses post-market surveillance and tracing of biological origin. Record the brand, origin (autogenous, allogenic, xenogeneic or synthetic), lot and amount for every graft, as you do for implants.",
+     "tags": ["bone augmentation", "traceability", "documentation", "regulatory"]},
+
+    # ── During placement ──
+    {"tip_id": "HAUGEN26_021", "title": "Lateral GBR: Technique Beats Material", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.4, citing Calciolari 2023 network meta-analysis",
+     "publication_year": 2026,
+     "tip_text": "Lateral GBR gains 3.5–5.5 mm. DBBM with a collagen membrane ranked best (SUCRA ~81%), and DBBM with autograft and a collagen membrane came a close second (~78%). Whatever the material, results depended most on primary closure, graft fixation and an intact membrane.",
+     "tags": ["bone augmentation", "GBR", "lateral augmentation", "during placement"]},
+
+    {"tip_id": "HAUGEN26_022", "title": "Vertical GBR: Mix, Don't Go Pure Autograft", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "High",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.4, citing Merli 2020 Fence Technique RCT",
+     "publication_year": 2026,
+     "tip_text": "In a double-blind RCT, 50% DBBM with 50% autograft gained 3.7 mm of vertical bone versus 2.2 mm with 100% autograft (p = 0.038), with no more complications. The slowly resorbing xenograft keeps the volume that pure autograft loses.",
+     "tags": ["bone augmentation", "vertical GBR", "composite graft", "during placement"]},
+
+    {"tip_id": "HAUGEN26_023", "title": "Harvest Autograft Gently", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.1, citing Miron 2013",
+     "publication_year": 2026,
+     "tip_text": "Bone cells survive better without mechanical trauma or drying out. Traumatic harvesting loses growth factors such as BMPs, TGF-β and VEGF and makes the graft resorb faster. Harvest gently, keep chips moist in blood or saline, and graft them quickly.",
+     "tags": ["bone augmentation", "autograft harvesting", "cell viability", "during placement"]},
+
+    {"tip_id": "HAUGEN26_024", "title": "No Micromovement Before Revascularisation", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4 and §4.4",
+     "publication_year": 2026,
+     "tip_text": "A ridge graft under a membrane must resist micromovement long before vessels reach it. Fix the membrane or mesh securely and immobilise the graft; together with tension-free primary closure, this drives GBR success more than the choice of material.",
+     "tags": ["bone augmentation", "graft fixation", "membrane", "primary closure", "during placement"]},
+
+    {"tip_id": "HAUGEN26_025", "title": "Keep the Scaffold Open for Vessels", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §3.2 osteoconduction and §5",
+     "publication_year": 2026,
+     "tip_text": "Bone grows into a graft only where vessels can follow; pore sizes around 0.7–1.2 mm are considered optimal. Bulky or irregular grafts may not get enough blood to their core. Pack particulate firmly enough to stay put, but don't crush it into a dense mass.",
+     "tags": ["bone augmentation", "porosity", "vascularisation", "during placement"]},
+
+    {"tip_id": "HAUGEN26_026", "title": "Sinus Lift: Protect the Membrane", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Intermediate", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §4.3",
+     "publication_year": 2026,
+     "tip_text": "The lifted Schneiderian membrane forms a closed chamber with a good blood supply and its own bone-forming potential, and the graft only holds the space. Elevate gently and keep the membrane intact; given time, bone forms beneath it.",
+     "tags": ["bone augmentation", "sinus lift", "Schneiderian membrane", "during placement"]},
+
+    {"tip_id": "HAUGEN26_027", "title": "Add L-PRF to the Graft", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Beginner", "evidence_level": "Moderate",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §2.5, citing Quirynen 2023 and Miron 2025",
+     "publication_year": 2026,
+     "tip_text": "L-PRF improves bone and soft-tissue healing in socket preservation and sinus augmentation. It is fully autologous and quick to prepare at the chair. Mixing xenograft with PRF (DBBM + PRF) adds growth factors to an otherwise inert scaffold.",
+     "tags": ["bone augmentation", "L-PRF", "platelet concentrate", "during placement"]},
+
+    {"tip_id": "HAUGEN26_028", "title": "Keep Inflammation in Check", "category": "Bone Augmentation",
+     "phase": "Surgery", "difficulty": "Advanced", "evidence_level": "Low",
+     "source_organization": "J Periodontal Res", "source_reference": "Haugen et al. 2026 — §3.4 osteoimmunology, citing Burgan 2025",
+     "publication_year": 2026,
+     "tip_text": "Healing needs a timely switch from inflammatory (M1) to reparative (M2) macrophages. Persistent inflammation leads to non-union, and too much M2 activity leads to fibrous tissue instead of bone. Minimal trauma, a clean field and a stable graft help this switch happen on time.",
+     "tags": ["bone augmentation", "osteoimmunology", "inflammation", "during placement"]},
 ]

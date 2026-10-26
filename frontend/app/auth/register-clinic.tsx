@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { HIDE_COMMERCE } from '../../utils/storePolicy';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -28,7 +30,7 @@ import PasswordRequirements, { isPasswordValid } from '../../components/Password
 
 const PREFIXES = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.'];
 
-export default function ClinicRegisterScreen() {
+function ClinicRegisterScreen() {
   const router = useRouter();
 
   const [logo, setLogo] = useState<string | null>(null);
@@ -554,3 +556,9 @@ const s = StyleSheet.create({
   successBtn: { backgroundColor: '#2E7D32', borderRadius: 14, paddingVertical: 15, paddingHorizontal: 40, alignItems: 'center', width: '100%' },
   successBtnTxt: { color: '#FFF', fontSize: 16, fontWeight: '700' },
 });
+
+// iOS: no self-service signup / plans in the app (see utils/storePolicy).
+export default function ClinicRegisterScreenGate() {
+  if (HIDE_COMMERCE) return <Redirect href={'/auth/request-access' as any} />;
+  return <ClinicRegisterScreen />;
+}

@@ -42,9 +42,25 @@ type Plan = {
   price_monthly: number;
   price_yearly: number;
   launch_offer_first_year_price?: number | null;
+  tagline?: string | null;
+  min_users?: number | null;
+  max_cases_per_month?: number | null;
+  extra_user_price_monthly?: number | null;
+  custom_pricing?: boolean;
+  features?: Partial<Record<FeatureKey, boolean>> & { analytics?: string; support?: string; onboarding?: string };
   active: boolean;
   updated_by?: string;
 };
+
+// Feature switches enforced by the server (missing = included).
+type FeatureKey = 'ai_planning' | 'admin_dashboard' | 'lab_prescription' | 'data_export' | 'api_access';
+const FEATURE_LABELS: [FeatureKey, string][] = [
+  ['ai_planning', 'AI-assisted treatment planning'],
+  ['admin_dashboard', 'Clinic admin dashboard'],
+  ['lab_prescription', 'Auto lab prescription'],
+  ['data_export', 'Data export (CSV / PDF)'],
+  ['api_access', 'API access'],
+];
 
 type TrialSettings = {
   enabled: boolean;
@@ -173,6 +189,8 @@ export default function SubscriptionPlansAdmin() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [formOrgType, setFormOrgType] = useState<'college' | 'clinic'>('college');
   const [formActive, setFormActive] = useState(true);
+  const [formFeatures, setFormFeatures] = useState<Partial<Record<FeatureKey, boolean>>>({});
+  const [formCustom, setFormCustom] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const openEdit = (plan: Plan) => {
@@ -190,7 +208,13 @@ export default function SubscriptionPlansAdmin() {
       price_monthly: String(plan.price_monthly),
       price_yearly: String(plan.price_yearly),
       launch_offer_first_year_price: plan.launch_offer_first_year_price != null ? String(plan.launch_offer_first_year_price) : '',
+      tagline: plan.tagline || '',
+      min_users: plan.min_users != null ? String(plan.min_users) : '',
+      max_cases_per_month: plan.max_cases_per_month != null ? String(plan.max_cases_per_month) : '',
+      extra_user_price_monthly: plan.extra_user_price_monthly != null ? String(plan.extra_user_price_monthly) : '',
     });
+    setFormFeatures(plan.features || {});
+    setFormCustom(!!plan.custom_pricing);
   };
 
   const openNew = () => {
@@ -201,7 +225,10 @@ export default function SubscriptionPlansAdmin() {
     setForm({
       key: '', name: '', max_users: '', max_students: '', max_department: '',
       max_implant_incharges: '', price_monthly: '', price_yearly: '', launch_offer_first_year_price: '',
+      tagline: '', min_users: '', max_cases_per_month: '', extra_user_price_monthly: '',
     });
+    setFormFeatures({});
+    setFormCustom(false);
   };
 
   const closeEdit = () => setEditing(null);
@@ -236,6 +263,12 @@ export default function SubscriptionPlansAdmin() {
           price_monthly: parseFloat(form.price_monthly),
           price_yearly: parseFloat(form.price_yearly),
           launch_offer_first_year_price: numOrUndef(form.launch_offer_first_year_price),
+          tagline: form.tagline?.trim() || null,
+          min_users: numOrUndef(form.min_users ?? '') ?? null,
+          max_cases_per_month: numOrUndef(form.max_cases_per_month ?? '') ?? null,
+          extra_user_price_monthly: numOrUndef(form.extra_user_price_monthly ?? '') ?? null,
+          custom_pricing: formCustom,
+          features: { ...(editing?.features || {}), ...formFeatures },
           active: formActive,
         });
       } else {
@@ -248,6 +281,12 @@ export default function SubscriptionPlansAdmin() {
           price_monthly: parseFloat(form.price_monthly),
           price_yearly: parseFloat(form.price_yearly),
           launch_offer_first_year_price: numOrUndef(form.launch_offer_first_year_price),
+          tagline: form.tagline?.trim() || null,
+          min_users: numOrUndef(form.min_users ?? '') ?? null,
+          max_cases_per_month: numOrUndef(form.max_cases_per_month ?? '') ?? null,
+          extra_user_price_monthly: numOrUndef(form.extra_user_price_monthly ?? '') ?? null,
+          custom_pricing: formCustom,
+          features: { ...(editing?.features || {}), ...formFeatures },
           active: formActive,
         });
       }
@@ -531,6 +570,50 @@ export default function SubscriptionPlansAdmin() {
                 data-testid="plan-launch-offer-input"
               />
 
+              <View style={s.fieldRow}>
+                <View style={s.fieldHalf}>
+                  <Text style={s.inputLabel}>Min Users</Text>
+                  <TextInput style={s.input} keyboardType="number-pad" value={form.min_users}
+                    placeholder="—" placeholderTextColor="#999"
+                    onChangeText={(v) => setForm((f) => ({ ...f, min_users: v }))} data-testid="plan-min-users-input" />
+                </View>
+                <View style={s.fieldHalf}>
+                  <Text style={s.inputLabel}>New Cases / Month</Text>
+                  <TextInput style={s.input} keyboardType="number-pad" value={form.max_cases_per_month}
+                    placeholder="Unlimited" placeholderTextColor="#999"
+                    onChangeText={(v) => setForm((f) => ({ ...f, max_cases_per_month: v }))} data-testid="plan-max-cases-input" />
+                </View>
+              </View>
+
+              <View style={s.fieldRow}>
+                <View style={s.fieldHalf}>
+                  <Text style={s.inputLabel}>Extra User (₹/month)</Text>
+                  <TextInput style={s.input} keyboardType="decimal-pad" value={form.extra_user_price_monthly}
+                    placeholder="—" placeholderTextColor="#999"
+                    onChangeText={(v) => setForm((f) => ({ ...f, extra_user_price_monthly: v }))} data-testid="plan-extra-user-input" />
+                </View>
+                <View style={s.fieldHalf}>
+                  <Text style={s.inputLabel}>Tagline</Text>
+                  <TextInput style={s.input} value={form.tagline}
+                    placeholder="—" placeholderTextColor="#999"
+                    onChangeText={(v) => setForm((f) => ({ ...f, tagline: v }))} data-testid="plan-tagline-input" />
+                </View>
+              </View>
+
+              <Text style={[s.inputLabel, { marginTop: 6 }]}>Included features</Text>
+              {FEATURE_LABELS.map(([k, label]) => (
+                <View key={k} style={s.activeRow}>
+                  <Text style={s.inputLabel}>{label}</Text>
+                  <Switch value={formFeatures[k] !== false}
+                    onValueChange={(v) => setFormFeatures((f) => ({ ...f, [k]: v }))} data-testid={`plan-feature-${k}`} />
+                </View>
+              ))}
+
+              <View style={s.activeRow}>
+                <Text style={s.inputLabel}>Custom pricing (quote on request)</Text>
+                <Switch value={formCustom} onValueChange={setFormCustom} data-testid="plan-custom-switch" />
+              </View>
+
               <View style={s.activeRow}>
                 <Text style={s.inputLabel}>Active (visible for new subscriptions)</Text>
                 <Switch value={formActive} onValueChange={setFormActive} data-testid="plan-active-switch" />
@@ -567,12 +650,24 @@ function PlanCard({ plan, onPress }: { plan: Plan; onPress: () => void }) {
         <Text style={s.planCaps}>
           {plan.max_students != null ? `${plan.max_students} students · ` : ''}
           {plan.max_department != null ? `${plan.max_department} dept · ` : ''}
-          {plan.max_users} users max
+          {plan.min_users != null ? `${plan.min_users}–` : ''}{plan.max_users} users max
+          {plan.max_cases_per_month != null ? ` · ${plan.max_cases_per_month} cases/mo` : ''}
         </Text>
+        {!!plan.features && FEATURE_LABELS.some(([k]) => plan.features?.[k] === false) && (
+          <Text style={s.planCaps}>
+            Without: {FEATURE_LABELS.filter(([k]) => plan.features?.[k] === false).map(([, l]) => l).join(', ')}
+          </Text>
+        )}
         <View style={s.priceRow}>
-          <Text style={s.priceText}>{inr(plan.price_monthly)}/mo</Text>
-          <Text style={s.priceDot}>·</Text>
-          <Text style={s.priceText}>{inr(plan.price_yearly)}/yr</Text>
+          {plan.custom_pricing ? (
+            <Text style={s.priceText}>Custom pricing</Text>
+          ) : (
+            <>
+              <Text style={s.priceText}>{inr(plan.price_monthly)}/mo</Text>
+              <Text style={s.priceDot}>·</Text>
+              <Text style={s.priceText}>{inr(plan.price_yearly)}/yr</Text>
+            </>
+          )}
           {plan.launch_offer_first_year_price != null && (
             <View style={s.launchChip}>
               <Ionicons name="flash" size={10} color="#B7791F" />

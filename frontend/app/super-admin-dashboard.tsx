@@ -36,6 +36,15 @@ type NavCard = {
 
 const NAV_CARDS: NavCard[] = [
   {
+    key: 'access-requests',
+    label: 'Access Requests',
+    sub: 'Colleges & clinics asking to join Implanr',
+    icon: 'mail-unread-outline',
+    route: '/admin/access-requests',
+    color: '#1565C0',
+    bg: '#E3F2FD',
+  },
+  {
     key: 'organizations',
     label: 'Organizations',
     sub: 'Manage colleges, clinics & workspace tenants',

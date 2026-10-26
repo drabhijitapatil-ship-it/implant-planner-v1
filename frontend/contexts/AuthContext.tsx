@@ -84,6 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const accessToken = await getToken('access_token');
       if (accessToken) {
+        // Stop this device receiving the signed-out user's notifications.
+        const pushToken = await getToken('push_token');
+        if (pushToken) {
+          try { await api.post('/auth/push-token/remove', { push_token: pushToken }); } catch {}
+        }
         await api.post('/auth/logout');
       }
     } catch {

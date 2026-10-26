@@ -4,7 +4,7 @@ import ScrollView from '@/components/KeyboardAwareScrollView';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../utils/api';
 
-export type AssistantCandidate = { id: string; name: string };
+export type AssistantCandidate = { id: string; name: string; email?: string };
 
 /**
  * iter-Jun-2026: "Name of the Assistant" dropdown.
@@ -49,6 +49,12 @@ export default function AssistantPicker({
 
   const excluded = new Set(excludeIds.filter(Boolean) as string[]);
   const visible = candidates.filter((c) => !excluded.has(c.id));
+  // Two different students can share a name — show their email to tell them apart.
+  const nameCount = visible.reduce<Record<string, number>>((m, c) => {
+    const k = c.name.trim().toLowerCase();
+    m[k] = (m[k] || 0) + 1;
+    return m;
+  }, {});
 
   return (
     <View style={styles.fieldContainer} data-testid="assistant-picker">
@@ -99,7 +105,12 @@ export default function AssistantPicker({
                 data-testid={`assistant-option-${c.id}`}
               >
                 <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={16} color={selected ? '#1565C0' : '#999'} />
-                <Text style={[styles.dropdownItemText, selected && { color: '#1565C0', fontWeight: '700' }]}>{c.name}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.dropdownItemText, selected && { color: '#1565C0', fontWeight: '700' }]}>{c.name}</Text>
+                  {nameCount[c.name.trim().toLowerCase()] > 1 && !!c.email && (
+                    <Text style={{ fontSize: 11, color: '#78909C', marginTop: 1 }}>{c.email}</Text>
+                  )}
+                </View>
               </TouchableOpacity>
             );
           })}

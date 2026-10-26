@@ -30,6 +30,7 @@ from bson import ObjectId
 import httpx
 from augmentation_checklist import generate_augmentation_checklist
 import aesthetic_risk as _era
+import diagnosis_engine as _dx
 import prescription as _rx
 from clinical_rules import evaluate_case as evaluate_clinical_rules
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -1393,63 +1394,146 @@ async def notify_rejection(procedure: dict, procedure_id: str, phase_label: str,
         )
 
 # Expo Push Notification Helper
+# ── Push notifications (Expo Push Service) ──────────────────────────────────
+# Previously every push was skipped unless an unused EMERGENT_PUSH_KEY env var
+# was set ("no-op in the current deployment"), so users only ever saw the
+# in-app list. Expo's push API needs no key; EXPO_ACCESS_TOKEN is optional
+# (only if "enhanced push security" is enabled on the Expo project).
+_EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+# (user_id, procedure_id) → time of the last push, so the automatic push sent
+# for every in-app notification doesn't duplicate an explicit one.
+_recent_push: Dict[tuple, float] = {}
+
+
+def _user_push_tokens(user: dict) -> List[str]:
+    toks = list(user.get("push_tokens") or [])
+    if user.get("push_token") and user["push_token"] not in toks:
+        toks.append(user["push_token"])
+    return [t for t in toks if isinstance(t, str) and t.startswith(("ExponentPushToken[", "ExpoPushToken["))]
+
+
 async def send_expo_push_notifications(user_ids: List[str], title: str, body: str, data: Optional[Dict] = None, redact: Optional[List[str]] = None):
-    """Send push notifications to users via Expo Push API.
+    """Send push notifications to users via the Expo Push API.
 
     `redact`: literal substrings (typically a patient name) to strip from
     `title`/`body` before the payload leaves our server. Push notifications
-    render on the OS lock screen — visible to anyone glancing at the device,
-    not just the authenticated recipient — so patient identity must not ride
-    in a push payload even though the same detail is fine in the persisted
-    in-app notification (only visible after login, to an authorized viewer).
-    Expo's relay also stores payloads in transit, another reason to keep PHI
-    out of it. Callers pass the patient name(s) that were interpolated into
-    the message; here they're swapped for a neutral placeholder.
-    """
+    render on the OS lock screen — visible to anyone glancing at the device —
+    so patient identity must not ride in a push payload even though the same
+    detail is fine in the persisted in-app notification."""
+    import time as _time
     if not user_ids:
         return
-    valid_oids = [ObjectId(uid) for uid in user_ids if ObjectId.is_valid(uid)]
+    valid_oids = [ObjectId(uid) for uid in user_ids if uid and ObjectId.is_valid(uid)]
     if not valid_oids:
         return
-    tokens = []
-    users = await db.users.find(
-        {"_id": {"$in": valid_oids}},
-        {"push_token": 1}
-    ).to_list(len(valid_oids))
-    for user in users:
-        if user.get("push_token"):
-            tokens.append(user["push_token"])
-    if not tokens:
-        return
-    # iter-Feb-2026 (v5): Push delivery is gated on EMERGENT_PUSH_KEY being
-    # configured. When missing (current deployment), this function is a
-    # no-op — the raw Expo push endpoint is not called. Once the user
-    # provisions push through the Emergent integration flow, EMERGENT_PUSH_KEY
-    # will be populated and this guard removes itself.
-    emergent_push_key = os.environ.get("EMERGENT_PUSH_KEY", "")
-    if not emergent_push_key or emergent_push_key == "placeholder":
-        logging.info("[push] EMERGENT_PUSH_KEY not configured — push delivery skipped")
+    pid = str((data or {}).get("procedure_id") or "")
+    now = _time.time()
+    for uid in user_ids:
+        if uid:
+            _recent_push[(str(uid), pid)] = now
+    if len(_recent_push) > 5000:  # keep the dedupe map small
+        for k, t in list(_recent_push.items()):
+            if now - t > 120:
+                _recent_push.pop(k, None)
+
+    users = await db.users.find({"_id": {"$in": valid_oids}}, {"push_token": 1, "push_tokens": 1}).to_list(len(valid_oids))
+    owner_of: Dict[str, str] = {}
+    for u in users:
+        for t in _user_push_tokens(u):
+            owner_of[t] = str(u["_id"])
+    if not owner_of:
         return
     for needle in (redact or []):
         needle = (needle or "").strip()
-        if not needle:
-            continue
-        title = title.replace(needle, "the patient")
-        body = body.replace(needle, "the patient")
-    messages = [
-        {"to": token, "sound": "default", "title": title, "body": body, "data": data or {}}
-        for token in tokens
-    ]
+        if needle:
+            title = title.replace(needle, "the patient")
+            body = body.replace(needle, "the patient")
+    tokens = list(owner_of.keys())
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if os.environ.get("EXPO_ACCESS_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['EXPO_ACCESS_TOKEN']}"
     try:
         async with httpx.AsyncClient() as client_http:
-            await client_http.post(
-                "https://exp.host/--/api/v2/push/send",
-                json=messages,
-                headers={"Accept": "application/json", "Content-Type": "application/json"},
-                timeout=10,
-            )
+            for i in range(0, len(tokens), 100):  # Expo accepts up to 100 per request
+                chunk = tokens[i:i + 100]
+                messages = [{"to": t, "sound": "default", "title": title, "body": body,
+                             "data": data or {}, "channelId": "default", "priority": "high"} for t in chunk]
+                resp = await client_http.post(_EXPO_PUSH_URL, json=messages, headers=headers, timeout=10)
+                if resp.status_code != 200:
+                    logging.error("[push] Expo push HTTP %s: %s", resp.status_code, resp.text[:300])
+                    continue
+                tickets = (resp.json() or {}).get("data") or []
+                for t, ticket in zip(chunk, tickets):
+                    if (ticket or {}).get("status") == "error":
+                        err = ((ticket.get("details") or {}).get("error")) or ticket.get("message")
+                        logging.warning("[push] delivery error for user %s: %s", owner_of.get(t), err)
+                        if err == "DeviceNotRegistered":  # app uninstalled / token revoked
+                            await db.users.update_many({"push_tokens": t}, {"$pull": {"push_tokens": t}})
+                            await db.users.update_many({"push_token": t}, {"$unset": {"push_token": ""}})
     except Exception as e:
         logging.error(f"Failed to send push notification: {e}")
+
+
+_PUSH_TITLE_BY_TYPE = {
+    "approved": "Case approved", "approval": "Approval needed", "rejected": "Case returned",
+    "rejection": "Case returned", "assigned": "New case assigned", "new_case": "New case scheduled",
+    "scheduled": "Case scheduled", "reminder": "Reminder", "nudge": "Reminder",
+    "access_request": "New access request",
+}
+
+
+async def _auto_push_for_notification(doc: dict) -> None:
+    """Push for an in-app notification unless an explicit push for the same
+    user + case was sent around the same time (explicit ones have better
+    wording). Patient name is removed for the lock screen."""
+    import time as _time
+    try:
+        await asyncio.sleep(2)  # let any explicit push in the same request register first
+        uid = str(doc.get("user_id") or "")
+        if not uid:
+            return
+        pid = str(doc.get("procedure_id") or "")
+        t = _recent_push.get((uid, pid))
+        if t and _time.time() - t < 15:
+            return
+        redact: List[str] = []
+        if pid and ObjectId.is_valid(pid):
+            proc = await db.procedures.find_one({"_id": ObjectId(pid)}, {"patient_name": 1})
+            if proc and proc.get("patient_name"):
+                redact.append(proc["patient_name"])
+        title = _PUSH_TITLE_BY_TYPE.get(str(doc.get("type") or ""), "Implanr")
+        body = str(doc.get("message") or "")[:240]
+        if body:
+            await send_expo_push_notifications([uid], title, body, {"procedure_id": pid, "type": doc.get("type")} if pid else {"type": doc.get("type")}, redact=redact)
+    except Exception as exc:
+        logging.warning("[push] auto push failed: %s", exc)
+
+
+class _NotificationsWithPush:
+    """db.notifications wrapper: every in-app notification also goes out as a
+    push. Before, ~half of the in-app notifications (follow-ups, augmentation,
+    end-of-treatment, parts of approvals) never had a push call at all."""
+    def __init__(self, inner):
+        self._inner = inner
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    async def insert_one(self, doc, *a, **kw):
+        res = await self._inner.insert_one(doc, *a, **kw)
+        if isinstance(doc, dict) and doc.get("user_id") and not doc.get("no_push"):
+            asyncio.create_task(_auto_push_for_notification(dict(doc)))
+        return res
+
+    async def insert_many(self, docs, *a, **kw):
+        res = await self._inner.insert_many(docs, *a, **kw)
+        for d in docs or []:
+            if isinstance(d, dict) and d.get("user_id") and not d.get("no_push"):
+                asyncio.create_task(_auto_push_for_notification(dict(d)))
+        return res
+
+
+db.notifications = _NotificationsWithPush(db.notifications)
 
 
 
@@ -2396,11 +2480,28 @@ async def register_push_token(
     data: PushTokenRegister,
     current_user: dict = Depends(get_current_user)
 ):
-    await db.users.update_one(
-        {"_id": ObjectId(current_user["_id"])},
-        {"$set": {"push_token": data.push_token}}
-    )
+    tok = (data.push_token or "").strip()
+    if not tok:
+        raise HTTPException(status_code=400, detail="Missing push token")
+    uid = ObjectId(current_user["_id"])
+    # A device token belongs to whoever is signed in on that phone now —
+    # remove it from any other account (shared clinic devices), so the
+    # previous user's notifications don't land on this phone.
+    await db.users.update_many({"_id": {"$ne": uid}, "push_tokens": tok}, {"$pull": {"push_tokens": tok}})
+    await db.users.update_many({"_id": {"$ne": uid}, "push_token": tok}, {"$unset": {"push_token": ""}})
+    # Several devices per user (phone + tablet).
+    await db.users.update_one({"_id": uid}, {"$addToSet": {"push_tokens": tok}, "$set": {"push_token": tok}})
     return {"message": "Push token registered"}
+
+
+@api_router.post("/auth/push-token/remove")
+async def unregister_push_token(data: PushTokenRegister, current_user: dict = Depends(get_current_user)):
+    """Called on logout so this device stops receiving this user's pushes."""
+    tok = (data.push_token or "").strip()
+    uid = ObjectId(current_user["_id"])
+    await db.users.update_one({"_id": uid}, {"$pull": {"push_tokens": tok}})
+    await db.users.update_one({"_id": uid, "push_token": tok}, {"$unset": {"push_token": ""}})
+    return {"message": "Push token removed"}
 
 # User Routes
 @api_router.get("/users/check-email")
@@ -2549,10 +2650,11 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
         if count >= incharge_cap:
             raise HTTPException(status_code=400, detail=f"Maximum {incharge_cap} users allowed with role '{user.role}'" + (f" in this department" if user.role == "implant_incharge" and department_id else ""))
 
+    await _assert_role_cap(org_id, user.role)
     if caps.get("max_users"):
         total_users = await db.users.count_documents({"org_id": org_id})
         if total_users >= caps["max_users"]:
-            raise HTTPException(status_code=400, detail=f"This organization has reached its plan limit of {caps['max_users']} users. Contact the platform admin to upgrade.")
+            raise HTTPException(status_code=400, detail=f"This organization has reached its limit of {caps['max_users']} users. Please contact your Implanr account manager.")
 
     # Create user
     user_dict = {
@@ -2692,6 +2794,8 @@ async def update_user(user_id: str, user: UserUpdate, request: Request, current_
             and "department_id" not in user.model_fields_set
         ):
             await _assert_dept_incharge_cap(existing.get("org_id"), existing.get("department_id"), "implant_incharge", user_id)
+        if user.role != existing.get("role"):
+            await _assert_role_cap(existing.get("org_id"), user.role, user_id)
         update_fields["role"] = user.role
     if user.password and user.password.strip():
         update_fields["password_hash"] = hash_password(user.password)
@@ -3255,7 +3359,7 @@ async def create_department(payload: DepartmentCreate, current_user: dict = Depe
     if caps.get("max_department") is not None and dept_count >= caps["max_department"]:
         raise HTTPException(
             status_code=400,
-            detail=f"Maximum {caps['max_department']} department(s) allowed on your current plan. Contact your platform admin to upgrade.",
+            detail=f"Your organization can have up to {caps['max_department']} department(s). Please contact your Implanr account manager.",
         )
 
     if payload.color:
@@ -4438,6 +4542,99 @@ async def _ensure_org_indexes() -> None:
         logging.warning(f"[org] Index creation skipped: {e}")
 
 
+# ── Access requests ("Request access" form) ──
+# The iOS app doesn't offer self-service registration, trials or pricing
+# (App Store guideline 3.1.1 / 3.1.3(c): Implanr is licensed to institutions
+# directly). Prospective colleges and clinics leave their details here; the
+# Implanr team follows up, sends a quote and creates the organization.
+
+class AccessRequestIn(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    email: EmailStr
+    phone: str = Field(..., min_length=7, max_length=20)
+    institution_type: str = Field(..., pattern="^(college|clinic)$")
+    institution_name: str = Field(..., min_length=2, max_length=160)
+    city: str = Field(..., min_length=2, max_length=80)
+    designation: Optional[str] = Field(None, max_length=80)
+    team_size: Optional[str] = Field(None, max_length=40)
+    message: Optional[str] = Field(None, max_length=1000)
+    platform: Optional[str] = Field(None, max_length=20)
+
+
+ACCESS_REQUEST_STATUSES = ("new", "contacted", "quoted", "onboarded", "closed")
+
+
+class AccessRequestUpdate(BaseModel):
+    status: Optional[str] = Field(None, pattern="^(new|contacted|quoted|onboarded|closed)$")
+    notes: Optional[str] = Field(None, max_length=2000)
+
+
+@api_router.post("/access-requests")
+@limiter.limit("5/hour")
+async def create_access_request(request: Request, payload: AccessRequestIn):
+    """Public: a college or clinic asks the Implanr team for access."""
+    doc = payload.model_dump()
+    doc["email"] = doc["email"].lower().strip()
+    doc.update({"status": "new", "created_at": datetime.now(timezone.utc).isoformat(), "notes": ""})
+    res = await db.access_requests.insert_one(doc)
+    kind = "Dental college" if payload.institution_type == "college" else "Dental clinic"
+    msg = f"New access request: {payload.institution_name} ({kind}, {payload.city}) from {payload.name}."
+    admins = await db.users.find({"$or": [{"role": "super_admin"}, {"is_super_admin": True}]}, {"_id": 1, "email": 1}).to_list(50)
+    for a in admins:
+        await db.notifications.insert_one({
+            "user_id": str(a["_id"]), "type": "access_request", "message": msg,
+            "access_request_id": str(res.inserted_id), "read": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    try:
+        import html as _html
+        e = _html.escape
+        rows = "".join(f"<tr><td><b>{k}</b></td><td>{e(str(v or '-'))}</td></tr>" for k, v in [
+            ("Type", kind), ("Institution", payload.institution_name), ("City", payload.city),
+            ("Name", payload.name), ("Designation", payload.designation), ("Email", payload.email),
+            ("Phone", payload.phone), ("Size", payload.team_size), ("Message", payload.message),
+            ("From", payload.platform)])
+        for a in admins:
+            if a.get("email"):
+                asyncio.create_task(_send_smtp_email(
+                    a["email"], f"Implanr access request — {payload.institution_name}",
+                    f"<p>{e(msg)}</p><table>{rows}</table>", msg, log_tag="access_request"))
+    except Exception as exc:  # email is best-effort; the request is stored either way
+        logging.warning("access-request email skipped: %s", exc)
+    return {"message": "Thank you. Our team will contact you shortly.", "id": str(res.inserted_id)}
+
+
+def _require_platform_admin(user: dict) -> None:
+    if not (user.get("role") == "super_admin" or user.get("is_super_admin")):
+        raise HTTPException(status_code=403, detail="Not permitted")
+
+
+@api_router.get("/admin/access-requests")
+async def list_access_requests(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    _require_platform_admin(current_user)
+    q: Dict[str, Any] = {"status": status} if status in ACCESS_REQUEST_STATUSES else {}
+    out = []
+    async for d in db.access_requests.find(q).sort("created_at", -1).limit(500):
+        d["id"] = str(d.pop("_id"))
+        out.append(d)
+    return out
+
+
+@api_router.patch("/admin/access-requests/{request_id}")
+async def update_access_request(request_id: str, body: AccessRequestUpdate, current_user: dict = Depends(get_current_user)):
+    _require_platform_admin(current_user)
+    if not ObjectId.is_valid(request_id):
+        raise HTTPException(status_code=404, detail="Request not found")
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not upd:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    upd.update({"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": current_user.get("name")})
+    res = await db.access_requests.update_one({"_id": ObjectId(request_id)}, {"$set": upd})
+    if not res.matched_count:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return {"message": "Updated"}
+
+
 # ── Endpoint 0: Registration email OTP ──
 
 @api_router.post("/auth/send-otp")
@@ -4815,6 +5012,19 @@ async def reset_department_scheduling_config(department_id: str, current_user: d
 #     an org's already-locked-in subscription — that's why org_subscriptions
 #     will store a full copy of the plan's terms, not a live reference.
 
+class PlanFeatures(BaseModel):
+    """Per-plan feature switches. Missing switch = included (so colleges and
+    older plans keep everything)."""
+    ai_planning: Optional[bool] = None
+    admin_dashboard: Optional[bool] = None
+    lab_prescription: Optional[bool] = None
+    data_export: Optional[bool] = None
+    api_access: Optional[bool] = None
+    analytics: Optional[str] = Field(None, pattern="^(basic|standard|full)$")
+    support: Optional[str] = Field(None, max_length=40)
+    onboarding: Optional[str] = Field(None, max_length=60)
+
+
 class SubscriptionPlanCreate(BaseModel):
     key: str = Field(..., max_length=40, pattern="^[a-z0-9_]+$")
     org_type: str = Field(..., pattern="^(college|clinic)$")
@@ -4826,6 +5036,12 @@ class SubscriptionPlanCreate(BaseModel):
     price_monthly: float = Field(..., ge=0)
     price_yearly: float = Field(..., ge=0)
     launch_offer_first_year_price: Optional[float] = Field(None, ge=0)
+    tagline: Optional[str] = Field(None, max_length=120)
+    min_users: Optional[int] = Field(None, ge=1, le=5000)
+    max_cases_per_month: Optional[int] = Field(None, ge=1, le=100000)
+    extra_user_price_monthly: Optional[float] = Field(None, ge=0)
+    custom_pricing: Optional[bool] = None
+    features: Optional[PlanFeatures] = None
     active: bool = True
 
 
@@ -4838,6 +5054,12 @@ class SubscriptionPlanUpdate(BaseModel):
     price_monthly: Optional[float] = Field(None, ge=0)
     price_yearly: Optional[float] = Field(None, ge=0)
     launch_offer_first_year_price: Optional[float] = Field(None, ge=0)
+    tagline: Optional[str] = Field(None, max_length=120)
+    min_users: Optional[int] = Field(None, ge=1, le=5000)
+    max_cases_per_month: Optional[int] = Field(None, ge=1, le=100000)
+    extra_user_price_monthly: Optional[float] = Field(None, ge=0)
+    custom_pricing: Optional[bool] = None
+    features: Optional[PlanFeatures] = None
     active: Optional[bool] = None
 
 
@@ -4881,6 +5103,10 @@ async def list_available_subscription_plans(current_user: dict = Depends(get_cur
             "max_implant_incharges": p.get("max_implant_incharges"),
             "price_monthly": p["price_monthly"], "price_yearly": p["price_yearly"],
             "launch_offer_first_year_price": p.get("launch_offer_first_year_price"),
+            "tagline": p.get("tagline"), "min_users": p.get("min_users"),
+            "max_cases_per_month": p.get("max_cases_per_month"),
+            "extra_user_price_monthly": p.get("extra_user_price_monthly"),
+            "custom_pricing": bool(p.get("custom_pricing")), "features": p.get("features") or {},
         })
     return {"plans": plans}
 
@@ -4892,6 +5118,7 @@ async def create_subscription_plan(payload: SubscriptionPlanCreate, current_user
         raise HTTPException(status_code=400, detail=f"Plan key '{payload.key}' already exists")
     now = datetime.now(timezone.utc).isoformat()
     doc = payload.model_dump()
+    doc["features"] = {k: v for k, v in (doc.get("features") or {}).items() if v is not None}
     doc["created_at"] = now
     doc["updated_at"] = now
     doc["updated_by"] = current_user.get("name") or current_user.get("email")
@@ -4905,7 +5132,14 @@ async def update_subscription_plan(key: str, payload: SubscriptionPlanUpdate, cu
     existing = await db.subscription_plans.find_one({"key": key})
     if not existing:
         raise HTTPException(status_code=404, detail=f"Plan '{key}' not found")
-    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    # An explicit null clears these (e.g. a case cap back to unlimited);
+    # everything else ignores nulls as before.
+    clearable = {"tagline", "min_users", "max_cases_per_month", "extra_user_price_monthly",
+                 "max_students", "max_department", "launch_offer_first_year_price"}
+    sent = payload.model_dump(exclude_unset=True)
+    updates = {k: v for k, v in sent.items() if v is not None or k in clearable}
+    if isinstance(updates.get("features"), dict):
+        updates["features"] = {k: v for k, v in updates["features"].items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -4943,22 +5177,64 @@ LAUNCH_OFFER_PLANS_SEED = [
         "max_users": 150, "max_students": 130, "max_department": 20, "max_implant_incharges": 2,
         "price_monthly": 25000, "price_yearly": 250000, "launch_offer_first_year_price": 200000,
     },
+    # Private clinic plans — "Implanr Subscription Plans.xlsx" (Oct 2026).
+    # Yearly = 10 x monthly. Feature switches mirror the rate card's table.
     {
-        "key": "clinic_starter", "org_type": "clinic", "name": "Dental Clinic Starter",
+        "key": "clinic_solo", "org_type": "clinic", "name": "Solo",
+        "tagline": "Built for the solo implantologist", "min_users": 1,
         "max_users": 3, "max_students": None, "max_department": None, "max_implant_incharges": 1,
-        "price_monthly": 2999, "price_yearly": 29999, "launch_offer_first_year_price": 25000,
+        "price_monthly": 3500, "price_yearly": 35000, "launch_offer_first_year_price": None,
+        "max_cases_per_month": 25, "extra_user_price_monthly": 500,
+        "features": {"ai_planning": False, "admin_dashboard": False, "lab_prescription": False,
+                     "data_export": False, "api_access": False, "analytics": "basic",
+                     "support": "Email", "onboarding": "1 session"},
     },
     {
-        "key": "clinic_professional", "org_type": "clinic", "name": "Dental Clinic Professional",
-        "max_users": 6, "max_students": None, "max_department": None, "max_implant_incharges": 1,
-        "price_monthly": 4999, "price_yearly": 49999, "launch_offer_first_year_price": 40000,
+        "key": "clinic_clinic", "org_type": "clinic", "name": "Clinic",
+        "tagline": "The complete clinic workflow", "min_users": 4,
+        "max_users": 10, "max_students": None, "max_department": None, "max_implant_incharges": 2,
+        "price_monthly": 6000, "price_yearly": 60000, "launch_offer_first_year_price": None,
+        "max_cases_per_month": None, "extra_user_price_monthly": 450,
+        "features": {"ai_planning": True, "admin_dashboard": True, "lab_prescription": True,
+                     "data_export": True, "api_access": False, "analytics": "standard",
+                     "support": "Email", "onboarding": "3 sessions"},
     },
     {
-        "key": "clinic_premium", "org_type": "clinic", "name": "Dental Clinic Premium",
-        "max_users": 15, "max_students": None, "max_department": None, "max_implant_incharges": 1,
-        "price_monthly": 7999, "price_yearly": 79000, "launch_offer_first_year_price": 65000,
+        "key": "clinic_specialist", "org_type": "clinic", "name": "Specialist",
+        "tagline": "For high-volume implant centres", "min_users": 11,
+        "max_users": 25, "max_students": None, "max_department": None, "max_implant_incharges": 3,
+        "price_monthly": 10000, "price_yearly": 100000, "launch_offer_first_year_price": None,
+        "max_cases_per_month": None, "extra_user_price_monthly": 400,
+        "features": {"ai_planning": True, "admin_dashboard": True, "lab_prescription": True,
+                     "data_export": True, "api_access": False, "analytics": "full",
+                     "support": "Dedicated", "onboarding": "Full onboarding"},
+    },
+    {
+        "key": "clinic_enterprise", "org_type": "clinic", "name": "Enterprise",
+        "tagline": "Multi-branch clinic group", "min_users": 26,
+        "max_users": 50, "max_students": None, "max_department": None, "max_implant_incharges": 5,
+        "price_monthly": 18000, "price_yearly": 180000, "launch_offer_first_year_price": None,
+        "max_cases_per_month": None, "extra_user_price_monthly": 350,
+        "features": {"ai_planning": True, "admin_dashboard": True, "lab_prescription": True,
+                     "data_export": True, "api_access": True, "analytics": "full",
+                     "support": "Dedicated", "onboarding": "Full onboarding"},
+    },
+    {
+        "key": "clinic_chain", "org_type": "clinic", "name": "Chain / Group",
+        "tagline": "50+ users — custom pricing", "min_users": 51, "custom_pricing": True,
+        "max_users": 5000, "max_students": None, "max_department": None, "max_implant_incharges": None,
+        "price_monthly": 0, "price_yearly": 0, "launch_offer_first_year_price": None,
+        "max_cases_per_month": None, "extra_user_price_monthly": None,
+        "features": {"ai_planning": True, "admin_dashboard": True, "lab_prescription": True,
+                     "data_export": True, "api_access": True, "analytics": "full",
+                     "support": "Dedicated", "onboarding": "Full onboarding"},
     },
 ]
+
+
+# Colleges now buy department licences (college_licensing.py), not these.
+RETIRED_PLAN_KEYS = ["clinic_starter", "clinic_professional", "clinic_premium",
+                     "dept_essential", "college_professional", "college_enterprise"]
 
 
 async def _seed_subscription_plans() -> None:
@@ -4974,6 +5250,12 @@ async def _seed_subscription_plans() -> None:
         await db.subscription_plans.update_one(
             {"key": plan["key"]}, {"$set": doc, "$setOnInsert": {"created_at": now}}, upsert=True,
         )
+    # Old clinic plans are no longer sold. Orgs already on them keep their
+    # limits (stored on the org's subscription), they just aren't offered.
+    await db.subscription_plans.update_many(
+        {"key": {"$in": RETIRED_PLAN_KEYS}, "updated_by": {"$in": [None, "", "seed"]}},
+        {"$set": {"active": False, "updated_at": now}},
+    )
 
 
 # ── super_admin: Free Trial settings (single global doc, applies to both
@@ -5152,10 +5434,9 @@ async def _get_current_org_subscription(org_id: str) -> Optional[dict]:
 async def _assert_subscription_not_expired(org_id: str) -> None:
     doc = await _get_current_org_subscription(org_id)
     if doc and doc.get("status") in ("expired", "cancelled"):
-        label = "free trial" if doc.get("plan_key") is None else "subscription"
         raise HTTPException(
             status_code=403,
-            detail=f"Your organization's {label} has expired. Existing users can still log in, but no new users can be added until your platform admin renews it.",
+            detail="Your organization's access is currently inactive, so new users can't be added. Existing users can still sign in. Please contact your Implanr account manager.",
         )
 
 
@@ -5168,7 +5449,90 @@ async def _get_org_caps(org_id: str) -> dict:
         "max_students": sub.get("max_students"),
         "max_department": sub.get("max_department"),
         "max_implant_incharges": sub.get("max_implant_incharges") if sub.get("max_implant_incharges") is not None else 2,
+        "max_cases_per_month": sub.get("max_cases_per_month"),
+        "features": sub.get("features") or {},
+        "role_caps": sub.get("role_caps") or {},
     }
+
+
+_ROLE_CAP_LABELS = {"student": "students (PG, fellows and interns)", "supervisor": "supervisors / guides",
+                    "implant_incharge": "Implant In-Charges", "administrator": "college admins"}
+
+
+async def _assert_role_cap(org_id: Optional[str], role: Optional[str], exclude_user_id: Optional[str] = None) -> None:
+    """Pooled per-role seat limit for licensed colleges (role_caps on the
+    org's subscription). Orgs without role_caps are unaffected."""
+    if not org_id or not role:
+        return
+    caps = await _get_org_caps(org_id)
+    cap = (caps.get("role_caps") or {}).get(role)
+    if cap is None:
+        return
+    q: Dict[str, Any] = {"org_id": org_id, "role": role, "disabled": {"$ne": True}}
+    if exclude_user_id and ObjectId.is_valid(exclude_user_id):
+        q["_id"] = {"$ne": ObjectId(exclude_user_id)}
+    if await db.users.count_documents(q) >= cap:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Your college's licences include {cap} {_ROLE_CAP_LABELS.get(role, role)}, and all are in use. "
+                   "Please contact your Implanr account manager.",
+        )
+
+
+_FEATURE_LABELS = {
+    "ai_planning": "AI-assisted treatment planning",
+    "lab_prescription": "Automatic lab prescriptions",
+    "data_export": "Data export",
+    "admin_dashboard": "The clinic admin dashboard",
+    "api_access": "API access",
+}
+
+
+async def _assert_org_feature(current_user: dict, feature: str) -> None:
+    """403 when the caller's org is on a plan that switches `feature` off.
+    No org / no plan / trial / switch not set → allowed."""
+    org_id = current_user.get("org_id")
+    if not org_id or current_user.get("is_super_admin"):
+        return
+    sub = await _get_current_org_subscription(org_id)
+    if not sub or sub.get("status") == "trial":
+        return
+    if (sub.get("features") or {}).get(feature) is False:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{_FEATURE_LABELS.get(feature, 'This feature')} isn't included for your organization. "
+                   "Please contact your Implanr account manager.",
+        )
+
+
+async def _cases_this_month(org_id: str) -> int:
+    """Cases created by the org since the 1st of this month (IST).
+    created_at is a naive-UTC datetime on most cases, an ISO string on some."""
+    ist = timezone(timedelta(hours=5, minutes=30))
+    month_start = datetime.now(ist).replace(day=1, hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+    return await db.procedures.count_documents({
+        "org_id": org_id,
+        "$or": [{"created_at": {"$gte": month_start.replace(tzinfo=None)}},
+                {"created_at": {"$gte": month_start.isoformat()}}],
+    })
+
+
+async def _assert_case_quota(org_id: Optional[str]) -> None:
+    """Monthly new-case cap (e.g. Solo: 25 a month), counted per calendar
+    month in IST."""
+    if not org_id:
+        return
+    sub = await _get_current_org_subscription(org_id)
+    cap = (sub or {}).get("max_cases_per_month")
+    if not cap or (sub or {}).get("status") == "trial":
+        return
+    used = await _cases_this_month(org_id)
+    if used >= cap:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your organization has reached its limit of {cap} new cases this month. "
+                   "Please contact your Implanr account manager.",
+        )
 
 
 class OrgSubscriptionOverride(BaseModel):
@@ -5231,8 +5595,115 @@ async def get_my_org_subscription(current_user: dict = Depends(get_current_user)
         "implant_incharges": incharge_count,
         "students": student_count,
         "department": department_count,
+        "cases_this_month": await _cases_this_month(org_id),
     }
+    if data.get("role_caps"):
+        data["usage"]["by_role"] = {
+            r: await db.users.count_documents({"org_id": org_id, "role": r, "disabled": {"$ne": True}})
+            for r in data["role_caps"]
+        }
     return data
+
+
+# ── Dental-college department licences (rate card in college_licensing.py) ──
+import college_licensing as _lic
+
+
+class CollegeLicenceLine(BaseModel):
+    label: str = Field(..., min_length=1, max_length=80)
+    pg_students: int = Field(..., ge=0, le=500)
+    tier_key: Optional[str] = Field(None, max_length=40)
+    department_id: Optional[str] = Field(None, max_length=40)
+
+
+class CollegeLicenceConfig(BaseModel):
+    licences: List[CollegeLicenceLine] = Field(..., min_length=1, max_length=30)
+    supervisors_needed: int = Field(0, ge=0, le=1000)
+    incharges_needed: int = Field(0, ge=0, le=200)
+    admins_needed: int = Field(0, ge=0, le=100)
+    fellows: int = Field(0, ge=0, le=500)
+    interns: int = Field(0, ge=0, le=2000)
+    research_module: bool = False
+    founding: bool = False
+    government: bool = False
+    university_group: bool = False
+    term_years: int = Field(1, ge=1, le=3)
+    negotiated_discount: float = Field(0.0, ge=0, le=0.3)
+    new_customer: bool = True
+    status: str = Field("active", pattern="^(active|expired|cancelled)$")
+
+
+def _licence_quote(cfg: CollegeLicenceConfig) -> Dict[str, Any]:
+    return _lic.compute_quote(
+        [l.model_dump() for l in cfg.licences],
+        supervisors_needed=cfg.supervisors_needed, incharges_needed=cfg.incharges_needed,
+        admins_needed=cfg.admins_needed, fellows=cfg.fellows, interns=cfg.interns,
+        research_module=cfg.research_module, founding=cfg.founding, government=cfg.government,
+        university_group=cfg.university_group, term_years=cfg.term_years,
+        negotiated_discount=cfg.negotiated_discount, new_customer=cfg.new_customer)
+
+
+@api_router.get("/admin/college-rate-card")
+async def college_rate_card(current_user: dict = Depends(get_current_user)):
+    _require_super_admin(current_user)
+    return {"tiers": _lic.LICENCE_TIERS, "rates": _lic.RATES,
+            "intern_tiers": [{"up_to": c, "price": p} for c, p in _lic.INTERN_TIERS],
+            "intern_above_100_each": _lic.INTERN_ABOVE_100_EACH}
+
+
+@api_router.post("/admin/college-quote")
+async def college_quote(cfg: CollegeLicenceConfig, current_user: dict = Depends(get_current_user)):
+    """Price a licence set without saving it (live preview in the editor)."""
+    _require_super_admin(current_user)
+    quote = _licence_quote(cfg)
+    caps = _lic.derive_caps(quote, supervisors_needed=cfg.supervisors_needed, incharges_needed=cfg.incharges_needed,
+                            admins_needed=cfg.admins_needed, fellows=cfg.fellows, interns=cfg.interns)
+    return {"quote": quote, "caps": caps}
+
+
+@api_router.put("/organizations/{org_id}/licences")
+async def set_college_licences(org_id: str, cfg: CollegeLicenceConfig, current_user: dict = Depends(get_current_user)):
+    """Put a college on department licences: saves the licence set + add-ons,
+    the agreed quote, and the pooled seat limits the server enforces."""
+    _require_super_admin(current_user)
+    if not ObjectId.is_valid(org_id):
+        raise HTTPException(status_code=404, detail="Organization not found")
+    org = await db.organizations.find_one({"_id": ObjectId(org_id)}, {"org_type": 1, "name": 1})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if org.get("org_type") != "college":
+        raise HTTPException(status_code=400, detail="Department licences apply to dental colleges only")
+    quote = _licence_quote(cfg)
+    caps = _lic.derive_caps(quote, supervisors_needed=cfg.supervisors_needed, incharges_needed=cfg.incharges_needed,
+                            admins_needed=cfg.admins_needed, fellows=cfg.fellows, interns=cfg.interns)
+    now = datetime.now(timezone.utc)
+    who = current_user.get("name") or current_user.get("email")
+    existing = await db.org_subscriptions.find_one({"org_id": org_id}, sort=[("started_at", -1)])
+    history = list((existing or {}).get("history", []))
+    history.append({"event": "licences_set", "at": now.isoformat(), "by": who,
+                    "detail": f"{quote['licence_count']} licence(s), {quote['total_pg_students']} PGs — "
+                              f"net ₹{quote['net_annual_fee']:,.0f}/yr excl GST"})
+    doc = {
+        "org_id": org_id, "status": cfg.status,
+        "plan_key": "college_licence",
+        "plan_name": f"{quote['licence_count']} department licence{'s' if quote['licence_count'] != 1 else ''}",
+        "billing_cycle": "yearly", "is_launch_offer": False,
+        "price_locked_in": quote["net_annual_fee"],
+        "licence_config": cfg.model_dump(), "licence_quote": quote,
+        **caps,
+        "max_cases_per_month": None, "features": {},
+        "updated_at": now.isoformat(), "updated_by": who, "history": history,
+    }
+    if existing:
+        await db.org_subscriptions.update_one(
+            {"_id": existing["_id"]},
+            {"$set": doc, "$unset": {"trial_ends_at": "", "requested_plan_key": "", "requested_billing_cycle": "",
+                                     "requested_at": "", "requested_by": ""}})
+    else:
+        doc["started_at"] = now.isoformat()
+        await db.org_subscriptions.insert_one(doc)
+    sub = await _get_current_org_subscription(org_id)
+    return _serialize_org_sub(sub, org_id)
 
 
 @api_router.get("/organizations/{org_id}/subscription")
@@ -5282,6 +5753,8 @@ async def update_org_subscription(org_id: str, payload: OrgSubscriptionOverride,
             "max_students": payload.max_students if payload.max_students is not None else plan.get("max_students"),
             "max_department": payload.max_department if payload.max_department is not None else plan.get("max_department"),
             "max_implant_incharges": payload.max_implant_incharges if payload.max_implant_incharges is not None else plan.get("max_implant_incharges"),
+            "max_cases_per_month": plan.get("max_cases_per_month"),
+            "features": plan.get("features") or {},
             "started_at": now.isoformat(),
             "updated_at": now.isoformat(),
             "updated_by": who,
@@ -5885,10 +6358,11 @@ async def send_invite(payload: InviteCreate, current_user: dict = Depends(get_cu
         if count >= incharge_cap:
             raise HTTPException(400, f"Maximum {incharge_cap} users allowed with role '{payload.role}'" + (" in this department" if payload.role == "implant_incharge" and department_id else ""))
 
+    await _assert_role_cap(org_id, payload.role)
     if caps.get("max_users"):
         total_users = await db.users.count_documents({"org_id": org_id})
         if total_users >= caps["max_users"]:
-            raise HTTPException(400, f"This organization has reached its plan limit of {caps['max_users']} users. Contact the platform admin to upgrade.")
+            raise HTTPException(400, f"This organization has reached its limit of {caps['max_users']} users. Please contact your Implanr account manager.")
 
     existing_user = await db.users.find_one({"email": payload.email})
     if existing_user:
@@ -6542,6 +7016,7 @@ async def create_procedure_with_existing_implants(
         await db.procedures.replace_one({"_id": existing["_id"]}, procedure_dict)
         new_id = str(existing["_id"])
     else:
+        await _assert_case_quota(procedure_dict.get("org_id"))
         result = await db.procedures.insert_one(procedure_dict)
         new_id = str(result.inserted_id)
 
@@ -6826,6 +7301,7 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     procedure_dict["augmentation_checklist_generated_by"] = current_user.get("id") or current_user.get("_id") or ""
     procedure_dict["org_id"] = current_user.get("org_id")
     procedure_dict["department_id"] = current_user.get("department_id")
+    await _assert_case_quota(procedure_dict["org_id"])
 
     result = await db.procedures.insert_one(procedure_dict)
     procedure_id = str(result.inserted_id)
@@ -8805,13 +9281,38 @@ async def list_assistant_candidates(current_user: dict = Depends(get_current_use
     is excluded (a user cannot assist their own case)."""
     if current_user["role"] == "nurse":
         raise HTTPException(status_code=403, detail="Not permitted")
-    users = await db.users.find({"role": "student"}, {"name": 1, "username": 1, "email": 1}).sort("name", 1).to_list(500)
-    out = []
+    # Only active students of the caller's own organization (and department,
+    # when the caller is department-scoped). Previously this listed every
+    # student in the database — other colleges and old seeded/legacy accounts
+    # with no organization — and the same person twice when they had a
+    # duplicate account.
+    query: Dict[str, Any] = {"role": "student", "disabled": {"$ne": True}}
+    if not current_user.get("is_super_admin"):
+        if not current_user.get("org_id"):
+            return []
+        query.update(_dept_scope_query(current_user))
+    users = await db.users.find(
+        query, {"name": 1, "username": 1, "email": 1, "first_login_at": 1, "created_at": 1},
+    ).to_list(2000)
+    # One entry per person: duplicate accounts share an email. Prefer the one
+    # that has actually signed in, then the most recently created.
+    def _rank(u):
+        created = u.get("created_at")
+        return (1 if u.get("first_login_at") else 0, created if isinstance(created, datetime) else datetime.min)
+    best: Dict[str, dict] = {}
     for u in users:
-        uid = str(u["_id"])
-        if uid == current_user["_id"]:
+        if str(u["_id"]) == current_user["_id"]:
             continue
-        out.append({"id": uid, "name": u.get("name") or u.get("username") or u.get("email", "")})
+        key = (u.get("email") or "").strip().lower() or f"id:{u['_id']}"
+        if key not in best or _rank(u) > _rank(best[key]):
+            best[key] = u
+    out = [
+        {"id": str(u["_id"]),
+         "name": (u.get("name") or u.get("username") or u.get("email") or "").strip(),
+         "email": u.get("email") or ""}
+        for u in best.values()
+    ]
+    out.sort(key=lambda x: x["name"].lower())
     return out
 
 
@@ -9028,6 +9529,11 @@ async def update_procedure(
         if new_status not in allowed:
             raise HTTPException(status_code=400, detail=f"Cannot change status from '{current_status}' to '{new_status}'")
         # Submitting for Phase 1 approval: full tooth-count rule on the final
+                # iter-455: Phase 1 diagnosis is mandatory at submission — auto-generate
+        # the Atlas diagnosis if the record still has none (API clients / legacy drafts).
+        if new_status == "pending_phase1" and not ((procedure.get("phase1_diagnosis") or {}).get("text") or "").strip():
+            update_data["phase1_diagnosis"] = _dx.generate({**procedure, **update_data})
+    
         # values (this call usually carries only the status change).
         if new_status == "pending_phase1":
             _validate_missing_teeth(
@@ -13195,8 +13701,14 @@ async def _build_smart_tips_block(proc: dict, max_tips: int = 3) -> str:
             category_hints.append("Full Arch")
         if (proc.get("phase2_data") or {}).get("flap_design"):
             category_hints.append("Soft Tissue")
+        if proc.get("augmentation_required") or (proc.get("phase2_data") or {}).get("augmentation") \
+                or status.startswith("augmentation"):
+            category_hints.append("Bone Augmentation")
         # Query: active tips matching the phase, prefer hinted categories.
-        query: Dict[str, Any] = {"active": True, "phase": phase}
+        # The seed library tags tips "Surgery"/"Restoration", the status map
+        # says "Surgical"/"Prosthetic" — accept both spellings.
+        phase_alias = {"Surgical": ["Surgical", "Surgery"], "Prosthetic": ["Prosthetic", "Restoration"]}
+        query: Dict[str, Any] = {"active": True, "phase": {"$in": phase_alias.get(phase, [phase])}}
         cursor = db.tips.find(query, {"_id": 0, "tip_id": 1, "title": 1, "category": 1,
                                        "tip_text": 1, "source_organization": 1,
                                        "source_reference": 1, "publication_year": 1})
@@ -13390,6 +13902,7 @@ _AI_BLOCKED_ROLES = {"nurse", "dental_assistant"}
 
 @api_router.post("/ai/explain-recommendation")
 async def ai_explain_recommendation(request: Request, current_user: dict = Depends(get_current_user)):
+    await _assert_org_feature(current_user, "ai_planning")
     """Generate AI explanation for implant recommendation."""
     if current_user.get("role") in _AI_BLOCKED_ROLES:
         raise HTTPException(status_code=403, detail="AI features not available for this role")
@@ -13741,6 +14254,7 @@ async def edit_exit_summary(procedure_id: str, request: Request, current_user: d
 
 @api_router.post("/ai/explain-standalone")
 async def ai_explain_standalone(request: Request, current_user: dict = Depends(get_current_user)):
+    await _assert_org_feature(current_user, "ai_planning")
     """Generate AI explanation for standalone implant selection (no procedure ID required)."""
     if current_user.get("role") in _AI_BLOCKED_ROLES:
         raise HTTPException(status_code=403, detail="AI features not available for this role")
@@ -16346,6 +16860,13 @@ async def generate_case_report(
     # in their own block below the risk factors. Skip them when iterating risk
     # factors so the colour-coding heuristics don't fire on numeric strings.
     LAB_KEYS = {"hba1c", "hb", "tlc", "bleeding_time", "clotting_time", "prothrombin_time", "inr"}
+    ASA_DECISIONS = {
+        "I": ("Proceed", (46, 125, 50)), "II": ("Proceed", (85, 139, 47)),
+        "III": ("Conditional - physician clearance required", (239, 108, 0)),
+        "IV": ("Defer elective implant surgery", (198, 40, 40)),
+        "V": ("Not applicable - exclude from elective care", (106, 27, 154)),
+        "VI": ("Not applicable - exclude from elective care", (69, 90, 100)),
+    }
     if isinstance(med, dict) and med:
         risk = procedure.get("medical_risk_level", "")
         title = f"Medical Assessment — {risk}" if risk else "Medical Assessment"
@@ -16358,6 +16879,15 @@ async def generate_case_report(
         }
         for key, value in med.items():
             if key in LAB_KEYS:
+                continue
+            if key == "asa_class":
+                # iter-453: ASA Physical Status — rendered with its decision rule
+                _asa = ASA_DECISIONS.get(str(value), ("", (0, 0, 0)))
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.cell(60, 7, safe("ASA Classification:"), ln=False)
+                pdf.set_text_color(*_asa[1])
+                pdf.cell(0, 7, safe(f"ASA {value}" + (f" - {_asa[0]}" if _asa[0] else "")), ln=True)
+                pdf.set_text_color(0, 0, 0)
                 continue
             label = key.replace("_", " ").title()
             pdf.set_font("Helvetica", "B", 10)
@@ -16451,6 +16981,27 @@ async def generate_case_report(
     # ── Phase 1: Diagnosis and Treatment Planning ─────────────
     pdf.add_page()
     add_section_title("Phase 1 - Diagnosis and Treatment Planning", 0, 122, 255)
+    # iter-455: Atlas-derived clinical diagnosis (clinician-edited narrative)
+    _dx_rec = procedure.get("phase1_diagnosis") or {}
+    if (_dx_rec.get("text") or "").strip():
+        _verdict = _dx_rec.get("verdict") or ""
+        _vcol = {"Proceed": (46, 125, 50), "Modify plan": (239, 108, 0), "Defer": (198, 40, 40)}.get(_verdict, (84, 110, 122))
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(21, 101, 192)
+        pdf.cell(0, 7, safe("Clinical Diagnosis"), ln=True)
+        if _verdict:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*_vcol)
+            pdf.cell(0, 6, safe(f"Overall assessment: {_verdict}"), ln=True)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.multi_cell(0, 5, safe(_dx_rec["text"]))
+        if _dx_rec.get("edited_by_name"):
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.set_text_color(120, 120, 120)
+            pdf.cell(0, 5, safe(f"Edited by {_dx_rec['edited_by_name']}"), ln=True)
+            pdf.set_text_color(0, 0, 0)
+        pdf.ln(3)
     checklist = procedure.get("checklist", {})
     if isinstance(checklist, dict):
         add_checklist_section("Pre-Surgical Checklist", checklist.get("pre_surgical"))
@@ -18099,6 +18650,75 @@ async def approve_procedure(
     return updated_procedure
 
 # ── Request Phase 1 Approval (Draft → Pending Phase 1) ───────────
+# ── iter-455: Phase 1 Clinical Diagnosis (Atlas rules engine) ─────────────
+def _dx_can_edit(proc: dict, user: dict) -> bool:
+    """Creator (student / in-charge) + assigned supervisor + implant in-charge + admin."""
+    uid = user["_id"]
+    role = user["role"]
+    if role in ("implant_incharge", "administrator"):
+        return True
+    if role == "supervisor":
+        return proc.get("supervisor_id") == uid or proc.get("created_by_id") == uid
+    if role == "student":
+        return proc.get("student_id") == uid or proc.get("created_by_id") == uid
+    return False
+
+
+class DiagnosisUpdate(BaseModel):
+    text: str = Field(..., min_length=1, max_length=20000)
+
+
+@api_router.post("/procedures/{procedure_id}/diagnosis/generate")
+async def generate_phase1_diagnosis(
+    procedure_id: str,
+    force: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate (or refresh with ?force=true) the deterministic Phase 1 diagnosis
+    from the captured case data. Preserves user edits unless force is set."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _dx_can_edit(proc, current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    existing = proc.get("phase1_diagnosis") or {}
+    fresh = _dx.generate(proc)
+    if existing.get("text") and not force:
+        # Refresh structured findings but keep the clinician's edited narrative.
+        fresh["text"] = existing["text"]
+        fresh["edited_by"] = existing.get("edited_by")
+        fresh["edited_by_name"] = existing.get("edited_by_name")
+        fresh["edited_at"] = existing.get("edited_at")
+    fresh["version"] = int(existing.get("version") or 0) + 1
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"phase1_diagnosis": fresh, "updated_at": datetime.utcnow()}})
+    return fresh
+
+
+@api_router.put("/procedures/{procedure_id}/diagnosis")
+async def save_phase1_diagnosis(
+    procedure_id: str,
+    body: DiagnosisUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """Save the clinician-edited diagnosis narrative."""
+    proc = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not proc:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    if not _dx_can_edit(proc, current_user):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if proc.get("status") == "completed":
+        raise HTTPException(status_code=400, detail="Cannot edit completed cases")
+    dx = proc.get("phase1_diagnosis") or _dx.generate(proc)
+    dx["text"] = body.text.strip()
+    dx["edited_by"] = current_user["_id"]
+    dx["edited_by_name"] = current_user.get("name")
+    dx["edited_at"] = datetime.now(timezone.utc).isoformat()
+    await db.procedures.update_one({"_id": ObjectId(procedure_id)},
+                                   {"$set": {"phase1_diagnosis": dx, "updated_at": datetime.utcnow()}})
+    return dx
+
+
 @api_router.post("/procedures/{procedure_id}/request-phase1-approval")
 async def request_phase1_approval(
     procedure_id: str,
@@ -18124,6 +18744,13 @@ async def request_phase1_approval(
         "phase1_requested_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
+    # iter-455: a Phase 1 clinical diagnosis is mandatory at submission. The UI
+    # generates/edits it in Step 2; if it is somehow missing (API clients,
+    # legacy drafts) we generate the deterministic Atlas diagnosis here so the
+    # record is never approved without one.
+    if not ((procedure.get("phase1_diagnosis") or {}).get("text") or "").strip():
+        update_fields["phase1_diagnosis"] = _dx.generate(procedure)
+    
 
     await db.procedures.update_one(
         {"_id": ObjectId(procedure_id)},
@@ -18214,6 +18841,7 @@ async def _get_proc_or_404(procedure_id: str) -> dict:
 @api_router.put("/procedures/{procedure_id}/prescription")
 async def save_prescription(procedure_id: str, body: PrescriptionEditBody,
                             current_user: dict = Depends(get_current_user)):
+    await _assert_org_feature(current_user, "lab_prescription")
     """Create / edit the prescription drug list + text. Creator edits before
     Phase 2 submission; faculty edit during Phase 2 review. Every change is
     audit-logged. Locked once approved."""
@@ -18255,6 +18883,7 @@ async def save_prescription(procedure_id: str, body: PrescriptionEditBody,
 @api_router.post("/procedures/{procedure_id}/prescription/sign")
 async def sign_prescription(procedure_id: str, body: PrescriptionSignBody,
                             current_user: dict = Depends(get_current_user)):
+    await _assert_org_feature(current_user, "lab_prescription")
     """Capture the creator's or supervisor's e-signature on the prescription.
     Reuses the server-side PNG rasteriser + SHA-256 tamper evidence."""
     procedure = await _get_proc_or_404(procedure_id)
@@ -19592,6 +20221,9 @@ async def approve_phase4_step2(
         )
 
     updated = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    # IIC: issue the Implant Information Card as soon as treatment completes.
+    if updated.get("status") == "completed" and not updated.get("implant_card"):
+        updated = await _iic_router.issue_card(updated, current_user)
     updated["_id"] = str(updated["_id"])
     updated["id"] = updated["_id"]
     return updated
@@ -26636,7 +27268,12 @@ async def _get_user_primary_case_context(user_id: str) -> dict:
         phase = "surgery"
     elif "stage2_prosthetic" in status:
         phase = "restoration"
-    return {"case_type": case_type, "bone_density": bone_density, "phase": phase}
+    # Bone graft involved: augmentation case/stage, or a graft recorded in Phase 2.
+    augmentation = bool(
+        proc.get("augmentation_required") or status.startswith("augmentation")
+        or "augmentation" in (proc.get("implant_procedure_type") or "").lower()
+        or (proc.get("phase2_data") or {}).get("augmentation"))
+    return {"case_type": case_type, "bone_density": bone_density, "phase": phase, "augmentation": augmentation}
 
 
 async def _pick_daily_tip_for_user(user_id: str, context: dict | None = None) -> tuple[dict, str | None]:
@@ -26683,6 +27320,9 @@ async def _pick_daily_tip_for_user(user_id: str, context: dict | None = None) ->
         if context.get("bone_density") == "D4":
             preferred_cats.append("Surgical")
             rationale = "Surfaced because your active case involves soft D4 bone."
+        if context.get("augmentation"):
+            preferred_cats.append("Bone Augmentation")
+            rationale = "Surfaced because your active case involves bone augmentation."
         if context.get("phase") == "surgery":
             preferred_cats.extend(["Surgical", "Soft Tissue"])
             rationale = rationale or "Surfaced because your active case is in the surgical phase."
@@ -28060,6 +28700,7 @@ async def export_survival_analytics_csv(
     to_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
+    await _assert_org_feature(current_user, "data_export")
     # Only administrator + implant_incharge may export the full CSV (patient
     # identifiers are included in case rows). Students / supervisors can
     # still view the dashboard scoped to their own cases.
@@ -28560,6 +29201,7 @@ async def export_procedure_overview_csv(
     student_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
+    await _assert_org_feature(current_user, "data_export")
     role = current_user.get("role")
     if role not in ("student", "supervisor", "implant_incharge", "administrator"):
         raise HTTPException(status_code=403, detail="Analytics not available for this role")
@@ -30270,6 +30912,12 @@ setup_lab_files(
     get_current_user=get_current_user, get_current_user_optional=get_current_user_optional,
     log_access=log_access, secret_key=SECRET_KEY, uploads_dir=UPLOADS_DIR, decode_query_token=_decode_query_token,
 )
+
+# Implant Information Card (IIC) — issued on treatment completion.
+import implant_card as _implant_card
+_iic_router = _implant_card.build_router(db, get_current_user, _resolve_active_implants_inline, log_access)
+api_router.include_router(_iic_router)
+
 
 # ── Transfer Case (iter-385) ───────────────────────────────────────────────
 # Student-initiated ownership handoff to a junior student in the same

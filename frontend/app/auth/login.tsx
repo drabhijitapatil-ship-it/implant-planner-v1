@@ -22,6 +22,7 @@ import { ONBOARDING_VERSION } from "../../components/onboarding/content/onboardi
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
+import { HIDE_COMMERCE } from "../../utils/storePolicy";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -411,18 +412,18 @@ export default function LoginScreen() {
                 </View>
 
                 <TouchableOpacity
-                  onPress={() => router.push("/auth/register")}
+                  onPress={() => router.push((HIDE_COMMERCE ? "/auth/request-access" : "/auth/register") as any)}
                   disabled={loading}
                   style={styles.registerButton}
                   data-testid="register-link"
                 >
                   <Ionicons
-                    name="person-add-outline"
+                    name={HIDE_COMMERCE ? "mail-outline" : "person-add-outline"}
                     size={18}
                     color="#007AFF"
                     style={styles.registerIcon}
                   />
-                  <Text style={styles.registerText}>Create Account</Text>
+                  <Text style={styles.registerText}>{HIDE_COMMERCE ? "Request Access for Your Institution" : "Create Account"}</Text>
                 </TouchableOpacity>
 
                 <Text style={styles.versionText} data-testid="app-version">

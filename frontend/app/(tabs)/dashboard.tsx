@@ -33,6 +33,7 @@ import {
   DepartmentItem,
 } from "../../utils/departmentBadge";
 import AssistingTodayStrip from "../../components/AssistingTodayStrip";
+import { HIDE_COMMERCE } from "../../utils/storePolicy";
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<
@@ -866,6 +867,141 @@ function StudentDashboard({
 }
 
 // ── Supervisor Dashboard ──────────────────────────────────
+// ── Home "Insights" tiles ────────────────────────────────────────────
+// Replaces the long Student / Supervisor / In-Charge performance lists and
+// the Departments preview on Home: one tap-to-open tile per area, each with
+// one key figure. The full leaderboards live on their own screens.
+const APPROVAL_PREVIEW = 3;
+
+type InsightTile = {
+  key: string;
+  icon: any;
+  color: string;
+  bg: string;
+  title: string;
+  figure?: string;
+  sub?: string;
+  route: string;
+};
+
+function InsightsTiles({
+  router,
+  stats,
+  variant,
+}: {
+  router: any;
+  stats: any;
+  variant: "incharge" | "supervisor";
+}) {
+  const { user } = useAuth();
+  const isAdmin = !!user?.is_admin;
+  const [deptCount, setDeptCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+    api
+      .get("/departments")
+      .then((r) => { if (alive) setDeptCount((r.data?.departments || []).length); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isAdmin]);
+
+  const students = (stats.student_stats || []).filter((x: any) => x.student_name);
+  const supervisors = (stats.supervisor_stats || []).filter((x: any) => x.supervisor_name);
+  const incharges = (stats.incharge_stats || []).filter((x: any) => x.incharge_name);
+  const sum = (rows: any[], k: string) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+  const tiles: InsightTile[] = [];
+  if (isAdmin && variant === "incharge") {
+    tiles.push({
+      key: "departments", icon: "business-outline", color: "#8D6E00", bg: "#FFF8E1",
+      title: "Departments & Units",
+      figure: deptCount == null ? undefined : String(deptCount),
+      sub: "Stats by department & role", route: "/admin/department-stats",
+    });
+  }
+  tiles.push({
+    key: "students", icon: "school-outline", color: "#1565C0", bg: "#E3F2FD",
+    title: "Students", figure: String(students.length),
+    sub: variant === "supervisor"
+      ? `${sum(students, "under_me")} cases under you`
+      : `${sum(students, "active")} active cases`,
+    route: "/admin/students-performance",
+  });
+  if (variant === "incharge") {
+    tiles.push({
+      key: "supervisors", icon: "ribbon-outline", color: "#6A1B9A", bg: "#F3E5F5",
+      title: "Supervisors", figure: String(supervisors.length),
+      sub: `${sum(supervisors, "pending")} pending reviews`, route: "/admin/supervisors-performance",
+    });
+  }
+  if (isAdmin && incharges.length > 0) {
+    tiles.push({
+      key: "incharges", icon: "medal-outline", color: "#00695C", bg: "#E0F2F1",
+      title: "In-Charges", figure: String(incharges.length),
+      sub: `${sum(incharges, "total")} cases`, route: "/admin/incharges-performance",
+    });
+  }
+  tiles.push({
+    key: "analytics", icon: "stats-chart-outline", color: "#2E7D32", bg: "#E8F5E9",
+    title: "Analytics", figure: stats.total != null ? String(stats.total) : undefined,
+    sub: stats.completed != null ? `${stats.completed} completed` : "Procedure overview",
+    route: "/analytics/procedure-overview",
+  });
+  tiles.push({
+    key: "survival", icon: "analytics-outline", color: "#0D47A1", bg: "#E8EAF6",
+    title: "Survival", sub: "Implant outcomes", route: "/admin/survival-analytics",
+  });
+
+  return (
+    <View style={s.section} data-testid="home-insights">
+      <View style={s.sectionHeader}>
+        <Ionicons name="grid-outline" size={18} color="#37474F" />
+        <Text style={s.sectionTitle}>Insights</Text>
+      </View>
+      <View style={s.tileGrid}>
+        {tiles.map((t) => (
+          <TouchableOpacity
+            key={t.key}
+            style={s.tile}
+            activeOpacity={0.75}
+            onPress={() => router.push(t.route as any)}
+            testID={`home-tile-${t.key}`}
+            data-testid={`home-tile-${t.key}`}
+            accessibilityRole="button"
+            accessibilityLabel={`${t.title}${t.figure ? ` ${t.figure}` : ""}`}
+          >
+            <View style={s.tileTop}>
+              <View style={[s.tileIcon, { backgroundColor: t.bg }]}>
+                <Ionicons name={t.icon} size={18} color={t.color} />
+              </View>
+              {t.figure != null && <Text style={[s.tileFigure, { color: t.color }]}>{t.figure}</Text>}
+            </View>
+            <Text style={s.tileTitle} numberOfLines={1}>{t.title}</Text>
+            {!!t.sub && <Text style={s.tileSub} numberOfLines={1}>{t.sub}</Text>}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// "See all" footer for the Home approvals preview → My Cases › Needs Action.
+function SeeAllApprovals({ router, total }: { router: any; total: number }) {
+  if (total <= APPROVAL_PREVIEW) return null;
+  return (
+    <TouchableOpacity
+      style={s.showMoreBtn}
+      onPress={() => router.push("/(tabs)/procedures?filter=needs_action")}
+      testID="home-approvals-see-all"
+    >
+      <Text style={s.showMoreText}>See all {total} awaiting review</Text>
+      <Ionicons name="chevron-forward" size={14} color="#1A73E8" />
+    </TouchableOpacity>
+  );
+}
+
 function SupervisorDashboard({
   stats,
   procedures,
@@ -955,6 +1091,132 @@ function SupervisorDashboard({
             />
           </View>
 
+          {/* Pending Approval Queue */}
+          {pendingApproval.length +
+            pendingFollowups.length +
+            pendingAugmentations.length >
+            0 && (
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="clipboard-outline" size={18} color="#E65100" />
+                <Text style={[s.sectionTitle, { color: "#E65100" }]}>
+                  Pending Your Approval (
+                  {pendingApproval.length +
+                    pendingFollowups.length +
+                    pendingAugmentations.length}
+                  )
+                </Text>
+              </View>
+              {pendingAugmentations.slice(0, APPROVAL_PREVIEW).map((proc: any) => (
+                <TouchableOpacity
+                  key={`aug-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`sup-pending-aug-${proc.id}`}
+                  testID={`sup-pending-aug-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#D7CCC8" },
+                    ]}
+                  >
+                    <Ionicons name="bandage" size={16} color="#5D4037" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      Pre-Implant Augmentation — review required
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#5D4037" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {pendingFollowups.slice(0, Math.max(0, APPROVAL_PREVIEW - Math.min(APPROVAL_PREVIEW, pendingAugmentations.length))).map((proc: any) => (
+                <TouchableOpacity
+                  key={`fu-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`sup-pending-followup-${proc.id}`}
+                  testID={`sup-pending-followup-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#B2DFDB" },
+                    ]}
+                  >
+                    <Ionicons name="repeat" size={16} color="#00695C" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      {
+                        (proc.followups || []).find(
+                          (f: any) => f.status !== "approved",
+                        )?.label
+                      }{" "}
+                      — Phase 5 review
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#00695C" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {pendingApproval.slice(0, Math.max(0, APPROVAL_PREVIEW - Math.min(APPROVAL_PREVIEW, pendingAugmentations.length + pendingFollowups.length))).map((proc: any) => {
+                const phase = getPhaseFromStatus(proc.status);
+                return (
+                  <TouchableOpacity
+                    key={proc.id}
+                    style={s.approvalCard}
+                    onPress={() => router.push(`/procedures/${proc.id}`)}
+                    data-testid={`pending-card-${proc.id}`}
+                  >
+                    <View style={s.approvalPhaseWrap}>
+                      <Text style={s.approvalPhaseNum}>P{phase}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                      <Text style={s.approvalSub}>
+                        {proc.student_name} - {proc.implant_procedure_type}
+                      </Text>
+                    </View>
+                    <PulsingDoubleArrow
+                      color="#EF6C00"
+                      size={14}
+                      delayMs={120}
+                    />
+                    <View style={s.reviewChip}>
+                      <Text style={s.reviewChipText}>Review</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <SeeAllApprovals router={router} total={pendingApproval.length + pendingFollowups.length + pendingAugmentations.length} />
+            </View>
+          )}
+
+        </>
+      )}
+
+      {/* Calendar sits right under the approvals on phones (tablet keeps it
+          in the right column). */}
+      {layoutMode === "mobile" && (
+        <ProcedureCalendar
+          procedures={procedures}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          router={router}
+        />
+      )}
+
+      {layoutMode !== "tablet-right" && (
+        <>
+          <InsightsTiles router={router} stats={stats} variant="supervisor" />
+
           {/* Case Pipeline */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
@@ -1025,131 +1287,6 @@ function SupervisorDashboard({
             </View>
           </View>
 
-          {/* Pending Approval Queue */}
-          {pendingApproval.length +
-            pendingFollowups.length +
-            pendingAugmentations.length >
-            0 && (
-            <View style={s.section}>
-              <View style={s.sectionHeader}>
-                <Ionicons name="clipboard-outline" size={18} color="#E65100" />
-                <Text style={[s.sectionTitle, { color: "#E65100" }]}>
-                  Pending Your Approval (
-                  {pendingApproval.length +
-                    pendingFollowups.length +
-                    pendingAugmentations.length}
-                  )
-                </Text>
-              </View>
-              {pendingAugmentations.slice(0, 5).map((proc: any) => (
-                <TouchableOpacity
-                  key={`aug-${proc.id}`}
-                  style={s.approvalCard}
-                  onPress={() => router.push(`/procedures/${proc.id}`)}
-                  data-testid={`sup-pending-aug-${proc.id}`}
-                  testID={`sup-pending-aug-${proc.id}`}
-                >
-                  <View
-                    style={[
-                      s.approvalPhaseWrap,
-                      { backgroundColor: "#D7CCC8" },
-                    ]}
-                  >
-                    <Ionicons name="bandage" size={16} color="#5D4037" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                    <Text style={s.approvalSub}>
-                      Pre-Implant Augmentation — review required
-                    </Text>
-                  </View>
-                  <View style={[s.reviewChip, { backgroundColor: "#5D4037" }]}>
-                    <Text style={s.reviewChipText}>Review Now</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {pendingFollowups.slice(0, 5).map((proc: any) => (
-                <TouchableOpacity
-                  key={`fu-${proc.id}`}
-                  style={s.approvalCard}
-                  onPress={() => router.push(`/procedures/${proc.id}`)}
-                  data-testid={`sup-pending-followup-${proc.id}`}
-                  testID={`sup-pending-followup-${proc.id}`}
-                >
-                  <View
-                    style={[
-                      s.approvalPhaseWrap,
-                      { backgroundColor: "#B2DFDB" },
-                    ]}
-                  >
-                    <Ionicons name="repeat" size={16} color="#00695C" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                    <Text style={s.approvalSub}>
-                      {
-                        (proc.followups || []).find(
-                          (f: any) => f.status !== "approved",
-                        )?.label
-                      }{" "}
-                      — Phase 5 review
-                    </Text>
-                  </View>
-                  <View style={[s.reviewChip, { backgroundColor: "#00695C" }]}>
-                    <Text style={s.reviewChipText}>Review Now</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {pendingApproval.slice(0, 5).map((proc: any) => {
-                const phase = getPhaseFromStatus(proc.status);
-                return (
-                  <TouchableOpacity
-                    key={proc.id}
-                    style={s.approvalCard}
-                    onPress={() => router.push(`/procedures/${proc.id}`)}
-                    data-testid={`pending-card-${proc.id}`}
-                  >
-                    <View style={s.approvalPhaseWrap}>
-                      <Text style={s.approvalPhaseNum}>P{phase}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                      <Text style={s.approvalSub}>
-                        {proc.student_name} - {proc.implant_procedure_type}
-                      </Text>
-                    </View>
-                    <PulsingDoubleArrow
-                      color="#EF6C00"
-                      size={14}
-                      delayMs={120}
-                    />
-                    <View style={s.reviewChip}>
-                      <Text style={s.reviewChipText}>Review</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Student Performance */}
-          {studentStats.length > 0 && (
-            <StudentPerformanceSection
-              rows={studentStats.filter((st: any) => st.student_name)}
-              router={router}
-            />
-          )}
-
-          {/* Supervisor Performance */}
-          {(stats.supervisor_stats || []).length > 0 && (
-            <SupervisorPerformanceSection
-              rows={(stats.supervisor_stats || []).filter(
-                (sp: any) => sp.supervisor_name,
-              )}
-              router={router}
-            />
-          )}
-
           {/* Draft Cases */}
           {draftCases.length > 0 && (
             <View style={s.section} data-testid="sup-draft-cases-section">
@@ -1190,7 +1327,7 @@ function SupervisorDashboard({
         </>
       )}
 
-      {layoutMode !== "tablet-left" && (
+      {layoutMode === "tablet-right" && (
         <ProcedureCalendar
           procedures={procedures}
           selectedDate={selectedDate}
@@ -1376,6 +1513,176 @@ function InChargeDashboard({
             />
           </View>
 
+          {/* Pending Review */}
+          {pendingApproval.length +
+            pendingFollowups.length +
+            pendingAugmentations.length >
+            0 && (
+            <View style={s.section}>
+              <View style={s.sectionHeader}>
+                <Ionicons name="clipboard-outline" size={18} color="#E65100" />
+                <Text style={[s.sectionTitle, { color: "#E65100" }]}>
+                  Needs your approval (
+                  {pendingApproval.length +
+                    pendingFollowups.length +
+                    pendingAugmentations.length}
+                  )
+                </Text>
+              </View>
+              {pendingAugmentations.slice(0, APPROVAL_PREVIEW).map((proc: any) => (
+                <TouchableOpacity
+                  key={`aug-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`ic-pending-aug-${proc.id}`}
+                  testID={`ic-pending-aug-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#D7CCC8" },
+                    ]}
+                  >
+                    <Ionicons name="bandage" size={16} color="#5D4037" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      Pre-Implant Augmentation — review required
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#5D4037" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {pendingFollowups.slice(0, Math.max(0, APPROVAL_PREVIEW - Math.min(APPROVAL_PREVIEW, pendingAugmentations.length))).map((proc: any) => (
+                <TouchableOpacity
+                  key={`fu-${proc.id}`}
+                  style={s.approvalCard}
+                  onPress={() => router.push(`/procedures/${proc.id}`)}
+                  data-testid={`ic-pending-followup-${proc.id}`}
+                  testID={`ic-pending-followup-${proc.id}`}
+                >
+                  <View
+                    style={[
+                      s.approvalPhaseWrap,
+                      { backgroundColor: "#B2DFDB" },
+                    ]}
+                  >
+                    <Ionicons name="repeat" size={16} color="#00695C" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                    <Text style={s.approvalSub}>
+                      {
+                        (proc.followups || []).find(
+                          (f: any) => f.status !== "approved",
+                        )?.label
+                      }{" "}
+                      — Phase 5 review
+                    </Text>
+                  </View>
+                  <View style={[s.reviewChip, { backgroundColor: "#00695C" }]}>
+                    <Text style={s.reviewChipText}>Review Now</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              {pendingApproval.slice(0, Math.max(0, APPROVAL_PREVIEW - Math.min(APPROVAL_PREVIEW, pendingAugmentations.length + pendingFollowups.length))).map((proc: any) => {
+                const phase = getPhaseFromStatus(proc.status);
+                return (
+                  <TouchableOpacity
+                    key={proc.id}
+                    style={s.approvalCard}
+                    onPress={() => router.push(`/procedures/${proc.id}`)}
+                    data-testid={`ic-pending-${proc.id}`}
+                  >
+                    <View style={s.approvalPhaseWrap}>
+                      <Text style={s.approvalPhaseNum}>P{phase}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.approvalPatient}>{proc.patient_name}</Text>
+                      <Text style={s.approvalSub}>
+                        {proc.student_name} - {proc.implant_procedure_type}
+                      </Text>
+                    </View>
+                    <PulsingDoubleArrow
+                      color="#EF6C00"
+                      size={14}
+                      delayMs={120}
+                    />
+                    <View style={s.reviewChip}>
+                      <Text style={s.reviewChipText}>Review</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <SeeAllApprovals router={router} total={pendingApproval.length + pendingFollowups.length + pendingAugmentations.length} />
+            </View>
+          )}
+
+        </>
+      )}
+
+      {/* Calendar sits right under the approvals on phones (tablet keeps it
+          in the right column). */}
+      {layoutMode === "mobile" && (
+        <ProcedureCalendar
+          procedures={procedures}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          router={router}
+        />
+      )}
+
+      {/* Quick Actions - Mobile position */}
+      {layoutMode === "mobile" && (
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Ionicons name="apps-outline" size={18} color="#37474F" />
+            <Text style={s.sectionTitle}>Quick Actions</Text>
+          </View>
+          <View style={s.quickActions}>
+            <TouchableOpacity
+              style={s.quickBtn}
+              onPress={() => router.push("/new-procedure")}
+              testID="quick-new-case-btn"
+              /* @ts-ignore */ data-testid="quick-new-case-btn"
+            >
+              <Ionicons name="add-circle-outline" size={24} color="#1A73E8" />
+              <Text style={s.quickBtnText}>New Case</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.quickBtn}
+              onPress={() => router.push("/procedures")}
+            >
+              <Ionicons name="folder-open-outline" size={24} color="#4CAF50" />
+              <Text style={s.quickBtnText}>All Cases</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.quickBtn}
+              onPress={() => router.push("/user-management")}
+            >
+              <Ionicons name="people-outline" size={24} color="#FF9800" />
+              <Text style={s.quickBtnText}>Users</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={s.quickBtn}
+              onPress={() => router.push("/implant-selection")}
+            >
+              <Ionicons name="search-outline" size={24} color="#9C27B0" />
+              <Text style={s.quickBtnText}>Implants</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {layoutMode !== "tablet-right" && (
+        <>
+          {/* Insights — tap-to-open tiles replace the long performance
+              lists and the Departments preview. */}
+          <InsightsTiles router={router} stats={stats} variant="incharge" />
+
           {/* Phase Pipeline */}
           <View style={s.section}>
             <View style={s.sectionHeader}>
@@ -1446,9 +1753,6 @@ function InChargeDashboard({
             </View>
           </View>
 
-          {/* Departments & Units — College / Org admin only */}
-          <DepartmentsUnitsSection router={router} />
-
           {/* Draft Cases */}
           {draftCases.length > 0 && (
             <View style={s.section} data-testid="ic-draft-cases-section">
@@ -1485,141 +1789,6 @@ function InChargeDashboard({
                 </View>
               ))}
             </View>
-          )}
-
-          {/* Pending Review */}
-          {pendingApproval.length +
-            pendingFollowups.length +
-            pendingAugmentations.length >
-            0 && (
-            <View style={s.section}>
-              <View style={s.sectionHeader}>
-                <Ionicons name="clipboard-outline" size={18} color="#E65100" />
-                <Text style={[s.sectionTitle, { color: "#E65100" }]}>
-                  Pending Review (
-                  {pendingApproval.length +
-                    pendingFollowups.length +
-                    pendingAugmentations.length}
-                  )
-                </Text>
-              </View>
-              {pendingAugmentations.slice(0, 5).map((proc: any) => (
-                <TouchableOpacity
-                  key={`aug-${proc.id}`}
-                  style={s.approvalCard}
-                  onPress={() => router.push(`/procedures/${proc.id}`)}
-                  data-testid={`ic-pending-aug-${proc.id}`}
-                  testID={`ic-pending-aug-${proc.id}`}
-                >
-                  <View
-                    style={[
-                      s.approvalPhaseWrap,
-                      { backgroundColor: "#D7CCC8" },
-                    ]}
-                  >
-                    <Ionicons name="bandage" size={16} color="#5D4037" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                    <Text style={s.approvalSub}>
-                      Pre-Implant Augmentation — review required
-                    </Text>
-                  </View>
-                  <View style={[s.reviewChip, { backgroundColor: "#5D4037" }]}>
-                    <Text style={s.reviewChipText}>Review Now</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {pendingFollowups.slice(0, 5).map((proc: any) => (
-                <TouchableOpacity
-                  key={`fu-${proc.id}`}
-                  style={s.approvalCard}
-                  onPress={() => router.push(`/procedures/${proc.id}`)}
-                  data-testid={`ic-pending-followup-${proc.id}`}
-                  testID={`ic-pending-followup-${proc.id}`}
-                >
-                  <View
-                    style={[
-                      s.approvalPhaseWrap,
-                      { backgroundColor: "#B2DFDB" },
-                    ]}
-                  >
-                    <Ionicons name="repeat" size={16} color="#00695C" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                    <Text style={s.approvalSub}>
-                      {
-                        (proc.followups || []).find(
-                          (f: any) => f.status !== "approved",
-                        )?.label
-                      }{" "}
-                      — Phase 5 review
-                    </Text>
-                  </View>
-                  <View style={[s.reviewChip, { backgroundColor: "#00695C" }]}>
-                    <Text style={s.reviewChipText}>Review Now</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-              {pendingApproval.slice(0, 5).map((proc: any) => {
-                const phase = getPhaseFromStatus(proc.status);
-                return (
-                  <TouchableOpacity
-                    key={proc.id}
-                    style={s.approvalCard}
-                    onPress={() => router.push(`/procedures/${proc.id}`)}
-                    data-testid={`ic-pending-${proc.id}`}
-                  >
-                    <View style={s.approvalPhaseWrap}>
-                      <Text style={s.approvalPhaseNum}>P{phase}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.approvalPatient}>{proc.patient_name}</Text>
-                      <Text style={s.approvalSub}>
-                        {proc.student_name} - {proc.implant_procedure_type}
-                      </Text>
-                    </View>
-                    <PulsingDoubleArrow
-                      color="#EF6C00"
-                      size={14}
-                      delayMs={120}
-                    />
-                    <View style={s.reviewChip}>
-                      <Text style={s.reviewChipText}>Review</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Student Performance */}
-          {studentStats.length > 0 && (
-            <StudentPerformanceSection
-              rows={studentStats.filter((st: any) => st.student_name)}
-              router={router}
-            />
-          )}
-
-          {/* Supervisor Performance */}
-          {/* Always shown to In-Charge / admin (empty state when the org has no supervisors yet). */}
-          <SupervisorPerformanceSection
-            rows={(stats.supervisor_stats || []).filter(
-              (sp: any) => sp.supervisor_name,
-            )}
-            router={router}
-          />
-
-          {/* Implant In-Charge Performance — College Admin only; backend
-              only populates incharge_stats for role === "administrator". */}
-          {(stats.incharge_stats || []).length > 0 && (
-            <InchargePerformanceSection
-              rows={(stats.incharge_stats || []).filter(
-                (ic: any) => ic.incharge_name,
-              )}
-              router={router}
-            />
           )}
         </>
       )}
@@ -1666,49 +1835,7 @@ function InChargeDashboard({
         </View>
       )}
 
-      {/* Quick Actions - Mobile position */}
-      {layoutMode === "mobile" && (
-        <View style={s.section}>
-          <View style={s.sectionHeader}>
-            <Ionicons name="apps-outline" size={18} color="#37474F" />
-            <Text style={s.sectionTitle}>Quick Actions</Text>
-          </View>
-          <View style={s.quickActions}>
-            <TouchableOpacity
-              style={s.quickBtn}
-              onPress={() => router.push("/new-procedure")}
-              testID="quick-new-case-btn"
-              /* @ts-ignore */ data-testid="quick-new-case-btn"
-            >
-              <Ionicons name="add-circle-outline" size={24} color="#1A73E8" />
-              <Text style={s.quickBtnText}>New Case</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickBtn}
-              onPress={() => router.push("/procedures")}
-            >
-              <Ionicons name="folder-open-outline" size={24} color="#4CAF50" />
-              <Text style={s.quickBtnText}>All Cases</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickBtn}
-              onPress={() => router.push("/user-management")}
-            >
-              <Ionicons name="people-outline" size={24} color="#FF9800" />
-              <Text style={s.quickBtnText}>Users</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.quickBtn}
-              onPress={() => router.push("/implant-selection")}
-            >
-              <Ionicons name="search-outline" size={24} color="#9C27B0" />
-              <Text style={s.quickBtnText}>Implants</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {layoutMode !== "tablet-left" && (
+      {layoutMode === "tablet-right" && (
         <ProcedureCalendar
           procedures={procedures}
           selectedDate={selectedDate}
@@ -2543,7 +2670,8 @@ export default function DashboardScreen() {
               (new Date(trialEndsAt).getTime() - Date.now()) / 86400000,
             ),
           );
-          setSubBanner(daysLeft <= 3 ? { status: "trial", daysLeft } : null);
+          // iOS: no trial countdown (App Store 3.1.1 — see utils/storePolicy).
+          setSubBanner(daysLeft <= 3 && !HIDE_COMMERCE ? { status: "trial", daysLeft } : null);
         } else {
           setSubBanner(null);
         }
@@ -2579,16 +2707,19 @@ export default function DashboardScreen() {
               ? s.subBannerExpired
               : s.subBannerLow,
           ]}
-          onPress={() => router.push("/subscription" as any)}
+          onPress={() => { if (!HIDE_COMMERCE) router.push("/subscription" as any); }}
+          disabled={HIDE_COMMERCE}
           data-testid="subscription-status-banner"
         >
           <Ionicons name="alert-circle" size={16} color="#FFF" />
           <Text style={s.subBannerText}>
             {subBanner.status === "expired"
-              ? "Your organization's free trial has expired — contact your platform admin to renew."
+              ? HIDE_COMMERCE
+                ? "Your organization's access is inactive — new users can't be added. Please contact your Implanr account manager."
+                : "Your organization's free trial has expired — contact your platform admin to renew."
               : `Free trial ends in ${subBanner.daysLeft} day${subBanner.daysLeft === 1 ? "" : "s"} — tap for details.`}
           </Text>
-          <Ionicons name="chevron-forward" size={16} color="#FFF" />
+          {!HIDE_COMMERCE && <Ionicons name="chevron-forward" size={16} color="#FFF" />}
         </TouchableOpacity>
       )}
       <ScrollView
@@ -2972,6 +3103,18 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: { fontSize: 16, fontWeight: "700", color: "#37474F" },
+  // Home insights tiles (2 per row)
+  tileGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 10 },
+  tile: {
+    width: "48.5%", backgroundColor: "#FFF", borderRadius: 14, padding: 12,
+    borderWidth: 1, borderColor: "#E8EDF5",
+    shadowColor: "#0F172A", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1,
+  },
+  tileTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+  tileIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  tileFigure: { fontSize: 20, fontWeight: "800" },
+  tileTitle: { fontSize: 13, fontWeight: "700", color: "#0F172A" },
+  tileSub: { fontSize: 11, color: "#64748B", marginTop: 2 },
 
   // Calendar
   calendarCard: {

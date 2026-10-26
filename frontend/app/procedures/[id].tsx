@@ -34,8 +34,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import RiskPill from "../../components/RiskPill";
-import PatientHeaderStrip from '../../components/PatientHeaderStrip';
-import PrescriptionEditor from '../../components/PrescriptionEditor';
+import PatientHeaderStrip from "../../components/PatientHeaderStrip";
+import PrescriptionEditor from "../../components/PrescriptionEditor";
 import EraGuidance from "../../components/EraGuidance";
 import {
   computeEra,
@@ -65,6 +65,7 @@ import BackButton from "../../components/BackButton";
 import ImplantTraceabilityCard from "../../components/ImplantTraceabilityCard";
 import RadiographThumb from "../../components/RadiographThumb";
 import ReferCaseButton from "../../components/ReferCaseButton";
+import ImplantInfoCard from "../../components/ImplantInfoCard";
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -98,6 +99,7 @@ import {
   SLEEVE_TYPES,
   DYNAMIC_NAV_SYSTEMS,
 } from "../../constants/checklist";
+import { ASA_CLASSES, getAsaInfo } from "../../constants/asa";
 import {
   OptionDesc,
   PROVISIONAL_GROUPED_OPTIONS,
@@ -137,6 +139,7 @@ import AugmentationPhase2Review from "../../components/AugmentationPhase2Review"
 import AddImplantSection from "../../components/AddImplantSection";
 import ScanFilesSection from "../../components/ScanFilesSection";
 import AssistantCard from "../../components/AssistantCard";
+import ClinicalDiagnosisCard from "../../components/ClinicalDiagnosisCard";
 // Treatment Complete banner above the timeline.
 import ImplantLifecycleTimeline from "../../components/ImplantLifecycleTimeline";
 import ExportPrintMenu from "../../components/ExportPrintMenu";
@@ -261,12 +264,16 @@ type FieldOptionsConfig = {
 // Flatten {label}/grouped option lists from the workflow constants into the
 // plain label list the picker uses (deduped, "Other" kept last).
 const labelsOf = (
-  list: Array<OptionDesc | { group: string; options: OptionDesc[] }> | null | undefined,
+  list:
+    | Array<OptionDesc | { group: string; options: OptionDesc[] }>
+    | null
+    | undefined,
 ): string[] => {
   const out: string[] = [];
   for (const item of list || []) {
     const opts = "options" in item ? item.options : [item as OptionDesc];
-    for (const o of opts) if (o?.label && !out.includes(o.label)) out.push(o.label);
+    for (const o of opts)
+      if (o?.label && !out.includes(o.label)) out.push(o.label);
   }
   const i = out.indexOf("Other");
   if (i >= 0) out.splice(i, 1);
@@ -284,12 +291,15 @@ const WORKFLOW_PLAN_FIELDS: Record<string, (proc: any) => string[] | null> = {
   ma_abutment_type: () => labelsOf(GROUP_A_ABUTMENT_TYPE_OPTIONS),
   ma_retention_type: () => labelsOf(GROUP_A_RETENTION_OPTIONS),
   ma_crown_material: () => labelsOf(GROUP_A_CROWN_MATERIAL_OPTIONS),
-  fa_prosthetic_plan: (p) => labelsOf(getGroupBPlanOptions(p?.implant_procedure_type)),
+  fa_prosthetic_plan: (p) =>
+    labelsOf(getGroupBPlanOptions(p?.implant_procedure_type)),
   zp_prosthetic_plan: () => labelsOf(GROUP_C_PROSTHETIC_PLAN_OPTIONS),
   type_of_provisional: (p) => {
     const wf = getEffectiveWorkflow(p?.implant_procedure_type, p?.num_implants);
     if (wf === "SC") return labelsOf(PROVISIONAL_GROUPED_OPTIONS);
-    const list = getProvisionalOptionsForProcType(p?.implant_procedure_type || "");
+    const list = getProvisionalOptionsForProcType(
+      p?.implant_procedure_type || "",
+    );
     return list ? labelsOf(list) : labelsOf(PROVISIONAL_GROUPED_OPTIONS);
   },
 };
@@ -609,7 +619,8 @@ export default function ProcedureDetailScreen() {
       try {
         node.measureLayout(
           inner,
-          (_x: number, y: number) => scroll.scrollTo({ y: Math.max(0, y - 12), animated: true }),
+          (_x: number, y: number) =>
+            scroll.scrollTo({ y: Math.max(0, y - 12), animated: true }),
           () => {},
         );
       } catch {}
@@ -1262,14 +1273,20 @@ export default function ProcedureDetailScreen() {
     // separate supervisor). Other In-Charges / admins can view & edit only.
     // Mirrors _check_user_approval_rights on the backend.
     const uid = String(user?.id || (user as any)?._id || "");
-    const idOf = (v: any) => (v && typeof v === "object" ? String(v._id || v.id || "") : String(v || ""));
+    const idOf = (v: any) =>
+      v && typeof v === "object"
+        ? String(v._id || v.id || "")
+        : String(v || "");
     const supId = idOf(procedure.supervisor_id);
     const incId = idOf(procedure.implant_incharge_id);
     const selfCreatedIncharge =
-      ["implant_incharge", "chief_dentist"].includes(procedure.created_by_role) &&
+      ["implant_incharge", "chief_dentist"].includes(
+        procedure.created_by_role,
+      ) &&
       idOf(procedure.created_by_id) === uid &&
       (!supId || supId === uid);
-    const isNamedApprover = !!uid && (uid === supId || uid === incId || selfCreatedIncharge);
+    const isNamedApprover =
+      !!uid && (uid === supId || uid === incId || selfCreatedIncharge);
     if (!isNamedApprover) return false;
 
     const PENDING = new Set([
@@ -1341,7 +1358,8 @@ export default function ProcedureDetailScreen() {
   const canEdit = () => {
     if (!procedure) return false;
     if (user?.role === "nurse") return false;
-    if (user?.role === "implant_incharge" || user?.role === "administrator") return true;
+    if (user?.role === "implant_incharge" || user?.role === "administrator")
+      return true;
     if (user?.role === "supervisor" && user?.id === procedure.supervisor_id)
       return true;
     if (
@@ -2510,14 +2528,13 @@ export default function ProcedureDetailScreen() {
               </View>
             )}
 
-
-        {/* Always-visible patient summary (outside the phase accordions) —
+            {/* Always-visible patient summary (outside the phase accordions) —
             name, age/sex, registration and tappable risk pills. */}
-        <PatientHeaderStrip
-          procedure={procedure}
-          onAestheticPress={() => jumpToPhase1Section(eraSectionRef)}
-          onMedicalPress={() => jumpToPhase1Section(medicalSectionRef)}
-        />
+            <PatientHeaderStrip
+              procedure={procedure}
+              onAestheticPress={() => jumpToPhase1Section(eraSectionRef)}
+              onMedicalPress={() => jumpToPhase1Section(medicalSectionRef)}
+            />
 
             {/* ── Treatment Complete + Case Summary + Digital Sign-Off (rendered above timeline on completion) ── */}
             {procedure.status === "completed" && (
@@ -2756,6 +2773,9 @@ export default function ProcedureDetailScreen() {
                     recorded in the case audit log.
                   </Text>
                 </View>
+                {user?.role !== "nurse" && (
+                  <ImplantInfoCard procedureId={String(id)} />
+                )}
               </>
             )}
 
@@ -6443,6 +6463,8 @@ export default function ProcedureDetailScreen() {
                                     "prothrombin_time",
                                     "inr",
                                     "hba1c",
+                                    "cigarettes_per_day",
+                                    "asa_class",
                                   ].includes(key),
                               )
                               .map(([key, value]) => {
@@ -6721,6 +6743,280 @@ export default function ProcedureDetailScreen() {
                                   </View>
                                 );
                               })}
+                            {/* iter-453: ASA Classification — mandatory Phase 1 field, editable inline */}
+                            {(() => {
+                              const asaKey = "medical_assessment.asa_class";
+                              const asaVal =
+                                (procedure.medical_assessment as any)
+                                  ?.asa_class || "";
+                              const asaInfo = getAsaInfo(asaVal);
+                              const asaEditing = editingField === asaKey;
+                              const asaEditVal = editValues[asaKey] ?? asaVal;
+                              const saveAsa = async () => {
+                                if (!asaEditVal) {
+                                  Alert.alert(
+                                    "Missing",
+                                    "Please select an ASA class",
+                                  );
+                                  return;
+                                }
+                                const updatedMedical = {
+                                  ...(procedure.medical_assessment || {}),
+                                  asa_class: asaEditVal,
+                                };
+                                setSaving(true);
+                                try {
+                                  const res = await api.patch(
+                                    `/procedures/${id}/edit-fields`,
+                                    {
+                                      fields: {
+                                        medical_assessment: updatedMedical,
+                                      },
+                                    },
+                                  );
+                                  setProcedure(res.data);
+                                  setEditingField(null);
+                                  Alert.alert(
+                                    "Saved",
+                                    "ASA classification updated",
+                                  );
+                                } catch (e: any) {
+                                  Alert.alert(
+                                    "Error",
+                                    e.response?.data?.detail ||
+                                      "Failed to save",
+                                  );
+                                } finally {
+                                  setSaving(false);
+                                }
+                              };
+                              return (
+                                <View
+                                  style={{
+                                    paddingVertical: 8,
+                                    borderBottomWidth: 1,
+                                    borderBottomColor: "#F0F0F0",
+                                  }}
+                                  testID="asa-readonly"
+                                  data-testid="asa-readonly"
+                                >
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <Ionicons
+                                      name={
+                                        asaInfo
+                                          ? asaInfo.decision === "Proceed"
+                                            ? "checkmark-circle"
+                                            : asaInfo.decision === "Conditional"
+                                              ? "alert-circle"
+                                              : "close-circle"
+                                          : "help-circle"
+                                      }
+                                      size={20}
+                                      color={asaInfo?.color || "#F44336"}
+                                    />
+                                    <View style={{ marginLeft: 12, flex: 1 }}>
+                                      <Text
+                                        style={{ fontSize: 12, color: "#666" }}
+                                      >
+                                        ASA Classification
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 14,
+                                          color: "#1A1A1A",
+                                          fontWeight: "500",
+                                        }}
+                                        data-testid="asa-readonly-value"
+                                      >
+                                        {asaInfo
+                                          ? `ASA ${asaInfo.cls} — ${asaInfo.definition}`
+                                          : "Not recorded"}
+                                      </Text>
+                                      {asaInfo && (
+                                        <Text
+                                          style={{
+                                            fontSize: 11,
+                                            color: asaInfo.color,
+                                            marginTop: 2,
+                                          }}
+                                        >
+                                          {asaInfo.decision} ·{" "}
+                                          {asaInfo.requiredAction}
+                                        </Text>
+                                      )}
+                                    </View>
+                                    {!asaEditing && asaInfo && (
+                                      <View
+                                        style={{
+                                          backgroundColor: asaInfo.bg,
+                                          borderRadius: 6,
+                                          paddingHorizontal: 8,
+                                          paddingVertical: 2,
+                                          marginRight: 6,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 10,
+                                            fontWeight: "700",
+                                            color: asaInfo.color,
+                                          }}
+                                        >
+                                          {asaInfo.decision.toUpperCase()}
+                                        </Text>
+                                      </View>
+                                    )}
+                                    {canEditField() && !asaEditing && (
+                                      <TouchableOpacity
+                                        onPress={() =>
+                                          startEdit(asaKey, asaVal)
+                                        }
+                                        style={{ padding: 4 }}
+                                        testID="edit-medical-asa_class"
+                                        data-testid="edit-medical-asa_class"
+                                      >
+                                        <Ionicons
+                                          name="pencil"
+                                          size={14}
+                                          color="#1565C0"
+                                        />
+                                      </TouchableOpacity>
+                                    )}
+                                  </View>
+                                  {asaEditing && (
+                                    <View
+                                      style={{ marginTop: 8, marginLeft: 32 }}
+                                    >
+                                      <View
+                                        style={{
+                                          flexDirection: "row",
+                                          flexWrap: "wrap",
+                                          gap: 6,
+                                        }}
+                                      >
+                                        {ASA_CLASSES.map((c) => {
+                                          const sel = asaEditVal === c.cls;
+                                          return (
+                                            <TouchableOpacity
+                                              key={c.cls}
+                                              onPress={() =>
+                                                setEditValues((prev) => ({
+                                                  ...prev,
+                                                  [asaKey]: c.cls,
+                                                }))
+                                              }
+                                              style={{
+                                                paddingHorizontal: 14,
+                                                paddingVertical: 6,
+                                                borderRadius: 16,
+                                                borderWidth: 1,
+                                                borderColor: sel
+                                                  ? c.color
+                                                  : "#CFD8DC",
+                                                backgroundColor: sel
+                                                  ? c.color
+                                                  : "#FFF",
+                                              }}
+                                              testID={`asa-edit-option-${c.cls}`}
+                                              data-testid={`asa-edit-option-${c.cls}`}
+                                            >
+                                              <Text
+                                                style={{
+                                                  fontSize: 12,
+                                                  fontWeight: "700",
+                                                  color: sel
+                                                    ? "#FFF"
+                                                    : "#37474F",
+                                                }}
+                                              >
+                                                {c.cls}
+                                              </Text>
+                                            </TouchableOpacity>
+                                          );
+                                        })}
+                                      </View>
+                                      <View
+                                        style={{
+                                          flexDirection: "row",
+                                          gap: 6,
+                                          marginTop: 8,
+                                        }}
+                                      >
+                                        <TouchableOpacity
+                                          onPress={saveAsa}
+                                          disabled={saving}
+                                          style={{
+                                            backgroundColor: "#4CAF50",
+                                            borderRadius: 6,
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 6,
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 4,
+                                          }}
+                                          testID="asa-edit-save"
+                                          data-testid="asa-edit-save"
+                                        >
+                                          {saving ? (
+                                            <ActivityIndicator
+                                              size="small"
+                                              color="#FFF"
+                                            />
+                                          ) : (
+                                            <Ionicons
+                                              name="checkmark"
+                                              size={14}
+                                              color="#FFF"
+                                            />
+                                          )}
+                                          <Text
+                                            style={{
+                                              color: "#FFF",
+                                              fontSize: 12,
+                                              fontWeight: "700",
+                                            }}
+                                          >
+                                            Save
+                                          </Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                          onPress={cancelEdit}
+                                          style={{
+                                            backgroundColor: "#F44336",
+                                            borderRadius: 6,
+                                            paddingHorizontal: 10,
+                                            paddingVertical: 6,
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 4,
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name="close"
+                                            size={14}
+                                            color="#FFF"
+                                          />
+                                          <Text
+                                            style={{
+                                              color: "#FFF",
+                                              fontSize: 12,
+                                              fontWeight: "700",
+                                            }}
+                                          >
+                                            Cancel
+                                          </Text>
+                                        </TouchableOpacity>
+                                      </View>
+                                    </View>
+                                  )}
+                                </View>
+                              );
+                            })()}
                             {/* Read-only Haematology Examination + HbA1c display block.
                 Phase-1 lab values captured at case-creation time. Not part
                 of the risk-scoring above; surfaced separately so reviewers
@@ -6830,6 +7126,37 @@ export default function ProcedureDetailScreen() {
                           </View>
                         )}
 
+                      {/* iter-455: Phase 1 Clinical Diagnosis (Atlas engine) — editable by creator, supervisor, in-charge */}
+                      {procedure.phase1_diagnosis?.text && (
+                        <View
+                          style={{ marginHorizontal: -4, marginBottom: 12 }}
+                          testID="dx-section"
+                          data-testid="dx-section"
+                        >
+                          <ClinicalDiagnosisCard
+                            procedureId={id as string}
+                            initial={procedure.phase1_diagnosis}
+                            autoGenerate={false}
+                            compact
+                            readOnly={
+                              procedure.status === "completed" ||
+                              !(
+                                user?.role === "implant_incharge" ||
+                                user?.role === "administrator" ||
+                                user?.id === procedure.student_id ||
+                                user?.id === procedure.created_by_id ||
+                                (user?.role === "supervisor" &&
+                                  user?.id === procedure.supervisor_id)
+                              )
+                            }
+                            onChange={(dx) =>
+                              setProcedure((p: any) =>
+                                p ? { ...p, phase1_diagnosis: dx } : p,
+                              )
+                            }
+                          />
+                        </View>
+                      )}
                       <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Payment</Text>
                         <InfoRow
@@ -7534,9 +7861,13 @@ export default function ProcedureDetailScreen() {
                     {/* Prescription (Rx) — faculty review/correct & sign during Phase 2;
                         creator/nurse can download the signed PDF once approved.
                         Kept outside the accordion body so it stays visible. */}
-                    {(!!(procedure.prescription?.drugs?.length) || procedure.status === 'pending_phase2') && (
+                    {(!!procedure.prescription?.drugs?.length ||
+                      procedure.status === "pending_phase2") && (
                       <View style={{ marginHorizontal: 12 }}>
-                        <PrescriptionEditor procedure={procedure} onChanged={loadProcedure} />
+                        <PrescriptionEditor
+                          procedure={procedure}
+                          onChanged={loadProcedure}
+                        />
                       </View>
                     )}
 
@@ -7600,7 +7931,8 @@ export default function ProcedureDetailScreen() {
                                         alignItems: "center",
                                         paddingVertical: 8,
                                         borderBottomWidth:
-                                          idx < procedure.torque_values.length - 1
+                                          idx <
+                                          procedure.torque_values.length - 1
                                             ? 1
                                             : 0,
                                         borderBottomColor: "#F0F0F0",
@@ -13502,99 +13834,82 @@ function IntraoralPhotoCard({
 }) {
   if (!Array.isArray(photos) || photos.length === 0) return null;
   return (
-<View
-                            style={styles.section}
-                            data-testid={`${testPrefix}-photos-section`}
-                          >
-                            <Text style={styles.sectionTitle}>
-                              {title}
-                            </Text>
-                            {photos.map(
-                              (f: any, idx: number) => {
-                                const baseUrl = api.defaults.baseURL || "";
-                                const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
-                                return (
-                                  <View
-                                    key={idx}
-                                    style={{
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      marginBottom: 10,
-                                      gap: 10,
-                                      backgroundColor: "#FFF8E1",
-                                      padding: 8,
-                                      borderRadius: 10,
-                                    }}
-                                    data-testid={`${testPrefix}-thumb-${idx}`}
-                                  >
-                                    <Image
-                                      source={{ uri: fileUrl }}
-                                      style={{
-                                        width: 50,
-                                        height: 50,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: "#FFD54F",
-                                      }}
-                                      resizeMode="cover"
-                                    />
-                                    <View style={{ flex: 1 }}>
-                                      <Text
-                                        style={{
-                                          fontSize: 13,
-                                          fontWeight: "700",
-                                          color: "#333",
-                                        }}
-                                      >
-                                        {f.label || `Photo ${idx + 1}`}
-                                      </Text>
-                                      <Text
-                                        style={{ fontSize: 11, color: "#888" }}
-                                        numberOfLines={1}
-                                      >
-                                        {f.original_name}
-                                      </Text>
-                                    </View>
-                                    <TouchableOpacity
-                                      style={{
-                                        backgroundColor: "#F57C00",
-                                        borderRadius: 8,
-                                        paddingVertical: 6,
-                                        paddingHorizontal: 12,
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        gap: 4,
-                                      }}
-                                      onPress={() =>
-                                        Linking.openURL(fileUrl).catch(() =>
-                                          Alert.alert(
-                                            "Error",
-                                            "Could not open file",
-                                          ),
-                                        )
-                                      }
-                                      data-testid={`${testPrefix}-view-${idx}`}
-                                    >
-                                      <Ionicons
-                                        name="open-outline"
-                                        size={14}
-                                        color="#FFF"
-                                      />
-                                      <Text
-                                        style={{
-                                          color: "#FFF",
-                                          fontSize: 12,
-                                          fontWeight: "700",
-                                        }}
-                                      >
-                                        View
-                                      </Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                );
-                              },
-                            )}
-                          </View>
+    <View style={styles.section} data-testid={`${testPrefix}-photos-section`}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {photos.map((f: any, idx: number) => {
+        const baseUrl = api.defaults.baseURL || "";
+        const fileUrl = `${baseUrl}/uploads/${f.filename}?token=${authToken}`;
+        return (
+          <View
+            key={idx}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              marginBottom: 10,
+              gap: 10,
+              backgroundColor: "#FFF8E1",
+              padding: 8,
+              borderRadius: 10,
+            }}
+            data-testid={`${testPrefix}-thumb-${idx}`}
+          >
+            <Image
+              source={{ uri: fileUrl }}
+              style={{
+                width: 50,
+                height: 50,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: "#FFD54F",
+              }}
+              resizeMode="cover"
+            />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "700",
+                  color: "#333",
+                }}
+              >
+                {f.label || `Photo ${idx + 1}`}
+              </Text>
+              <Text style={{ fontSize: 11, color: "#888" }} numberOfLines={1}>
+                {f.original_name}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={{
+                backgroundColor: "#F57C00",
+                borderRadius: 8,
+                paddingVertical: 6,
+                paddingHorizontal: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+              }}
+              onPress={() =>
+                Linking.openURL(fileUrl).catch(() =>
+                  Alert.alert("Error", "Could not open file"),
+                )
+              }
+              data-testid={`${testPrefix}-view-${idx}`}
+            >
+              <Ionicons name="open-outline" size={14} color="#FFF" />
+              <Text
+                style={{
+                  color: "#FFF",
+                  fontSize: 12,
+                  fontWeight: "700",
+                }}
+              >
+                View
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 
@@ -13654,8 +13969,12 @@ function InfoRow({
       let seed: any;
       if (cfg) {
         if (key.includes(".")) {
-          seed = key.split('.').reduce((acc: any, part: string) => (acc == null ? undefined : acc[part]), editCtx.procedure);
-
+          seed = key
+            .split(".")
+            .reduce(
+              (acc: any, part: string) => (acc == null ? undefined : acc[part]),
+              editCtx.procedure,
+            );
         } else {
           seed = editCtx.procedure?.[key];
         }
@@ -13664,7 +13983,10 @@ function InfoRow({
         else seed = seed == null ? "" : String(seed);
         if (cfg.otherKey) {
           const otherSeed = editCtx.procedure?.[cfg.otherKey] ?? "";
-          editCtx.setEditValues((prev) => ({ ...prev, [`${key}::other`]: otherSeed }));
+          editCtx.setEditValues((prev) => ({
+            ...prev,
+            [`${key}::other`]: otherSeed,
+          }));
         }
       } else {
         seed = value || "";
@@ -13788,7 +14110,10 @@ function InfoRow({
                     }}
                     value={String(editCtx?.editValues?.[`${key}::other`] ?? "")}
                     onChangeText={(t) =>
-                      editCtx?.setEditValues((prev) => ({ ...prev, [`${key}::other`]: t }))
+                      editCtx?.setEditValues((prev) => ({
+                        ...prev,
+                        [`${key}::other`]: t,
+                      }))
                     }
                     placeholder="Describe the option"
                     placeholderTextColor="#999"

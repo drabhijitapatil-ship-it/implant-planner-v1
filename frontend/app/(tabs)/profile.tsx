@@ -28,6 +28,8 @@ import LogoutConfirmModal from '../../components/LogoutConfirmModal';
 import PhotoOptionsModal from '../../components/PhotoOptionsModal';
 import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
 import AssistantLogbookCard from '../../components/AssistantLogbookCard';
+import InstitutionNameSetting from '../../components/InstitutionNameSetting';
+import { HIDE_COMMERCE } from '../../utils/storePolicy';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -422,7 +424,7 @@ export default function ProfileScreen() {
 
           {/* Subscription — org admin only, view-only (managing the plan itself is a
               super_admin action from the platform side). */}
-          {isOrgAdmin && (
+          {isOrgAdmin && !HIDE_COMMERCE && (
             <TouchableOpacity
               style={[styles.rowItem, styles.rowItemLast]}
               onPress={() => router.push('/subscription' as any)}
@@ -518,6 +520,7 @@ export default function ProfileScreen() {
         {(user?.role === 'implant_incharge' || user?.role === 'administrator' || user?.role === 'super_admin') && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Compliance</Text>
+             <InstitutionNameSetting />
             <TouchableOpacity
               style={styles.rowItem}
               onPress={() => router.push('/admin/audit-log')}

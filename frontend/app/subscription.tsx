@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { HIDE_COMMERCE } from '../utils/storePolicy';
 import React, { useCallback, useState } from 'react';
 import {
   View,
@@ -36,11 +38,18 @@ type SubscriptionData = {
   max_students: number | null;
   max_department: number | null;
   max_implant_incharges: number | null;
+  max_cases_per_month?: number | null;
+  plan_key?: string | null;
+  role_caps?: Record<string, number>;
+  licence_quote?: {
+    licences: { label: string; tier_name: string; pg_students: number }[];
+    term_years: number;
+  } | null;
   trial_days?: number;
   trial_ends_at?: string | null;
   org_type: 'college' | 'clinic';
   org_name?: string;
-  usage: { users: number; implant_incharges: number; students: number; department: number };
+  usage: { users: number; implant_incharges: number; students: number; department: number; cases_this_month?: number; by_role?: Record<string, number> };
   requested_plan_key?: string | null;
   requested_plan_name?: string | null;
   requested_billing_cycle?: 'monthly' | 'yearly' | null;
@@ -57,6 +66,19 @@ type AvailablePlan = {
   price_monthly: number;
   price_yearly: number;
   launch_offer_first_year_price?: number | null;
+  tagline?: string | null;
+  min_users?: number | null;
+  max_cases_per_month?: number | null;
+  extra_user_price_monthly?: number | null;
+  custom_pricing?: boolean;
+  features?: Record<string, boolean | string | undefined>;
+};
+
+const MISSING_FEATURE_LABELS: Record<string, string> = {
+  ai_planning: 'AI treatment planning',
+  admin_dashboard: 'admin dashboard',
+  lab_prescription: 'lab prescriptions',
+  data_export: 'data export',
 };
 
 const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
@@ -113,7 +135,7 @@ function statusConfig(status: string) {
   }
 }
 
-export default function SubscriptionScreen() {
+function SubscriptionScreen() {
   const [data, setData] = useState<SubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -220,7 +242,18 @@ export default function SubscriptionScreen() {
           color: '#2563EB',
           bg: '#EFF6FF',
         },
-        ...(data.org_type === 'college'
+        ...(data.role_caps
+          ? [
+              { key: 'r_student', label: 'Students (PG, fellows, interns)', used: data.usage.by_role?.student ?? data.usage.students,
+                max: data.role_caps.student ?? null, icon: 'school-outline' as const, color: '#4F46E5', bg: '#EEF2FF' },
+              { key: 'r_supervisor', label: 'Supervisors / Guides', used: data.usage.by_role?.supervisor ?? 0,
+                max: data.role_caps.supervisor ?? null, icon: 'person-outline' as const, color: '#0369A1', bg: '#F0F9FF' },
+              { key: 'r_admin', label: 'College Admins', used: data.usage.by_role?.administrator ?? 0,
+                max: data.role_caps.administrator ?? null, icon: 'shield-checkmark-outline' as const, color: '#9333EA', bg: '#FAF5FF' },
+              { key: 'department', label: 'Licensed Departments', used: data.usage.department, max: data.max_department,
+                icon: 'business-outline' as const, color: '#7C3AED', bg: '#F5F3FF' },
+            ]
+          : data.org_type === 'college'
           ? [
               {
                 key: 'students',
@@ -250,6 +283,15 @@ export default function SubscriptionScreen() {
           icon: 'medkit-outline' as const,
           color: '#0D9488',
           bg: '#F0FDF4',
+        },
+        {
+          key: 'cases',
+          label: 'New Cases This Month',
+          used: data.usage.cases_this_month ?? 0,
+          max: data.max_cases_per_month ?? null,
+          icon: 'folder-open-outline' as const,
+          color: '#B45309',
+          bg: '#FFFBEB',
         },
       ].filter((c) => c.max != null)
     : [];
@@ -458,6 +500,19 @@ export default function SubscriptionScreen() {
                     {cancellingRequest ? <ActivityIndicator size="small" color="#B7791F" /> : <Text style={s.requestCancelBtnText}>Cancel Request</Text>}
                   </TouchableOpacity>
                 </View>
+              ) : data?.plan_key === 'college_licence' ? (
+                <View style={s.sectionCard} data-testid="college-licences-card">
+                  <Text style={s.sectionTitle}>Department Licences</Text>
+                  {(data.licence_quote?.licences || []).map((l, i) => (
+                    <Text key={i} style={s.sectionSub}>
+                      {l.label} — {l.tier_name} · {l.pg_students} PG students
+                    </Text>
+                  ))}
+                  <Text style={[s.sectionSub, { marginTop: 8 }]}>
+                    To add a department, more seats, interns or fellows, contact your Implanr account manager. Licences renew
+                    {data.licence_quote?.term_years === 3 ? ' every 3 years' : ' annually'} with the MDS academic session.
+                  </Text>
+                </View>
               ) : (
                 <TouchableOpacity style={s.upgradeBtn} onPress={openUpgradeModal} data-testid="request-upgrade-btn">
                   <Ionicons name="arrow-up-circle-outline" size={18} color="#FFF" />
@@ -504,10 +559,23 @@ export default function SubscriptionScreen() {
                     <Ionicons name={selectedPlanKey === p.key ? 'radio-button-on' : 'radio-button-off'} size={18} color={selectedPlanKey === p.key ? '#1565C0' : '#94A3B8'} />
                     <View style={{ flex: 1 }}>
                       <Text style={s.planOptName}>{p.name}</Text>
+                      {!!p.tagline && <Text style={s.planOptPrice}>{p.tagline}</Text>}
                       <Text style={s.planOptPrice}>
-                        {inr(p.price_monthly)}/mo · {inr(p.price_yearly)}/yr
+                        {p.custom_pricing
+                          ? 'Custom pricing'
+                          : `${inr(p.price_monthly)}/mo · ${inr(p.price_yearly)}/yr`}
                         {p.launch_offer_first_year_price != null ? ` · launch ${inr(p.launch_offer_first_year_price)}` : ''}
                       </Text>
+                      <Text style={s.planOptPrice}>
+                        {p.min_users != null ? `${p.min_users}–` : 'Up to '}{p.max_users} users
+                        {p.max_cases_per_month != null ? ` · ${p.max_cases_per_month} new cases/month` : ' · unlimited cases'}
+                        {p.extra_user_price_monthly != null ? ` · extra user ${inr(p.extra_user_price_monthly)}/mo` : ''}
+                      </Text>
+                      {Object.keys(MISSING_FEATURE_LABELS).some((k) => p.features?.[k] === false) && (
+                        <Text style={[s.planOptPrice, { color: '#B45309' }]}>
+                          Not included: {Object.keys(MISSING_FEATURE_LABELS).filter((k) => p.features?.[k] === false).map((k) => MISSING_FEATURE_LABELS[k]).join(', ')}
+                        </Text>
+                      )}
                     </View>
                   </TouchableOpacity>
                 ))
@@ -1012,3 +1080,9 @@ const s = StyleSheet.create({
   submitRequestBtn: { backgroundColor: '#1565C0', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 20 },
   submitRequestBtnText: { color: '#FFF', fontSize: 15, fontWeight: '700' },
 });
+
+// iOS: no self-service signup / plans in the app (see utils/storePolicy).
+export default function SubscriptionScreenGate() {
+  if (HIDE_COMMERCE) return <Redirect href={'/(tabs)/profile' as any} />;
+  return <SubscriptionScreen />;
+}

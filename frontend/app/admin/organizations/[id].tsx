@@ -390,6 +390,16 @@ export default function OrganizationDetailScreen() {
           <View style={s.subCard} data-testid="org-subscription-card">
             <View style={s.subHeaderRow}>
               <Text style={s.sectionTitle}>Subscription</Text>
+              {profile?.org_type === 'college' && (
+                <TouchableOpacity
+                  style={[s.subEditBtn, { marginLeft: 'auto', marginRight: 8 }]}
+                  onPress={() => router.push({ pathname: '/admin/organizations/licences', params: { id: String(id), name: profile?.name || '' } } as any)}
+                  data-testid="org-licences-btn"
+                >
+                  <Ionicons name="layers-outline" size={14} color="#0D47A1" />
+                  <Text style={s.subEditBtnText}>Department Licences</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={s.subEditBtn} onPress={openSubModal} data-testid="org-subscription-edit-btn">
                 <Ionicons name="create-outline" size={14} color="#0D47A1" />
                 <Text style={s.subEditBtnText}>Manage</Text>

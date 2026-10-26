@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { HIDE_COMMERCE } from '../../utils/storePolicy';
 import React from "react";
 import {
   View,
@@ -38,7 +40,7 @@ const OPTIONS = [
   },
 ];
 
-export default function RegisterScreen() {
+function RegisterScreen() {
   const router = useRouter();
 
   return (
@@ -143,3 +145,9 @@ const styles = StyleSheet.create({
   loginText: { fontSize: 14, color: "#64748B" },
   loginLink: { color: "#007AFF", fontWeight: "700" },
 });
+
+// iOS: no self-service signup / plans in the app (see utils/storePolicy).
+export default function RegisterScreenGate() {
+  if (HIDE_COMMERCE) return <Redirect href={'/auth/request-access' as any} />;
+  return <RegisterScreen />;
+}

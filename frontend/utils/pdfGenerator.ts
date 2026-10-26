@@ -11,6 +11,7 @@ import {
   RISK_COLORS,
 } from "./aestheticRisk";
 import { fmtBytes } from "./scanUpload";
+import { asaDisplay } from "../constants/asa";
 
 // ── Organization letterhead (name + logo) for generated documents ──
 export type OrgBranding = { name?: string | null; logo?: string | null };
@@ -354,21 +355,33 @@ ${(() => {
           <div class="section">
             <div class="section-title">Medical Assessment${procedure.medical_risk_level ? ` — ${procedure.medical_risk_level}` : ""}</div>
             <table>
-              ${Object.entries(procedure.medical_assessment)
-                .map(
-                  ([key, value]) => `
+                           ${Object.entries(procedure.medical_assessment)
+                             .map(([key, value]) =>
+                               key === "asa_class"
+                                 ? `
+              <tr>
+                <td class="info-label">ASA Classification:</td>
+                <td class="info-value"><span style="font-weight: bold;">${asaDisplay(value as string)}</span></td>
+              </tr>`
+                                 : `
               <tr>
                 <td class="info-label" style="text-transform: capitalize;">${key.replace(/_/g, " ")}:</td>
                 <td class="info-value">
                   <span style="color: ${value === "Yes" ? "#F44336" : "#4CAF50"}; font-weight: bold;">${value}</span>
                 </td>
               </tr>`,
-                )
-                .join("")}
+                             )
+                             .join("")}
             </table>
           </div>`
               : ""
           }
+          ${procedure.phase1_diagnosis?.text ? `
+          <div class="section">
+            <div class="section-title">Clinical Diagnosis — Phase 1${procedure.phase1_diagnosis.verdict ? ` · ${procedure.phase1_diagnosis.verdict}` : ''}</div>
+            <div style="font-size:11px;line-height:1.5;white-space:pre-wrap;">${String(procedure.phase1_diagnosis.text).replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>
+            ${procedure.phase1_diagnosis.edited_by_name ? `<div style="font-size:10px;color:#777;margin-top:4px;">Edited by ${procedure.phase1_diagnosis.edited_by_name}</div>` : ''}
+          </div>` : ''}
 
           ${
             procedure.implant_plans?.length

@@ -55,6 +55,8 @@ import ZygomaPterygoidPhase1Form, {
 import GroupedDescDropdown from "../../components/GroupedDescDropdown";
 import AssistantPicker from "../../components/AssistantPicker";
 import AestheticRiskSection from "../../components/AestheticRiskSection";
+import AsaClassificationSection from "../../components/AsaClassificationSection";
+import ClinicalDiagnosisCard, { Phase1Diagnosis } from '../../components/ClinicalDiagnosisCard';
 import {
   isAnteriorMaxillaCase,
   ERA_PATIENT_FACTORS,
@@ -649,6 +651,7 @@ export default function NewProcedureScreen() {
   const [createdProcedureId, setCreatedProcedureId] = useState<string | null>(
     null,
   );
+    const [phase1Diagnosis, setPhase1Diagnosis] = useState<Phase1Diagnosis | null>(null);
   const [phase1Done, setPhase1Done] = useState(false);
   const [isDraftResume, setIsDraftResume] = useState(false);
   // iter-222: full procedure record when resuming an existing-implant draft.
@@ -1254,6 +1257,7 @@ export default function NewProcedureScreen() {
             const proc = res.data;
             if (proc.status === "draft") {
               setCreatedProcedureId(params.draftId!);
+              setPhase1Diagnosis(proc.phase1_diagnosis?.text ? proc.phase1_diagnosis : null);
               setIsDraftResume(true);
               setFormData((prev) => ({
                 ...prev,
@@ -2237,6 +2241,14 @@ export default function NewProcedureScreen() {
       Alert.alert("Missing Field", "Please select at least one loading type.");
       return;
     }
+    // iter-453: ASA Classification is mandatory for every Phase 1 record.
+    if (!formData.medical_assessment?.asa_class) {
+      Alert.alert(
+        "Missing Field",
+        "Please select the ASA Class (Medical Assessment → ASA Classification).",
+      );
+      return;
+    }
     // iter-387: surgical-approach cascade validation (not for Existing Implant)
     if (!isExistingImplantCase) {
       if (!sanitized.procedure_surgery_type) {
@@ -2299,18 +2311,24 @@ export default function NewProcedureScreen() {
     // Single / Multiple Conventional Implants — tooth count must match.
     {
       const n = (sanitized.missing_teeth || []).length;
-      if (sanitized.implant_procedure_type === "Single Conventional Implant" && n !== 1) {
+      if (
+        sanitized.implant_procedure_type === "Single Conventional Implant" &&
+        n !== 1
+      ) {
         Alert.alert(
           "Tooth Count Mismatch",
           `Single Conventional Implant needs exactly 1 tooth on the FDI chart, but ${n} ${n === 1 ? "is" : "are"} marked.`,
         );
         return;
       }
-      if (sanitized.implant_procedure_type === "Multiple Conventional Implants" && n < 2) {
+      if (
+        sanitized.implant_procedure_type === "Multiple Conventional Implants" &&
+        n < 2
+      ) {
         Alert.alert(
           "Multiple implants selected",
           `Multiple Conventional Implants needs at least 2 teeth on the FDI chart, but ${n} ${n === 1 ? "is" : "are"} marked. ` +
-            'Mark the remaining teeth or change the procedure to Single Conventional Implant.',
+            "Mark the remaining teeth or change the procedure to Single Conventional Implant.",
         );
         return;
       }
@@ -2963,6 +2981,14 @@ export default function NewProcedureScreen() {
               }
             }}
           />
+                    {/* iter-455: Atlas-derived Phase 1 Clinical Diagnosis — mandatory before submission */}
+          {!!createdProcedureId && (
+            <ClinicalDiagnosisCard
+              procedureId={createdProcedureId}
+              initial={phase1Diagnosis}
+              onChange={setPhase1Diagnosis}
+            />
+          )}
         </ScrollView>
         <View style={styles.submitContainer}>
           {phase1Done ? (
@@ -3029,6 +3055,11 @@ export default function NewProcedureScreen() {
                 onPress={async () => {
                   // Final clinical-correlation summary before submission (Q2=c — also done live).
                   let fetchedPlan: any[] = [];
+                   // iter-455: diagnosis must exist and be non-empty before submission.
+              if (!phase1Diagnosis?.text?.trim()) {
+                Alert.alert('Diagnosis required', 'Please generate and review the Clinical Diagnosis before submitting the case.');
+                return;
+              }
                   try {
                     const planRes = await api.get(
                       `/procedures/${createdProcedureId}/implant-plan`,
@@ -3395,7 +3426,9 @@ export default function NewProcedureScreen() {
               <>
                 <Ionicons name="checkmark-circle" size={20} color="#FFF" />
                 <Text style={styles.submitBtnText}>
-                  {isInchargeSelfApproving ? "Confirm & Mark Done" : "Confirm & Submit"}
+                  {isInchargeSelfApproving
+                    ? "Confirm & Mark Done"
+                    : "Confirm & Submit"}
                 </Text>
               </>
             )}
@@ -3671,11 +3704,14 @@ export default function NewProcedureScreen() {
       if (!ma.osteoporosis)
         missMedicalOrChecklist.push("Osteoporosis medication");
       if (!ma.radiation) missMedicalOrChecklist.push("Radiation therapy");
+      if (!ma.asa_class) missMedicalOrChecklist.push("ASA Classification");
     } else {
       if (!cbctFiles[0] || !cbctFiles[1])
         missMedicalOrChecklist.push("Both CBCT Reports");
       if (!intraoralPhotos[0] || !intraoralPhotos[1])
         missMedicalOrChecklist.push("Both Patient Intra-oral Photographs");
+      if (!formData.medical_assessment?.asa_class)
+        missMedicalOrChecklist.push("ASA Classification");
       if (!formData.loading_type || formData.loading_type.length === 0)
         missMedicalOrChecklist.push("Type of Loading");
       // iter-Feb-2026 / -B / -C — Type of Provisional (any workflow group)
@@ -6031,13 +6067,16 @@ export default function NewProcedureScreen() {
                       // for GBR / Immediate / PET / Guided / Sinus Lift, from
                       // the "Number of Implants" answer. (The old check used
                       // the wrong name "Conventional Single Implant" and never ran.)
-                      const askedNum = PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(ptype);
+                      const askedNum =
+                        PROCEDURES_WITH_NUM_IMPLANTS_QUESTION.has(ptype);
                       const singleMode =
                         ptype === "Single Conventional Implant" ||
-                        (askedNum && formData.num_implants === "Single Implant");
+                        (askedNum &&
+                          formData.num_implants === "Single Implant");
                       const multipleMode =
                         ptype === "Multiple Conventional Implants" ||
-                        (askedNum && formData.num_implants === "Multiple Implants");
+                        (askedNum &&
+                          formData.num_implants === "Multiple Implants");
                       let countError: string | null = null;
                       if (singleMode && missing.length > 1) {
                         countError = `Single implant selected — ${missing.length} teeth are marked. Tap one tooth to keep only that one.`;
@@ -6060,18 +6099,33 @@ export default function NewProcedureScreen() {
                             {subLabel}
                           </Text>
                           {singleMode && (
-                            <Text style={{ fontSize: 12, color: "#1565C0", fontWeight: "600", marginBottom: 4 }}>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: "#1565C0",
+                                fontWeight: "600",
+                                marginBottom: 4,
+                              }}
+                            >
                               Single implant — only one tooth can be selected.
                             </Text>
                           )}
                           <FdiAnatomicalChart
                             mode={singleMode ? "single" : "multi"}
-                            value={singleMode ? (missing.length === 1 ? missing[0] : "") : missing}
+                            value={
+                              singleMode
+                                ? missing.length === 1
+                                  ? missing[0]
+                                  : ""
+                                : missing
+                            }
                             onChange={(next) =>
                               updateForm(
                                 "missing_teeth",
                                 singleMode
-                                  ? (next ? [next as string] : [])
+                                  ? next
+                                    ? [next as string]
+                                    : []
                                   : (next as string[]),
                               )
                             }
@@ -7876,6 +7930,11 @@ export default function NewProcedureScreen() {
                     </View>
                   ))}
                   {renderHaematologySection("routine")}
+                  <AsaClassificationSection
+            value={formData.medical_assessment.asa_class || ''}
+            onChange={(v) => updateMedical('asa_class', v)}
+            testidSuffix="routine"
+          />
                   {Object.keys(formData.medical_assessment).length > 0 &&
                     (() => {
                       const risk = calculateMedicalRisk(
@@ -8004,6 +8063,11 @@ export default function NewProcedureScreen() {
                 </View>
               ))}
               {renderHaematologySection("existing")}
+              <AsaClassificationSection
+              value={formData.medical_assessment.asa_class || ''}
+              onChange={(v) => updateMedical('asa_class', v)}
+              testidSuffix="existing"
+            />
               {Object.keys(formData.medical_assessment).length > 0 &&
                 (() => {
                   const risk = calculateMedicalRisk(

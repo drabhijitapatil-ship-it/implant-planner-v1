@@ -61,6 +61,9 @@ export default function RootLayout() {
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="auth/login" options={{ headerShown: false }} />
               <Stack.Screen name="auth/register" options={{ headerShown: false }} />
+              <Stack.Screen name="auth/request-access" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/access-requests" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/organizations/licences" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="super-admin-dashboard" options={{ headerShown: false }} />
               <Stack.Screen name="implantlens/index" options={{ headerShown: false }} />

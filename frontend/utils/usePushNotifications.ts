@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import api from './api';
+import { router } from 'expo-router';
+import api, { setToken } from './api';
+import { useAuth } from '../contexts/AuthContext';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -22,15 +24,22 @@ if (!isExpoGo) {
 }
 
 export function usePushNotifications() {
-  const notificationListener = useRef<any>();
-  const responseListener = useRef<any>();
+  const notificationListener = useRef<any>(null);
+  const responseListener = useRef<any>(null);
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  // (Re-)register whenever a different user signs in on this device, so the
+  // server always maps this phone's token to the current user.
+  useEffect(() => {
+    if (isExpoGo || !userId) return;
+    registerForPushNotifications(require('expo-notifications'));
+  }, [userId]);
 
   useEffect(() => {
     if (isExpoGo) return;
 
     const Notifications = require('expo-notifications');
-
-    registerForPushNotifications(Notifications);
 
     notificationListener.current = Notifications.addNotificationReceivedListener(
       (notification: any) => {
@@ -40,8 +49,11 @@ export function usePushNotifications() {
 
     responseListener.current = Notifications.addNotificationResponseReceivedListener(
       (response: any) => {
-        const data = response.notification.request.content.data;
-        console.log('Notification tapped, data:', data);
+        const data = response.notification.request.content.data || {};
+        // Tapping a case notification opens that case.
+        if (data.procedure_id) {
+          try { router.push(`/procedures/${data.procedure_id}` as any); } catch {}
+        }
       }
     );
 
@@ -73,6 +85,17 @@ async function registerForPushNotifications(Notifications: any) {
   }
 
   try {
+    // Android 8+: the channel must exist before the permission prompt /
+    // token, otherwise notifications can be silently dropped.
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#2196F3',
+      });
+    }
+
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -86,17 +109,13 @@ async function registerForPushNotifications(Notifications: any) {
       return;
     }
 
-    const pushToken = (await Notifications.getExpoPushTokenAsync()).data;
+    // projectId is required in standalone/EAS builds; without it the token
+    // call can throw and no push ever reaches this device.
+    const projectId =
+      (Constants as any)?.expoConfig?.extra?.eas?.projectId ?? (Constants as any)?.easConfig?.projectId;
+    const pushToken = (await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)).data;
     await api.post('/auth/push-token', { push_token: pushToken });
-
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#2196F3',
-      });
-    }
+    await setToken('push_token', pushToken).catch(() => {});
 
     console.log('Push token registered:', pushToken);
   } catch (error) {

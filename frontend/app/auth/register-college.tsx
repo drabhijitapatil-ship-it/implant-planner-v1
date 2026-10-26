@@ -1,3 +1,5 @@
+import { Redirect } from 'expo-router';
+import { HIDE_COMMERCE } from '../../utils/storePolicy';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
@@ -40,7 +42,7 @@ const PRESET_DEPARTMENTS = [
   'Oral Surgery',
 ];
 
-export default function CollegeRegisterScreen() {
+function CollegeRegisterScreen() {
   const router = useRouter();
   const { refreshUser } = useAuth();
 
@@ -736,3 +738,9 @@ const s = StyleSheet.create({
   deptRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
   deptRowTxt: { fontSize: 15, color: '#1A1A2E' },
 });
+
+// iOS: no self-service signup / plans in the app (see utils/storePolicy).
+export default function CollegeRegisterScreenGate() {
+  if (HIDE_COMMERCE) return <Redirect href={'/auth/request-access' as any} />;
+  return <CollegeRegisterScreen />;
+}
