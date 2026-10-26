@@ -6,6 +6,18 @@ Older ideas and environment notes live in `memory/BACKLOG.md`.
 
 ---
 
+## Super-admin: create organization
+**Saved**: 26 Oct 2026
+**Priority**: P1 (needed to onboard iOS "Request Access" leads cleanly)
+**Context**: An organisation can only be created through self-signup (`/auth/signup`, email one-time code, starts a free trial) on Android or web. Leads that arrive through the iOS Request Access form must be sent a signup link, or signed up together with the team on a call.
+
+**To build**:
+- Super-admin screen: create a college or clinic with its name and the founder's name and email; the founder receives an invite email to set their password (reuse `/organizations/invite`).
+- Option to apply the plan or licences in the same step (skip the trial).
+- "Create organization" button on an Access Request that pre-fills from the request and marks it Onboarded.
+
+---
+
 ## Free management viewer role (Dean, Principal, HOD)
 **Saved**: 26 Oct 2026
 **Priority**: P1 (part of the college rate card)
