@@ -30,7 +30,7 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO"
       ],
-      "versionCode": 43
+      "versionCode": 44
     },
     "web": {
       "bundler": "metro",

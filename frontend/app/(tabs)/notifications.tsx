@@ -76,6 +76,23 @@ export default function NotificationsScreen() {
       router.push('/referrals');
       return;
     }
+    // Research module notifications deep-link into the study / visit form.
+    const t = String(notification.type || '');
+    if (t === 'research_visit' || t === 'research_query') {
+      if (notification.research_enrolment_id) {
+        router.push(`/research/enrolment/${notification.research_enrolment_id}${notification.timepoint_key ? `?tp=${notification.timepoint_key}` : ''}` as any);
+      } else if (notification.research_study_id) router.push(`/research/${notification.research_study_id}` as any);
+      else router.push('/research' as any);
+      return;
+    }
+    if (t === 'research_inclusion') {
+      router.push((notification.inclusion_request_id ? `/research/inclusion/${notification.inclusion_request_id}` : '/research') as any);
+      return;
+    }
+    if (t === 'research_study') {
+      router.push((notification.research_study_id ? `/research/${notification.research_study_id}` : '/research') as any);
+      return;
+    }
     router.push(`/procedures/${notification.procedure_id}`);
   };
 
@@ -92,6 +109,14 @@ export default function NotificationsScreen() {
         return 'swap-horizontal';
       case 'referral_status':
         return 'git-branch-outline';
+      case 'research_visit':
+        return 'alarm';
+      case 'research_query':
+        return 'flag';
+      case 'research_study':
+        return 'flask';
+      case 'research_inclusion':
+        return 'paper-plane';
       default:
         return 'information-circle';
     }

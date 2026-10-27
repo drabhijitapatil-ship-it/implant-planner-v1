@@ -85,6 +85,40 @@ const PENDING_STATUSES = [
   "pending_final_delivery",
 ];
 
+// Phases where the supervisor and the In-Charge each approve separately.
+const DUAL_APPROVAL_FLAGS: Record<string, [string, string]> = {
+  pending_phase1: ["supervisor_phase1_approved", "implant_incharge_phase1_approved"],
+  pending_phase2: ["supervisor_phase2_approved", "implant_incharge_phase2_approved"],
+};
+
+/**
+ * True when THIS user still has to approve the case. Mirrors the server's
+ * _check_user_approval_rights: only the supervisor / In-Charge NAMED on the
+ * case approve (or an In-Charge who created it with no other supervisor).
+ * Other faculty can see department cases but must not get them as
+ * "Needs your approval". A half already given (dual-approval phases) drops
+ * the case from that person's list while the other approver is pending.
+ */
+function needsMyApproval(p: any, userId?: string | null): boolean {
+  if (!userId || !PENDING_STATUSES.includes(p.status)) return false;
+  const sup = p.supervisor_id ? String(p.supervisor_id) : "";
+  const inc = p.implant_incharge_id ? String(p.implant_incharge_id) : "";
+  const creator = p.created_by_id ? String(p.created_by_id) : "";
+  const isSup = sup === userId;
+  const isInc = inc === userId;
+  const selfCreated =
+    ["implant_incharge", "chief_dentist"].includes(p.created_by_role) &&
+    creator === userId &&
+    (!sup || sup === userId);
+  if (!isSup && !isInc && !selfCreated) return false;
+  const flags = DUAL_APPROVAL_FLAGS[p.status];
+  if (!flags) return true;
+  const supDone = !!p[flags[0]];
+  const incDone = !!p[flags[1]];
+  if (selfCreated || (isSup && isInc)) return !(supDone && incDone);
+  return (isSup && !supDone) || (isInc && !incDone);
+}
+
 function getPhaseFromStatus(status: string): number {
   if (["draft", "pending_phase1"].includes(status)) return 1;
   if (["phase1_approved", "pending_phase2"].includes(status)) return 2;
@@ -1012,25 +1046,28 @@ function SupervisorDashboard({
   layoutMode = "mobile",
 }: any) {
   const pendingApproval = useMemo(
-    () => procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
-    [procedures],
+    () => procedures.filter((p: any) => needsMyApproval(p, userId)),
+    [procedures, userId],
   );
+  // Only cases where this user is the named supervisor.
   const pendingFollowups = useMemo(
     () =>
       procedures.filter((p: any) =>
+        !!userId && String(p.supervisor_id || "") === userId &&
         (p.followups || []).some((f: any) => f.status === "pending_supervisor"),
       ),
-    [procedures],
+    [procedures, userId],
   );
   // Pre-Implant Augmentation rounds awaiting this supervisor.
   const pendingAugmentations = useMemo(
     () =>
       procedures.filter((p: any) =>
+        !!userId && String(p.supervisor_id || "") === userId &&
         (p.augmentations || []).some(
           (a: any) => a.status === "pending_supervisor",
         ),
       ),
-    [procedures],
+    [procedures, userId],
   );
   const draftCases = useMemo(
     () => procedures.filter((p: any) => p.status === "draft"),
@@ -1445,13 +1482,20 @@ function InChargeDashboard({
     [procedures],
   );
 
+  const { user: me } = useAuth();
+  const myId = me?.id;
   const pendingApproval = useMemo(
-    () => procedures.filter((p: any) => PENDING_STATUSES.includes(p.status)),
-    [procedures],
+    () => procedures.filter((p: any) => needsMyApproval(p, myId)),
+    [procedures, myId],
   );
+  // Only cases where this user is the named In-Charge (or no In-Charge is
+  // named yet, so older cases don't get stuck).
+  const isMyInchargeCase = (p: any) =>
+    !!myId && (!p.implant_incharge_id || String(p.implant_incharge_id) === myId);
   const pendingFollowups = useMemo(
     () =>
       procedures.filter((p: any) =>
+        isMyInchargeCase(p) &&
         (p.followups || []).some(
           (f: any) =>
             f.status === "pending_incharge" ||
@@ -1460,13 +1504,14 @@ function InChargeDashboard({
               p.supervisor_id === p.implant_incharge_id),
         ),
       ),
-    [procedures],
+    [procedures, myId],
   );
 
   // Pre-Implant Augmentation rounds awaiting this in-charge.
   const pendingAugmentations = useMemo(
     () =>
       procedures.filter((p: any) =>
+        isMyInchargeCase(p) &&
         (p.augmentations || []).some(
           (a: any) =>
             a.status === "pending_incharge" ||
@@ -1475,7 +1520,7 @@ function InChargeDashboard({
               p.supervisor_id === p.implant_incharge_id),
         ),
       ),
-    [procedures],
+    [procedures, myId],
   );
   return (
     <>

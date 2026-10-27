@@ -189,6 +189,13 @@ function DrawerMenu({
           bg: '#E8F5E9', chip: '#C8E6C9', iconColor: '#2E7D32',
         }]
       : []),
+    // Research Module tile — all clinical roles except nurse; sits before Archived.
+    ...(isNurse
+      ? []
+      : [{
+          key: 'research', icon: 'flask' as const, label: 'Research', route: '/research',
+          bg: '#F3E5F5', chip: '#E1BEE7', iconColor: '#6A1B9A',
+        }]),
     ...(isNurse
       ? []
       : [{

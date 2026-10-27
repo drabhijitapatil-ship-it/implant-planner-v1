@@ -781,6 +781,7 @@ export default function NewProcedureScreen() {
       string,
       { oc?: string; md?: string }
     >,
+    socket_types: {} as Record<string, string>,
     arch: "",
     loading_type: [] as string[],
     prosthetic_plan: "",
@@ -1302,6 +1303,10 @@ export default function NewProcedureScreen() {
                   : [],
                 edentulous_site_measurements:
                   proc.edentulous_site_measurements || {},
+                socket_types:
+                  proc.socket_types && typeof proc.socket_types === "object"
+                    ? proc.socket_types
+                    : {},
                 arch: proc.arch || "",
                 loading_type: Array.isArray(proc.loading_type)
                   ? proc.loading_type
@@ -1589,6 +1594,7 @@ export default function NewProcedureScreen() {
             string,
             { oc?: string; md?: string }
           >,
+          socket_types: {} as Record<string, string>,
           arch: "",
           loading_type: [] as string[],
           type_of_provisional: "",
@@ -6860,6 +6866,35 @@ export default function NewProcedureScreen() {
                   </>
                 )}
 
+                {/* Research Module: Elian extraction-socket type per site (immediate placement) */}
+                {(formData.implant_procedure_type === "Immediate Implant" ||
+                  formData.implant_procedure_type === "Partial Extraction Therapy") &&
+                  (formData.missing_teeth || []).length > 0 && (
+                    <View style={styles.medicalSection} testID="socket-type-section" data-testid="socket-type-section">
+                      <Text style={styles.subSectionTitle}>Extraction Socket Type (Elian)</Text>
+                      <Text style={{ fontSize: 12, color: "#546E7A", marginBottom: 8 }}>
+                        Type I: intact facial plate + soft tissue · Type II: soft tissue intact, facial plate lost · Type III: both lost.
+                      </Text>
+                      {(formData.missing_teeth || []).map((tooth: string) => (
+                        <View key={tooth} style={styles.medicalRow}>
+                          <Text style={styles.medicalLabel}>Tooth {tooth}</Text>
+                          <View style={styles.yesNoRow}>
+                            {["Type I", "Type II", "Type III"].map((opt) => (
+                              <TouchableOpacity
+                                key={opt}
+                                style={[styles.yesNoBtn, formData.socket_types?.[tooth] === opt && styles.yesActive]}
+                                onPress={() => updateForm("socket_types", { ...(formData.socket_types || {}), [tooth]: opt })}
+                                testID={`socket-${tooth}-${opt.replace(" ", "-")}`}
+                              >
+                                <Text style={[styles.yesNoText, formData.socket_types?.[tooth] === opt && styles.yesNoTextActive]}>{opt}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
                 {/* Periodontal Status – shown for specific procedure types */}
                 {(formData.implant_procedure_type ===
                   "Single Conventional Implant" ||
@@ -7898,6 +7933,25 @@ export default function NewProcedureScreen() {
                           ))}
                         </View>
                       </View>
+                      {factor.id === "smoking" &&
+                        !!formData.medical_assessment.smoking &&
+                        formData.medical_assessment.smoking !== "No" && (
+                          <View style={styles.hba1cRow} testID="cigs-row-routine" data-testid="cigs-row-routine">
+                            <Text style={styles.hba1cLabel}>
+                              Cigarettes per day <Text style={styles.hba1cOptional}>(research)</Text>
+                            </Text>
+                            <TextInput
+                              style={styles.hba1cInput}
+                              value={formData.medical_assessment.cigarettes_per_day || ""}
+                              onChangeText={(t) => updateMedical("cigarettes_per_day", t.replace(/[^0-9]/g, ""))}
+                              placeholder="e.g. 10"
+                              placeholderTextColor="#90A4AE"
+                              keyboardType="number-pad"
+                              testID="cigs-input-routine"
+                              data-testid="cigs-input-routine"
+                            />
+                          </View>
+                        )}
                       {factor.id === "diabetes" &&
                         (formData.medical_assessment.diabetes ===
                           "Controlled" ||

@@ -64,6 +64,24 @@ export default function RootLayout() {
               <Stack.Screen name="auth/request-access" options={{ headerShown: false }} />
               <Stack.Screen name="admin/access-requests" options={{ headerShown: false }} />
               <Stack.Screen name="admin/organizations/licences" options={{ headerShown: false }} />
+              <Stack.Screen name="research/index" options={{ headerShown: false }} />
+              <Stack.Screen name="research/new" options={{ headerShown: false }} />
+              <Stack.Screen name="research/guide" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/index" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/eligibility" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/variables" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/schedule" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/ethics" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/team" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/screening" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/results" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/queries" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/synopsis" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/blind-queue" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/amendments" options={{ headerShown: false }} />
+              <Stack.Screen name="research/[id]/audit" options={{ headerShown: false }} />
+              <Stack.Screen name="research/inclusion/[rid]" options={{ headerShown: false }} />
+              <Stack.Screen name="research/enrolment/[eid]" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="super-admin-dashboard" options={{ headerShown: false }} />
               <Stack.Screen name="implantlens/index" options={{ headerShown: false }} />

@@ -836,6 +836,8 @@ class ProcedureCreate(BaseModel):
     # Per-tooth Edentulous-site measurements (keyed by FDI code) — used when 2+ teeth
     # are marked missing. Structure: { "16": { "oc": 7.5, "md": 9.0 }, "17": {...} }.
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
+    # Research Module: Elian extraction-socket type per tooth (FDI → 'Type I'|'Type II'|'Type III').
+    socket_types: Optional[Dict[str, str]] = None
     arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
@@ -986,6 +988,8 @@ class ProcedureUpdate(BaseModel):
     teeth_present: Optional[List[str]] = None
     missing_teeth: Optional[List[str]] = None
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
+    # Research Module: Elian extraction-socket type per tooth (FDI → 'Type I'|'Type II'|'Type III').
+    socket_types: Optional[Dict[str, str]] = None
     clinical_exam_per_site: Optional[Dict[str, Dict[str, Any]]] = None
     supervisor_id: Optional[str] = Field(None, max_length=50)
     supervisor_name: Optional[str] = Field(None, max_length=100)
@@ -30962,6 +30966,27 @@ setup_lab_files(
     log_access=log_access, secret_key=SECRET_KEY, uploads_dir=UPLOADS_DIR, decode_query_token=_decode_query_token,
 )
 
+# Research Module (studies / enrolment / data capture / export) — lives in
+# research.py (engines) + research_routes.py (endpoints), mounted under /api/research.
+import research_routes as _research_routes
+
+
+async def _research_user_from_token(token: str):
+    """Resolve a user from a raw JWT (query-param auth for <Image> downloads)."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("jti") in token_blocklist or payload.get("type") not in ("access", None):
+            return None
+        user = await db.users.find_one({"_id": ObjectId(payload.get("user_id"))}, {"password_hash": 0})
+        if user:
+            user["_id"] = str(user["_id"])
+        return user
+    except Exception:
+        return None
+
+
+api_router.include_router(_research_routes.build_router(db, get_current_user, _research_user_from_token))
+
 # Implant Information Card (IIC) — issued on treatment completion.
 import implant_card as _implant_card
 _iic_router = _implant_card.build_router(db, get_current_user, _resolve_active_implants_inline, log_access)
@@ -31684,6 +31709,13 @@ async def contribution_timeline(procedure_id: str, request: Request,
         "total_days": _iso_to_days(created_at, None),
     }
 
+
+
+@app.on_event("startup")
+async def start_research_reminder_scheduler():
+    """Research visit reminders (upcoming / due / overdue forms) — every 6 h."""
+    from research_reminders import reminder_loop as _research_reminder_loop
+    asyncio.create_task(_research_reminder_loop(db, 6 * 3600))
 
 app.include_router(api_router)
 

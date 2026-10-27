@@ -35,6 +35,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import RiskPill from "../../components/RiskPill";
 import PatientHeaderStrip from "../../components/PatientHeaderStrip";
+import CaseResearchCard from "../../components/CaseResearchCard";
 import PrescriptionEditor from "../../components/PrescriptionEditor";
 import EraGuidance from "../../components/EraGuidance";
 import {
@@ -2535,6 +2536,9 @@ export default function ProcedureDetailScreen() {
               onAestheticPress={() => jumpToPhase1Section(eraSectionRef)}
               onMedicalPress={() => jumpToPhase1Section(medicalSectionRef)}
             />
+
+            {/* Research Module: studies this case is in / eligible for */}
+            <CaseResearchCard procedureId={String(id)} role={user?.role} />
 
             {/* ── Treatment Complete + Case Summary + Digital Sign-Off (rendered above timeline on completion) ── */}
             {procedure.status === "completed" && (
