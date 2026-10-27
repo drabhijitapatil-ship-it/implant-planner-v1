@@ -9,21 +9,24 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://api.implanr.com"
-      }
+      },
+      "channel": "development"
     },
     "production": {
       "distribution": "store",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://api.implanr.com"
-      }
+      },
+      "channel": "production"
     },
     "preview": {
       "extends": "production",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "preview"
     }
   },
   "submit": {

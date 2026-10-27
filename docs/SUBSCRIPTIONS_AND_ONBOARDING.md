@@ -1,6 +1,6 @@
 # Subscriptions and Onboarding
 
-How institutions join Implanr, how they are billed, and what the app enforces. Applies from version **1.3.6** onward.
+How institutions join Implanr, how they are billed, and what the app enforces. Applies from version **1.3.7** onward.
 
 Pricing source: `Implanr Subscription Plans.xlsx` (Oct 2026). If prices change, update the code locations listed under [Where things live](#where-things-live).
 
@@ -207,4 +207,4 @@ Tracked in `docs/BACKLOG.md`:
 - Free management viewer role (Dean, Principal, HOD).
 - Separate intern and fellow roles, so observing interns don't use seats.
 - Enforce Solo's admin dashboard and analytics level.
-- Next iOS submission: version 1.3.6 in App Store Connect and the reviewer note.
+- Next iOS submission: version 1.3.7 in App Store Connect and the reviewer note.

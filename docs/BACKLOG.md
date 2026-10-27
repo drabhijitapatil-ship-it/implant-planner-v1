@@ -57,10 +57,10 @@ Older ideas and environment notes live in `memory/BACKLOG.md`.
 ## Next iOS submission: App Store Connect version + reviewer note
 **Saved**: 26 Oct 2026
 **Priority**: P0 (needed for the next App Review)
-**Context**: Apple rejected 1.3.3 (47) under Guideline 3.1.1. Build 1.3.6 (48) makes the iOS app sign-in only for institution members: no registration, trials, pricing or upgrade requests; new institutions use "Request Access".
+**Context**: Apple rejected 1.3.3 (47) under Guideline 3.1.1. Build 1.3.7 (50) makes the iOS app sign-in only for institution members: no registration, trials, pricing or upgrade requests; new institutions use "Request Access".
 
 **Steps**:
-1. In App Store Connect, create the new version as **1.3.6** so it matches the build.
+1. In App Store Connect, create the new version as **1.3.7** so it matches the build.
 2. In App Review Information → Notes, add:
 
 ```
