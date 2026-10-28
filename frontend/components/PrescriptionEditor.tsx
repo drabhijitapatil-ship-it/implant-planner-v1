@@ -8,10 +8,15 @@ import SignaturePad from './SignaturePad';
 import { downloadPrescriptionPdf } from '../utils/prescriptionPdf';
 import {
   Drug, DRUG_FORMS, FREQUENCY_OPTIONS, TIMING_OPTIONS, MAX_DRUGS, emptyDrug,
-  STANDARD_TEMPLATE, DEFAULT_ADVICE, prescriptionWarnings,
+  STANDARD_TEMPLATE, DEFAULT_ADVICE, PREOP_TEMPLATE, PREOP_DEFAULT_ADVICE, prescriptionWarnings,
 } from '../constants/prescription';
 
 type RxState = { hasDrugs: boolean; creatorSigned: boolean };
+type RxKind = 'postop' | 'preop';
+type RxFields = { prescribed_date?: string; diagnosis: string; allergies: string; advice: string; drugs: Drug[] };
+
+// Today's date in IST as YYYY-MM-DD (default date of a pre-operative Rx).
+const todayIST = () => new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
 
 const STATUS_META: Record<string, { label: string; bg: string; fg: string }> = {
   draft: { label: 'Draft', bg: '#ECEFF1', fg: '#546E7A' },
@@ -19,12 +24,24 @@ const STATUS_META: Record<string, { label: string; bg: string; fg: string }> = {
   approved: { label: 'Approved', bg: '#E8F5E9', fg: '#2E7D32' },
 };
 
+/**
+ * kind="postop" (default): Phase 2 prescription, approved with Phase 2.
+ * kind="preop": Phase 1 "Pre-operative Prescription" with its own date,
+ *   approved with Phase 1.
+ * `local`: edit an Rx that isn't saved on a case yet (New Case form) —
+ *   changes go to local.onChange; save/sign/approve/PDF are hidden.
+ */
 export default function PrescriptionEditor({
-  procedure, onChanged, onStateChange,
-}: { procedure: any; onChanged?: () => void; onStateChange?: (s: RxState) => void }) {
+  procedure, onChanged, onStateChange, kind = 'postop', local,
+}: {
+  procedure: any; onChanged?: () => void; onStateChange?: (s: RxState) => void;
+  kind?: RxKind; local?: { value: Partial<RxFields> | null | undefined; onChange: (v: RxFields) => void };
+}) {
   const { user } = useAuth();
-  const rx = procedure?.prescription || {};
-  const status: string | undefined = rx.status;
+  const preop = kind === 'preop';
+  const kq = preop ? '?kind=preop' : '';
+  const rx = (local ? local.value : procedure?.[preop ? 'preop_prescription' : 'prescription']) || {};
+  const status: string | undefined = local ? undefined : rx.status;
   const caseStatus: string | undefined = procedure?.status;
   const uid = user?.id;
   const role = user?.role;
@@ -32,15 +49,20 @@ export default function PrescriptionEditor({
   const isFaculty = role === 'implant_incharge' || role === 'administrator'
     || (role === 'supervisor' && procedure?.supervisor_id === uid);
   const approved = status === 'approved';
-  const creatorCanEdit = isCreator && !approved && caseStatus === 'phase1_approved';
+  const creatorStates = preop ? ['draft', 'pending_phase1', 'rejected_phase1'] : ['phase1_approved'];
+  const creatorCanEdit = isCreator && !approved && creatorStates.includes(caseStatus || '');
   const facultyCanEdit = isFaculty && !approved;
-  const canEdit = creatorCanEdit || facultyCanEdit;
-  const signSlot: 'creator' | 'supervisor' | null = (isFaculty && !isCreator) ? 'supervisor' : (isCreator ? 'creator' : null);
+  const localLocked = !!local && (local.value as any)?.status === 'approved';
+  const canEdit = (!!local && !localLocked) || (!local && (creatorCanEdit || facultyCanEdit));
+  const signSlot: 'creator' | 'supervisor' | null = local ? null : (isFaculty && !isCreator) ? 'supervisor' : (isCreator ? 'creator' : null);
+  const template = preop ? PREOP_TEMPLATE : STANDARD_TEMPLATE;
+  const defaultAdvice = preop ? PREOP_DEFAULT_ADVICE : DEFAULT_ADVICE;
 
   const [drugs, setDrugs] = useState<Drug[]>(rx.drugs || []);
   const [diagnosis, setDiagnosis] = useState(rx.diagnosis || '');
   const [allergies, setAllergies] = useState(rx.allergies || '');
   const [advice, setAdvice] = useState(rx.advice || '');
+  const [rxDate, setRxDate] = useState<string>(rx.prescribed_date || todayIST());
   const [saving, setSaving] = useState(false);
   const [showPad, setShowPad] = useState(false);
   const [sigStrokes, setSigStrokes] = useState<number[][][]>([]);
@@ -57,9 +79,17 @@ export default function PrescriptionEditor({
       setDiagnosis(rx.diagnosis || '');
       setAllergies(rx.allergies || '');
       setAdvice(rx.advice || '');
+      setRxDate(rx.prescribed_date || todayIST());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rx.updated_at]);
+
+  // Form (local) mode: every edit flows straight back to the parent form.
+  useEffect(() => {
+    if (!local) return;
+    local.onChange({ ...(preop ? { prescribed_date: rxDate } : {}), diagnosis, allergies, advice, drugs });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drugs, diagnosis, allergies, advice, rxDate]);
 
   const hasNamedDrugs = drugs.some(d => (d.name || '').trim());
   useEffect(() => {
@@ -72,7 +102,9 @@ export default function PrescriptionEditor({
   const persist = async (): Promise<any | null> => {
     setSaving(true);
     try {
-      const res = await api.put(`/procedures/${procedure.id}/prescription`, { diagnosis, allergies, advice, drugs });
+      const res = await api.put(`/procedures/${procedure.id}/prescription${kq}`, {
+        diagnosis, allergies, advice, drugs, ...(preop ? { prescribed_date: rxDate } : {}),
+      });
       syncedRef.current = res.data?.updated_at || syncedRef.current;
       onChanged?.();
       return res.data;
@@ -85,10 +117,10 @@ export default function PrescriptionEditor({
   const applyTemplate = () => {
     setDrugs(prev => {
       const names = new Set(prev.map(d => (d.name || '').toLowerCase()));
-      const add = STANDARD_TEMPLATE.filter(d => !names.has(d.name.toLowerCase()));
+      const add = template.filter(d => !names.has(d.name.toLowerCase()));
       return [...prev, ...add].slice(0, MAX_DRUGS);
     });
-    if (!advice.trim()) setAdvice(DEFAULT_ADVICE);
+    if (!advice.trim()) setAdvice(defaultAdvice);
   };
   const addDrug = () => setDrugs(prev => (prev.length >= MAX_DRUGS ? prev : [...prev, emptyDrug()]));
   const removeDrug = (i: number) => setDrugs(prev => prev.filter((_, idx) => idx !== i));
@@ -102,7 +134,7 @@ export default function PrescriptionEditor({
     const saved = await persist();
     if (!saved) return;
     try {
-      const res = await api.post(`/procedures/${procedure.id}/prescription/sign`, {
+      const res = await api.post(`/procedures/${procedure.id}/prescription/sign${kq}`, {
         strokes: sigStrokes, pad_width: padSize.w, pad_height: padSize.h,
       });
       syncedRef.current = res.data?.updated_at || syncedRef.current;
@@ -116,7 +148,7 @@ export default function PrescriptionEditor({
     Alert.alert('Reopen prescription', 'This unlocks the approved prescription for corrections. Continue?', [
       { text: 'Cancel' },
       { text: 'Reopen', style: 'destructive', onPress: async () => {
-        try { await api.post(`/procedures/${procedure.id}/prescription/reopen`); onChanged?.(); }
+        try { await api.post(`/procedures/${procedure.id}/prescription/reopen${kq}`); onChanged?.(); }
         catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Could not reopen'); }
       } },
     ]);
@@ -126,7 +158,7 @@ export default function PrescriptionEditor({
     Alert.alert('Approve prescription', 'Lock this prescription as approved?', [
       { text: 'Cancel' },
       { text: 'Approve', onPress: async () => {
-        try { await api.post(`/procedures/${procedure.id}/prescription/approve`); onChanged?.(); }
+        try { await api.post(`/procedures/${procedure.id}/prescription/approve${kq}`); onChanged?.(); }
         catch (e: any) { Alert.alert('Error', e.response?.data?.detail || 'Could not approve'); }
       } },
     ]);
@@ -146,10 +178,10 @@ export default function PrescriptionEditor({
   );
 
   return (
-    <View style={s.card} testID="prescription-section" data-testid="prescription-section">
+    <View style={s.card} testID={preop ? 'preop-prescription-section' : 'prescription-section'} data-testid={preop ? 'preop-prescription-section' : 'prescription-section'}>
       <View style={s.header}>
         <Ionicons name="medkit" size={20} color="#00897B" />
-        <Text style={s.title}>Prescription (Rx)</Text>
+        <Text style={s.title}>{preop ? 'Pre-operative Prescription' : 'Prescription (Rx)'}</Text>
         {sm && (
           <View style={[s.statusPill, { backgroundColor: sm.bg }]} testID="rx-status-pill">
             <Text style={[s.statusTxt, { color: sm.fg }]}>{sm.label}</Text>
@@ -161,10 +193,20 @@ export default function PrescriptionEditor({
         {procedure?.patient_name || '—'} · {procedure?.age ? `${procedure.age} yrs` : 'age —'} · {procedure?.sex || '—'}
       </Text>
 
+      {preop && (
+        <View style={{ marginTop: 8 }}>
+          <Text style={s.fieldLabel}>Date</Text>
+          {canEdit ? (
+            <TextInput style={s.input} value={rxDate} onChangeText={setRxDate} placeholder="YYYY-MM-DD"
+              placeholderTextColor="#90A4AE" maxLength={10} testID="rx-preop-date" />
+          ) : <Text style={s.roView}>{rxDate}</Text>}
+        </View>
+      )}
+
       {/* Empty-state CTA */}
       {canEdit && drugs.length === 0 && (
         <View style={s.emptyCta}>
-          <Text style={s.emptyHint}>Optional — add post-surgical medication for this case.</Text>
+          <Text style={s.emptyHint}>{preop ? 'Add the medication the patient should take before surgery.' : 'Optional — add post-surgical medication for this case.'}</Text>
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <TouchableOpacity style={s.primaryBtn} onPress={applyTemplate} testID="rx-use-template-btn">
               <Ionicons name="flash" size={14} color="#FFF" />
@@ -271,21 +313,21 @@ export default function PrescriptionEditor({
             <Ionicons name="add" size={16} color="#00695C" />
             <Text style={s.secondaryBtnTxt}>Add drug</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.primaryBtn} onPress={persist} disabled={saving} testID="rx-save-btn">
+          {!local && <TouchableOpacity style={s.primaryBtn} onPress={persist} disabled={saving} testID="rx-save-btn">
             {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="save" size={14} color="#FFF" />}
             <Text style={s.primaryBtnTxt}>Save prescription</Text>
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </View>
       )}
 
       {/* Advice */}
       {(canEdit || advice) && drugs.length > 0 && (
         <View style={{ marginTop: 10 }}>
-          <Text style={s.fieldLabel}>Post-operative advice</Text>
+          <Text style={s.fieldLabel}>{preop ? 'Pre-operative instructions' : 'Post-operative advice'}</Text>
           {canEdit ? (
             <TextInput style={[s.input, { minHeight: 56 }]} value={advice} onChangeText={setAdvice} multiline
-              placeholder={DEFAULT_ADVICE} placeholderTextColor="#90A4AE" testID="rx-advice" />
-          ) : <Text style={s.roView}>{advice || DEFAULT_ADVICE}</Text>}
+              placeholder={defaultAdvice} placeholderTextColor="#90A4AE" testID="rx-advice" />
+          ) : <Text style={s.roView}>{advice || defaultAdvice}</Text>}
         </View>
       )}
 
@@ -340,8 +382,12 @@ export default function PrescriptionEditor({
         </View>
       )}
 
+      {local && (
+        <Text style={s.lockedNote}>Saved with the case. You can sign it from the case page; it is approved together with Phase 1.</Text>
+      )}
+
       {/* Faculty approve (post-reopen) / reopen / download */}
-      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+      {!local && <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         {isFaculty && !approved && hasNamedDrugs && supervisorSig && (
           <TouchableOpacity style={s.approveBtn} onPress={doApprove} testID="rx-approve-btn">
             <Ionicons name="shield-checkmark" size={14} color="#FFF" />
@@ -355,15 +401,15 @@ export default function PrescriptionEditor({
           </TouchableOpacity>
         )}
         {hasNamedDrugs && (
-          <TouchableOpacity style={s.downloadBtn} onPress={() => downloadPrescriptionPdf(procedure.id)} testID="rx-download-btn">
+          <TouchableOpacity style={s.downloadBtn} onPress={() => downloadPrescriptionPdf(procedure.id, kind)} testID="rx-download-btn">
             <Ionicons name="download" size={14} color="#1565C0" />
             <Text style={s.downloadTxt}>{approved ? 'Download PDF' : 'Preview PDF'}</Text>
           </TouchableOpacity>
         )}
-      </View>
+      </View>}
 
       {approved && (
-        <Text style={s.lockedNote}>Approved & locked with Phase 2. Faculty can reopen to make corrections.</Text>
+        <Text style={s.lockedNote}>Approved & locked with Phase {preop ? 1 : 2}. Faculty can reopen to make corrections.</Text>
       )}
     </View>
   );

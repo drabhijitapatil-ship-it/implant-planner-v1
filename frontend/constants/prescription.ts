@@ -35,6 +35,18 @@ export const STANDARD_TEMPLATE: Drug[] = [
   { name: 'Chlorhexidine Gluconate 0.2% Mouthwash', strength: '0.2%', form: 'Mouthwash', dosage: '10 ml rinse', frequency: '0-1-1', duration: '7 days', timing: 'After brushing', notes: 'Start 24 h post-op; do not eat/rinse for 30 min after use' },
 ];
 
+// One-tap standard pre-operative prescription (Phase 1) — editable afterwards.
+// Single-dose prophylaxis 1 h before placement + pre-surgical antiseptic rinse.
+export const PREOP_TEMPLATE: Drug[] = [
+  { name: 'Amoxicillin', strength: '2 g', form: 'Capsule', dosage: '4 caps (500 mg each)', frequency: 'STAT', duration: 'Single dose', timing: 'After food', notes: '1 hour before surgery — prophylaxis. Penicillin allergy: use an alternative' },
+  { name: 'Chlorhexidine Gluconate 0.2% Mouthwash', strength: '0.2%', form: 'Mouthwash', dosage: '10 ml rinse', frequency: 'STAT', duration: 'Once', timing: 'Empty stomach', notes: 'Rinse for 1 minute just before surgery' },
+];
+
+export const PREOP_DEFAULT_ADVICE =
+  'Take the medications exactly as prescribed before the surgery. Have a light meal unless told otherwise. ' +
+  'Continue your regular medicines unless your clinician has advised a change. ' +
+  'Inform the team of any allergy, fever or new medication.';
+
 export const DEFAULT_ADVICE =
   'Apply cold compresses for the first 24 hours. Soft diet for 2-3 days. ' +
   'Avoid spitting, vigorous rinsing and smoking. Maintain oral hygiene. ' +

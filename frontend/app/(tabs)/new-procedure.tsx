@@ -56,6 +56,7 @@ import GroupedDescDropdown from "../../components/GroupedDescDropdown";
 import AssistantPicker from "../../components/AssistantPicker";
 import AestheticRiskSection from "../../components/AestheticRiskSection";
 import AsaClassificationSection from "../../components/AsaClassificationSection";
+import PrescriptionEditor from "../../components/PrescriptionEditor";
 import ClinicalDiagnosisCard, { Phase1Diagnosis } from '../../components/ClinicalDiagnosisCard';
 import {
   isAnteriorMaxillaCase,
@@ -782,6 +783,8 @@ export default function NewProcedureScreen() {
       { oc?: string; md?: string }
     >,
     socket_types: {} as Record<string, string>,
+    preop_prescription_required: false,
+    preop_prescription: null as any,
     arch: "",
     loading_type: [] as string[],
     prosthetic_plan: "",
@@ -1307,6 +1310,8 @@ export default function NewProcedureScreen() {
                   proc.socket_types && typeof proc.socket_types === "object"
                     ? proc.socket_types
                     : {},
+                preop_prescription_required: !!proc.preop_prescription_required,
+                preop_prescription: proc.preop_prescription || null,
                 arch: proc.arch || "",
                 loading_type: Array.isArray(proc.loading_type)
                   ? proc.loading_type
@@ -1595,6 +1600,8 @@ export default function NewProcedureScreen() {
             { oc?: string; md?: string }
           >,
           socket_types: {} as Record<string, string>,
+          preop_prescription_required: false,
+          preop_prescription: null as any,
           arch: "",
           loading_type: [] as string[],
           type_of_provisional: "",
@@ -7989,6 +7996,40 @@ export default function NewProcedureScreen() {
             onChange={(v) => updateMedical('asa_class', v)}
             testidSuffix="routine"
           />
+                  {/* Prescribe Pre-operative Medications — Phase 1 Rx, approved with Phase 1 */}
+                  <View style={styles.medicalRow} testID="preop-rx-toggle" data-testid="preop-rx-toggle">
+                    <Text style={styles.medicalLabel}>Prescribe Pre-operative Medications</Text>
+                    <View style={styles.yesNoRow}>
+                      {["No", "Yes"].map((opt) => {
+                        const active = (opt === "Yes") === !!formData.preop_prescription_required;
+                        return (
+                          <TouchableOpacity
+                            key={opt}
+                            style={[styles.yesNoBtn, active && { backgroundColor: "#1565C0", borderColor: "#1565C0" }]}
+                            onPress={() => updateForm("preop_prescription_required", opt === "Yes")}
+                            testID={`preop-rx-${opt.toLowerCase()}`}
+                          >
+                            <Text style={[styles.yesNoText, active && styles.yesNoTextActive]}>{opt}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  {!!formData.preop_prescription_required && (
+                    <PrescriptionEditor
+                      kind="preop"
+                      procedure={{
+                        patient_name: formData.patient_name,
+                        age: formData.age,
+                        sex: formData.sex,
+                        medical_assessment: formData.medical_assessment,
+                      }}
+                      local={{
+                        value: formData.preop_prescription,
+                        onChange: (v) => updateForm("preop_prescription", v),
+                      }}
+                    />
+                  )}
                   {Object.keys(formData.medical_assessment).length > 0 &&
                     (() => {
                       const risk = calculateMedicalRisk(

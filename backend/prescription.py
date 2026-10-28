@@ -18,6 +18,14 @@ A signature <sig> = { filename, signed_at, signed_by_id, signed_by_name,
 from __future__ import annotations
 from datetime import datetime, timezone
 import io
+import re
+
+# Two prescriptions can live on a case:
+#   "postop" → procedure["prescription"]        (Phase 2, approved with Phase 2)
+#   "preop"  → procedure["preop_prescription"]  (Phase 1, approved with Phase 1,
+#              carries its own `prescribed_date`)
+RX_FIELDS = {"postop": "prescription", "preop": "preop_prescription"}
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 DRUG_FORMS = ["Tablet", "Capsule", "Syrup", "Mouthwash", "Gel", "Injection", "Ointment", "Other"]
 MAX_DRUGS = 20
@@ -37,6 +45,12 @@ STANDARD_TEMPLATE = [
      "dosage": "10 ml rinse", "frequency": "0-1-1", "duration": "7 days", "timing": "After brushing",
      "notes": "Start 24 h post-op; do not eat/rinse for 30 min after use"},
 ]
+
+PREOP_DEFAULT_ADVICE = (
+    "Take the medications exactly as prescribed before the surgery. Have a light meal "
+    "unless told otherwise. Continue your regular medicines unless your clinician has "
+    "advised a change. Inform the team of any allergy, fever or new medication."
+)
 
 DEFAULT_ADVICE = (
     "Apply cold compresses for the first 24 hours. Soft diet for 2-3 days. "
@@ -69,12 +83,16 @@ def sanitize_prescription_edit(data: dict | None) -> dict:
     data = data or {}
     drugs = [_clean_drug(d) for d in (data.get("drugs") or []) if isinstance(d, dict)]
     drugs = [d for d in drugs if d.get("name")][:MAX_DRUGS]
-    return {
+    out = {
         "diagnosis": _STR(data.get("diagnosis"), 500).strip(),
         "allergies": _STR(data.get("allergies"), 500).strip(),
         "advice": _STR(data.get("advice"), 2000).strip(),
         "drugs": drugs,
     }
+    d = _STR(data.get("prescribed_date"), 10).strip()
+    if d and _DATE_RE.match(d):
+        out["prescribed_date"] = d
+    return out
 
 
 def now_iso() -> str:
@@ -107,7 +125,7 @@ def rx_mark_approved(rx: dict, approver: dict) -> dict:
     return rx
 
 
-def build_prescription_pdf(procedure: dict, uploads_dir) -> io.BytesIO:
+def build_prescription_pdf(procedure: dict, uploads_dir, kind: str = "postop") -> io.BytesIO:
     """Signed prescription PDF (reportlab) — patient block, Rx table, advice,
     and the creator + supervisor signatures with approval metadata."""
     from reportlab.lib.pagesizes import A4
@@ -118,7 +136,8 @@ def build_prescription_pdf(procedure: dict, uploads_dir) -> io.BytesIO:
     from reportlab.lib.units import mm
     from reportlab.lib.enums import TA_LEFT
 
-    rx = procedure.get("prescription") or {}
+    preop = kind == "preop"
+    rx = procedure.get(RX_FIELDS.get(kind, "prescription")) or {}
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm,
                             topMargin=12 * mm, bottomMargin=12 * mm)
@@ -137,8 +156,9 @@ def build_prescription_pdf(procedure: dict, uploads_dir) -> io.BytesIO:
                               textColor=colors.HexColor('#78909C'), leading=9))
 
     story: list = []
-    story.append(Paragraph("PRESCRIPTION", styles['RxTitle']))
-    story.append(Paragraph("Dental Implant Treatment — Post-Surgical Medication", styles['RxSub']))
+    story.append(Paragraph("PRE-OPERATIVE PRESCRIPTION" if preop else "PRESCRIPTION", styles['RxTitle']))
+    story.append(Paragraph("Dental Implant Treatment — " + ("Pre-operative Medication" if preop else "Post-Surgical Medication"),
+                           styles['RxSub']))
     story.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor('#CFD8DC'), spaceAfter=4))
 
     # Patient block
@@ -146,7 +166,8 @@ def build_prescription_pdf(procedure: dict, uploads_dir) -> io.BytesIO:
         ["Patient:", procedure.get("patient_name") or "—", "Age:", str(procedure.get("age") or "—"),
          "Sex:", procedure.get("sex") or "—"],
         ["Reg No.:", procedure.get("registration_number") or "—", "Date:",
-         (rx.get("approved_at") or rx.get("submitted_at") or rx.get("updated_at") or now_iso())[:10],
+         (rx.get("prescribed_date") if preop and rx.get("prescribed_date") else
+          (rx.get("approved_at") or rx.get("submitted_at") or rx.get("updated_at") or now_iso())[:10]),
          "", ""],
     ]
     pt = Table(pt_rows, colWidths=[18 * mm, 62 * mm, 14 * mm, 24 * mm, 14 * mm, 50 * mm])
@@ -192,8 +213,8 @@ def build_prescription_pdf(procedure: dict, uploads_dir) -> io.BytesIO:
     ]))
     story.append(dt)
 
-    advice = rx.get("advice") or DEFAULT_ADVICE
-    story.append(Paragraph("Post-Operative Advice", styles['RxH2']))
+    advice = rx.get("advice") or (PREOP_DEFAULT_ADVICE if preop else DEFAULT_ADVICE)
+    story.append(Paragraph("Pre-operative Instructions" if preop else "Post-Operative Advice", styles['RxH2']))
     story.append(Paragraph(advice, styles['RxBody']))
 
     # Signatures
@@ -233,14 +254,14 @@ def build_prescription_pdf(procedure: dict, uploads_dir) -> io.BytesIO:
         who = ", ".join(f"{a.get('name')} ({a.get('role')})" for a in appr) or "faculty"
         story.append(Spacer(1, 6))
         story.append(Paragraph(
-            f"Digitally approved on {(rx.get('approved_at') or '')[:19].replace('T',' ')} UTC with Phase 2 by {who}. "
+            f"Digitally approved on {(rx.get('approved_at') or '')[:19].replace('T',' ')} UTC with Phase {1 if preop else 2} by {who}. "
             f"Creator signature SHA-256: {(creator.get('sha256') or '')[:16]}… · "
             f"Supervisor signature SHA-256: {(supervisor.get('sha256') or '')[:16]}…",
             styles['RxSmall']))
     else:
         story.append(Spacer(1, 6))
         story.append(Paragraph(
-            "DRAFT — not yet approved. This prescription becomes valid only after Phase 2 approval.",
+            f"DRAFT — not yet approved. This prescription becomes valid only after Phase {1 if preop else 2} approval.",
             styles['RxSmall']))
 
     doc.build(story)

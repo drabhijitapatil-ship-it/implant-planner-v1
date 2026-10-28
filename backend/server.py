@@ -838,6 +838,11 @@ class ProcedureCreate(BaseModel):
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
     # Research Module: Elian extraction-socket type per tooth (FDI → 'Type I'|'Type II'|'Type III').
     socket_types: Optional[Dict[str, str]] = None
+    # Phase 1 "Prescribe Pre-operative Medications" toggle + the Rx itself
+    # ({prescribed_date, diagnosis, allergies, advice, drugs}). Signatures and
+    # status are server-managed; see _merge_preop_rx.
+    preop_prescription_required: Optional[bool] = None
+    preop_prescription: Optional[Dict[str, Any]] = None
     arch_condition: Optional[str] = Field("", max_length=50)
     ridge_contour: Optional[str] = Field("", max_length=50)
     soft_tissue_thickness: Optional[str] = Field("", max_length=20)
@@ -846,7 +851,7 @@ class ProcedureCreate(BaseModel):
     occlusal_scheme: Optional[str] = Field("", max_length=50)
     parafunction_habit: Optional[str] = Field("", max_length=20)
     vertical_dimension: Optional[str] = Field("", max_length=50)
-    opposing_dentition: Optional[str] = Field("", max_length=20)
+    opposing_dentition: Optional[str] = Field("", max_length=50)
     # Occlusal Analysis (full-arch)
     vertical_dimension_mm: Optional[str] = Field("", max_length=20)
     available_interarch_space: Optional[str] = Field("", max_length=20)
@@ -990,6 +995,11 @@ class ProcedureUpdate(BaseModel):
     edentulous_site_measurements: Optional[Dict[str, Dict[str, Any]]] = None
     # Research Module: Elian extraction-socket type per tooth (FDI → 'Type I'|'Type II'|'Type III').
     socket_types: Optional[Dict[str, str]] = None
+    # Phase 1 "Prescribe Pre-operative Medications" toggle + the Rx itself
+    # ({prescribed_date, diagnosis, allergies, advice, drugs}). Signatures and
+    # status are server-managed; see _merge_preop_rx.
+    preop_prescription_required: Optional[bool] = None
+    preop_prescription: Optional[Dict[str, Any]] = None
     clinical_exam_per_site: Optional[Dict[str, Dict[str, Any]]] = None
     supervisor_id: Optional[str] = Field(None, max_length=50)
     supervisor_name: Optional[str] = Field(None, max_length=100)
@@ -7354,6 +7364,9 @@ async def create_procedure(procedure: ProcedureCreate, current_user: dict = Depe
     procedure_dict["augmentation_checklist_generated_by"] = current_user.get("id") or current_user.get("_id") or ""
     procedure_dict["org_id"] = current_user.get("org_id")
     procedure_dict["department_id"] = current_user.get("department_id")
+    _raw_preop = procedure_dict.pop("preop_prescription", None)
+    if procedure_dict.get("preop_prescription_required"):
+        procedure_dict["preop_prescription"] = _merge_preop_rx(None, _raw_preop or {}, current_user)
     await _assert_case_quota(procedure_dict["org_id"])
 
     result = await db.procedures.insert_one(procedure_dict)
@@ -7428,10 +7441,20 @@ async def get_booked_slots(date: str, current_user: dict = Depends(get_current_u
     plus the caller's org scheduling config so the case-creation picker can
     render whichever mode (default/custom/open) is active without a second
     round-trip to /organizations/me."""
+    # Same scope as /procedures/slots-month and the booking conflict check:
+    # only this organisation's cases, and only the caller's own department
+    # (each department has its own operatory). Org admins keep org-wide view.
+    query: Dict[str, Any] = {"procedure_date": date, "status": {"$ne": "cancelled"}, "archived": {"$ne": True}}
+    org_scope = await _org_scope_match(current_user)
+    if org_scope:
+        query.update(org_scope)
+    dept_id = current_user.get("department_id")
+    if dept_id and not current_user.get("is_admin") and not current_user.get("is_super_admin"):
+        query["department_id"] = dept_id
     booked = await db.procedures.find(
-        {"procedure_date": date, "status": {"$ne": "cancelled"}},
+        query,
         {"_id": 0, "procedure_time": 1, "patient_name": 1, "student_name": 1, "created_by_name": 1, "created_by_role": 1},
-    ).to_list(50)
+    ).to_list(200)
     slots = {}
     for b in booked:
         t = b.get("procedure_time", "")
@@ -7440,7 +7463,10 @@ async def get_booked_slots(date: str, current_user: dict = Depends(get_current_u
             "scheduled_by": b.get("created_by_name") or b.get("student_name") or "",
         }
 
-    sched_cfg = await _get_org_scheduling_config(current_user.get("org_id"))
+    # Department's own Time Slot Mode (set in Scheduling Settings), falling
+    # back to the org-wide one — previously this read only the org-wide config,
+    # so a department set to Custom / Open still showed the default slots.
+    sched_cfg = await _get_dept_scheduling_config(current_user.get("org_id"), current_user.get("department_id"))
     sched_mode = sched_cfg.get("mode", "default")
     day_slots: List[Dict[str, Any]] = []
     if sched_mode == "custom":
@@ -9553,6 +9579,16 @@ async def update_procedure(
     # implant_incharge can edit all
     
     update_data = {k: v for k, v in procedure_update.model_dump().items() if v is not None}
+    # Pre-op prescription from the case form: merged, never overwritten wholesale.
+    if "preop_prescription" in update_data or update_data.get("preop_prescription_required") is not None:
+        raw_preop = update_data.pop("preop_prescription", None)
+        required = update_data.get("preop_prescription_required",
+                                   procedure.get("preop_prescription_required"))
+        existing_preop = procedure.get("preop_prescription") or {}
+        if required:
+            update_data["preop_prescription"] = _merge_preop_rx(existing_preop, raw_preop, current_user)
+        elif existing_preop.get("status") != "approved":
+            update_data["preop_prescription"] = {}  # toggled to No → discard the draft
     # iter-Jun-2026: assistant edits go through the same validation as create.
     if "assistant_id" in update_data:
         owner_ids = [procedure.get("student_id"), procedure.get("created_by_id")]
@@ -9589,6 +9625,9 @@ async def update_procedure(
     
         # values (this call usually carries only the status change).
         if new_status == "pending_phase1":
+            _preop = update_data.get("preop_prescription", procedure.get("preop_prescription"))
+            if _rx.has_drugs(_preop):
+                update_data["preop_prescription"] = _rx.rx_mark_pending(_preop)
             _validate_missing_teeth(
                 update_data.get("implant_procedure_type") or procedure.get("implant_procedure_type"),
                 update_data.get("missing_teeth") if "missing_teeth" in update_data else procedure.get("missing_teeth"),
@@ -18382,6 +18421,11 @@ async def approve_procedure(
                 target = procedure.get("existing_phase_to_start") if procedure.get("case_origin") == "existing_implants" else None
                 now_ts = datetime.utcnow()
                 fields["phase1_completed_at"] = now_ts
+                # Pre-operative Rx is approved and locked together with Phase 1.
+                if _rx.has_drugs(procedure.get("preop_prescription")):
+                    fields["preop_prescription"] = _rx.rx_mark_approved(
+                        procedure.get("preop_prescription"),
+                        {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")})
                 if target == "phase3":
                     # Skip Phase 2 (no surgery performed by us) → land in the Phase 3 inbox.
                     fields["status"] = "phase2_approved"
@@ -18855,12 +18899,46 @@ class PrescriptionEditBody(BaseModel):
     allergies: str = Field("", max_length=600)
     advice: str = Field("", max_length=2500)
     drugs: List[Dict[str, Any]] = Field(default_factory=list)
+    prescribed_date: Optional[str] = Field(None, max_length=10)  # pre-op Rx only (YYYY-MM-DD)
 
 
 class PrescriptionSignBody(BaseModel):
     strokes: List[List[List[float]]]
     pad_width: float = Field(..., gt=0, le=2000)
     pad_height: float = Field(..., gt=0, le=1000)
+
+
+_RX_KIND = Query("postop", pattern="^(postop|preop)$")
+
+
+def _rx_field(kind: str) -> str:
+    """Case field holding the prescription: Phase 2 post-op (default) or Phase 1 pre-op."""
+    return _rx.RX_FIELDS.get(kind, "prescription")
+
+
+def _merge_preop_rx(existing: Optional[dict], raw: Optional[dict], user: dict) -> Optional[dict]:
+    """Fold the case form's pre-op Rx (drugs/text/date) into the stored one,
+    keeping server-managed status/signatures. Approved Rx is never changed
+    here (faculty reopen it from the case page)."""
+    existing = existing or {}
+    if existing.get("status") == "approved" or raw is None:
+        return existing or None
+    clean = _rx.sanitize_prescription_edit(raw)
+    now = _rx.now_iso()
+    rx = dict(existing) or _rx_build_new(user, now)
+    rx.update(clean)
+    rx.setdefault("prescribed_date", datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d"))
+    rx["updated_at"] = now
+    audit = list(rx.get("audit_log") or [])
+    audit.append({"action": "edit", "by_id": user.get("_id"), "by_name": user.get("name", ""),
+                  "by_role": user.get("role", ""), "at": now, "detail": f"{len(clean['drugs'])} drug(s) (case form)"})
+    rx["audit_log"] = audit[-100:]
+    return rx
+
+
+def _rx_build_new(user: dict, now: str) -> dict:
+    return {"status": "draft", "created_by_id": user.get("_id"), "created_by_name": user.get("name", ""),
+            "created_by_role": user.get("role", ""), "created_at": now, "signatures": {}}
 
 
 def _rx_roles(procedure: dict, user: dict):
@@ -18893,6 +18971,7 @@ async def _get_proc_or_404(procedure_id: str) -> dict:
 
 @api_router.put("/procedures/{procedure_id}/prescription")
 async def save_prescription(procedure_id: str, body: PrescriptionEditBody,
+                            kind: str = _RX_KIND,
                             current_user: dict = Depends(get_current_user)):
     await _assert_org_feature(current_user, "lab_prescription")
     """Create / edit the prescription drug list + text. Creator edits before
@@ -18900,25 +18979,24 @@ async def save_prescription(procedure_id: str, body: PrescriptionEditBody,
     audit-logged. Locked once approved."""
     procedure = await _get_proc_or_404(procedure_id)
     is_creator, is_faculty = _rx_roles(procedure, current_user)
-    existing = procedure.get("prescription") or {}
+    field = _rx_field(kind)
+    existing = procedure.get(field) or {}
     if existing.get("status") == "approved":
         raise HTTPException(status_code=400, detail="Prescription is approved and locked. Ask faculty to reopen it first.")
     case_status = procedure.get("status")
-    creator_window = is_creator and case_status in ("phase1_approved",)
+    # Post-op Rx: creator drafts it before submitting Phase 2. Pre-op Rx:
+    # creator drafts it any time before Phase 1 is approved.
+    creator_states = ("draft", "pending_phase1", "rejected_phase1") if kind == "preop" else ("phase1_approved",)
+    creator_window = is_creator and case_status in creator_states
     faculty_window = is_faculty and existing.get("status") != "approved"
     if not (creator_window or faculty_window):
         raise HTTPException(status_code=403, detail="You cannot edit this prescription at this stage.")
 
     clean = _rx.sanitize_prescription_edit(body.model_dump())
+    if kind != "preop":
+        clean.pop("prescribed_date", None)
     now = _rx.now_iso()
-    rx = dict(existing)
-    if not rx:
-        rx["status"] = "draft"
-        rx["created_by_id"] = current_user.get("_id")
-        rx["created_by_name"] = current_user.get("name", "")
-        rx["created_by_role"] = current_user.get("role", "")
-        rx["created_at"] = now
-        rx["signatures"] = {}
+    rx = dict(existing) or _rx_build_new(current_user, now)
     rx.update(clean)
     rx["updated_at"] = now
     audit = list(rx.get("audit_log") or [])
@@ -18929,19 +19007,21 @@ async def save_prescription(procedure_id: str, body: PrescriptionEditBody,
     })
     rx["audit_log"] = audit[-100:]
     await db.procedures.update_one({"_id": ObjectId(procedure_id)},
-                                   {"$set": {"prescription": rx, "updated_at": now}})
+                                   {"$set": {field: rx, "updated_at": now}})
     return rx
 
 
 @api_router.post("/procedures/{procedure_id}/prescription/sign")
 async def sign_prescription(procedure_id: str, body: PrescriptionSignBody,
+                            kind: str = _RX_KIND,
                             current_user: dict = Depends(get_current_user)):
     await _assert_org_feature(current_user, "lab_prescription")
     """Capture the creator's or supervisor's e-signature on the prescription.
     Reuses the server-side PNG rasteriser + SHA-256 tamper evidence."""
     procedure = await _get_proc_or_404(procedure_id)
     is_creator, is_faculty = _rx_roles(procedure, current_user)
-    rx = procedure.get("prescription") or {}
+    field = _rx_field(kind)
+    rx = procedure.get(field) or {}
     if not _rx.has_drugs(rx):
         raise HTTPException(status_code=400, detail="Add at least one medication before signing.")
     if rx.get("status") == "approved":
@@ -18985,19 +19065,21 @@ async def sign_prescription(procedure_id: str, body: PrescriptionSignBody,
                   "by_name": current_user.get("name", ""), "by_role": current_user.get("role", ""), "at": now})
     rx["audit_log"] = audit[-100:]
     await db.procedures.update_one({"_id": ObjectId(procedure_id)},
-                                   {"$set": {"prescription": rx, "updated_at": now}})
+                                   {"$set": {field: rx, "updated_at": now}})
     return rx
 
 
 @api_router.post("/procedures/{procedure_id}/prescription/approve")
-async def approve_prescription(procedure_id: str, current_user: dict = Depends(get_current_user)):
+async def approve_prescription(procedure_id: str, kind: str = _RX_KIND,
+                               current_user: dict = Depends(get_current_user)):
     """Faculty manual approve (used after a reopen). Requires a supervisor
     signature. The normal path auto-approves with Phase 2."""
     procedure = await _get_proc_or_404(procedure_id)
     _, is_faculty = _rx_roles(procedure, current_user)
     if not is_faculty:
         raise HTTPException(status_code=403, detail="Only faculty can approve the prescription.")
-    rx = procedure.get("prescription") or {}
+    field = _rx_field(kind)
+    rx = procedure.get(field) or {}
     if not _rx.has_drugs(rx):
         raise HTTPException(status_code=400, detail="Nothing to approve — no medications.")
     if rx.get("status") == "approved":
@@ -19007,18 +19089,20 @@ async def approve_prescription(procedure_id: str, current_user: dict = Depends(g
     approver = {"id": current_user.get("_id"), "name": current_user.get("name", ""), "role": current_user.get("role", "")}
     rx = _rx.rx_mark_approved(rx, approver)
     await db.procedures.update_one({"_id": ObjectId(procedure_id)},
-                                   {"$set": {"prescription": rx, "updated_at": _rx.now_iso()}})
+                                   {"$set": {field: rx, "updated_at": _rx.now_iso()}})
     return rx
 
 
 @api_router.post("/procedures/{procedure_id}/prescription/reopen")
-async def reopen_prescription(procedure_id: str, current_user: dict = Depends(get_current_user)):
+async def reopen_prescription(procedure_id: str, kind: str = _RX_KIND,
+                              current_user: dict = Depends(get_current_user)):
     """Faculty reopens an approved prescription for corrections."""
     procedure = await _get_proc_or_404(procedure_id)
     _, is_faculty = _rx_roles(procedure, current_user)
     if not is_faculty:
         raise HTTPException(status_code=403, detail="Only faculty can reopen the prescription.")
-    rx = procedure.get("prescription") or {}
+    field = _rx_field(kind)
+    rx = procedure.get(field) or {}
     if rx.get("status") != "approved":
         return {"ok": True, "already_open": True, "prescription": rx}
     now = _rx.now_iso()
@@ -19032,26 +19116,26 @@ async def reopen_prescription(procedure_id: str, current_user: dict = Depends(ge
     rx.pop("approved_by", None)
     rx["updated_at"] = now
     await db.procedures.update_one({"_id": ObjectId(procedure_id)},
-                                   {"$set": {"prescription": rx, "updated_at": now}})
+                                   {"$set": {field: rx, "updated_at": now}})
     return {"ok": True, "prescription": rx}
 
 
 @api_router.get("/procedures/{procedure_id}/prescription/pdf")
-async def prescription_pdf(procedure_id: str, request: Request,
+async def prescription_pdf(procedure_id: str, request: Request, kind: str = _RX_KIND,
                            current_user: dict = Depends(get_current_user)):
     """Download the signed prescription PDF."""
     procedure = await _get_proc_or_404(procedure_id)
     is_creator, is_faculty = _rx_roles(procedure, current_user)
     if not (is_creator or is_faculty or current_user.get("role") == "nurse"):
         raise HTTPException(status_code=403, detail="Not allowed to view this prescription.")
-    rx = procedure.get("prescription") or {}
+    rx = procedure.get(_rx_field(kind)) or {}
     if not _rx.has_drugs(rx):
         raise HTTPException(status_code=400, detail="No prescription to export for this case.")
     await log_access(action="pdf_export", resource_type="prescription", resource_id=procedure_id,
                      user=current_user, request=request,
                      extra={"patient_name": procedure.get("patient_name")})
-    buf = _rx.build_prescription_pdf(procedure, UPLOADS_DIR)
-    filename = f"Prescription_{(procedure.get('patient_name') or 'Patient').replace(' ', '_')}.pdf"
+    buf = _rx.build_prescription_pdf(procedure, UPLOADS_DIR, kind)
+    filename = f"{'PreOp_' if kind == 'preop' else ''}Prescription_{(procedure.get('patient_name') or 'Patient').replace(' ', '_')}.pdf"
     return StreamingResponse(buf, media_type="application/pdf",
                              headers={"Content-Disposition": f'inline; filename="{filename}"'})
 

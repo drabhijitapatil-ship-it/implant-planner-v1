@@ -8,10 +8,11 @@ import api, { getToken } from './api';
  * Download the signed prescription PDF and open it via the native Share sheet
  * (iOS/Android) or a new browser tab (web). Mirrors utils/consentPdf.ts.
  */
-export async function downloadPrescriptionPdf(procedureId: string) {
+export async function downloadPrescriptionPdf(procedureId: string, kind: 'postop' | 'preop' = 'postop') {
+  const q = kind === 'preop' ? '?kind=preop' : '';
   try {
     if (Platform.OS === 'web') {
-      const res = await api.get(`/procedures/${procedureId}/prescription/pdf`, { responseType: 'blob' });
+      const res = await api.get(`/procedures/${procedureId}/prescription/pdf${q}`, { responseType: 'blob' });
       const url = URL.createObjectURL(res.data as Blob);
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 15000);
@@ -22,7 +23,7 @@ export async function downloadPrescriptionPdf(procedureId: string) {
     const baseUrl = api.defaults.baseURL || '';
     const localUri = `${FileSystem.cacheDirectory}prescription_${procedureId}_${Date.now()}.pdf`;
     const result = await FileSystem.downloadAsync(
-      `${baseUrl}/procedures/${procedureId}/prescription/pdf`, localUri,
+      `${baseUrl}/procedures/${procedureId}/prescription/pdf${q}`, localUri,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     if (result.status !== 200) { Alert.alert('Download failed', `Server returned ${result.status}.`); return; }

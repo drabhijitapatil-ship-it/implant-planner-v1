@@ -1411,8 +1411,155 @@ export default function ProcedureDetailScreen() {
     (isSupervisorOnCase && isInchargeOnCase),
   );
 
+  // Reject panel — drawn IN PLACE of the Approve / Reject buttons (any
+  // phase), so it opens exactly where the reviewer tapped Reject instead
+  // of further down the page.
+  const renderRejectDialog = () => (
+      <View style={styles.rejectDialog}>
+        {!rejectionType ? (
+          <>
+            <Text style={styles.dialogTitle}>
+              Select Rejection Type
+            </Text>
+            <TouchableOpacity
+              style={styles.rejectPermanentBtn}
+              onPress={() => setRejectionType("permanent")}
+              data-testid="reject-permanently-btn"
+            >
+              <Ionicons name="ban" size={20} color="#FFF" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rejectTypeBtnText}>
+                  Reject Permanently
+                </Text>
+                <Text style={styles.rejectTypeDesc}>
+                  Case will be stopped. No further phases can proceed.
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rejectReconsiderBtn}
+              onPress={() => setRejectionType("reconsider")}
+              data-testid="reject-reconsider-btn"
+            >
+              <Ionicons name="refresh" size={20} color="#FFF" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rejectTypeBtnText}>
+                  Reject with Consideration
+                </Text>
+                <Text style={styles.rejectTypeDesc}>
+                  Student can edit the rejected phase and resubmit.
+                </Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dialogCancelButton}
+              onPress={() => {
+                setShowRejectDialog(false);
+                setRejectionType(null);
+              }}
+            >
+              <Text style={styles.dialogCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 12,
+              }}
+            >
+              <Ionicons
+                name={rejectionType === "permanent" ? "ban" : "refresh"}
+                size={20}
+                color={
+                  rejectionType === "permanent" ? "#D32F2F" : "#F57C00"
+                }
+              />
+              <Text style={styles.dialogTitle}>
+                {rejectionType === "permanent"
+                  ? "Reject Permanently"
+                  : "Reject with Consideration"}
+              </Text>
+            </View>
+            <View
+              style={{
+                backgroundColor:
+                  rejectionType === "permanent" ? "#FFEBEE" : "#FFF3E0",
+                padding: 10,
+                borderRadius: 8,
+                marginBottom: 12,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  color:
+                    rejectionType === "permanent"
+                      ? "#C62828"
+                      : "#E65100",
+                }}
+              >
+                {rejectionType === "permanent"
+                  ? "This action is final. The case cannot be moved forward after permanent rejection."
+                  : "The student will be notified and can edit this phase based on your feedback, then resubmit for approval."}
+              </Text>
+            </View>
+            <TextInput
+              style={styles.dialogInput}
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              placeholder={
+                rejectionType === "permanent"
+                  ? "Enter reason for permanent rejection"
+                  : "Enter reason for reconsideration"
+              }
+              multiline
+              numberOfLines={4}
+              data-testid="rejection-reason-input"
+            />
+            <View style={styles.dialogButtons}>
+              <TouchableOpacity
+                style={styles.dialogCancelButton}
+                onPress={() => {
+                  setRejectionType(null);
+                  setRejectionReason("");
+                }}
+              >
+                <Text style={styles.dialogCancelText}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  rejectionType === "permanent"
+                    ? styles.dialogConfirmButton
+                    : styles.dialogReconsiderConfirmBtn,
+                  actionLoading && styles.buttonDisabled,
+                ]}
+                onPress={handleReject}
+                disabled={actionLoading}
+                data-testid="confirm-rejection-btn"
+              >
+                {actionLoading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={styles.dialogConfirmText}>
+                    {rejectionType === "permanent"
+                      ? "Reject Permanently"
+                      : "Reject & Request Revision"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+      </View>
+  );
+
   const renderApprovalActions = () => {
-    if (!canApprove() || showRejectDialog) return null;
+    if (!canApprove()) return null;
+    if (showRejectDialog) return renderRejectDialog();
     // In-Charge self-created case: their submission already approved both
     // slots, so no buttons. Only when no DIFFERENT supervisor is assigned —
     // otherwise the In-Charge still approves their own slot from here.
@@ -7130,37 +7277,16 @@ export default function ProcedureDetailScreen() {
                           </View>
                         )}
 
-                      {/* iter-455: Phase 1 Clinical Diagnosis (Atlas engine) — editable by creator, supervisor, in-charge */}
-                      {procedure.phase1_diagnosis?.text && (
-                        <View
-                          style={{ marginHorizontal: -4, marginBottom: 12 }}
-                          testID="dx-section"
-                          data-testid="dx-section"
-                        >
-                          <ClinicalDiagnosisCard
-                            procedureId={id as string}
-                            initial={procedure.phase1_diagnosis}
-                            autoGenerate={false}
-                            compact
-                            readOnly={
-                              procedure.status === "completed" ||
-                              !(
-                                user?.role === "implant_incharge" ||
-                                user?.role === "administrator" ||
-                                user?.id === procedure.student_id ||
-                                user?.id === procedure.created_by_id ||
-                                (user?.role === "supervisor" &&
-                                  user?.id === procedure.supervisor_id)
-                              )
-                            }
-                            onChange={(dx) =>
-                              setProcedure((p: any) =>
-                                p ? { ...p, phase1_diagnosis: dx } : p,
-                              )
-                            }
-                          />
-                        </View>
+                      {/* Pre-operative Prescription (Phase 1) — after Medical Assessment / ASA */}
+                      {(procedure.preop_prescription_required ||
+                        (procedure.preop_prescription?.drugs || []).length > 0) && (
+                        <PrescriptionEditor
+                          kind="preop"
+                          procedure={procedure}
+                          onChanged={() => loadProcedure()}
+                        />
                       )}
+
                       <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Payment</Text>
                         <InfoRow
@@ -7752,6 +7878,38 @@ export default function ProcedureDetailScreen() {
                             "Phase 1: Pre-Surgical Protocol",
                           )}
                         </>
+                      )}
+
+                      {/* Phase 1 Clinical Diagnosis (Atlas engine) — last item of Phase 1, right before Phase 2. Editable by creator, supervisor, in-charge */}
+                      {procedure.phase1_diagnosis?.text && (
+                        <View
+                          style={{ marginHorizontal: -4, marginBottom: 12 }}
+                          testID="dx-section"
+                          data-testid="dx-section"
+                        >
+                          <ClinicalDiagnosisCard
+                            procedureId={id as string}
+                            initial={procedure.phase1_diagnosis}
+                            autoGenerate={false}
+                            compact
+                            readOnly={
+                              procedure.status === "completed" ||
+                              !(
+                                user?.role === "implant_incharge" ||
+                                user?.role === "administrator" ||
+                                user?.id === procedure.student_id ||
+                                user?.id === procedure.created_by_id ||
+                                (user?.role === "supervisor" &&
+                                  user?.id === procedure.supervisor_id)
+                              )
+                            }
+                            onChange={(dx) =>
+                              setProcedure((p: any) =>
+                                p ? { ...p, phase1_diagnosis: dx } : p,
+                              )
+                            }
+                          />
+                        </View>
                       )}
                     </>
                   )}
@@ -12433,149 +12591,6 @@ export default function ProcedureDetailScreen() {
 
             {/* ── APPROVAL SECTION (Phase 2-4) ── */}
             {procedure.status !== "pending_phase1" && renderApprovalActions()}
-
-            {showRejectDialog && (
-              <View style={styles.rejectDialog}>
-                {!rejectionType ? (
-                  <>
-                    <Text style={styles.dialogTitle}>
-                      Select Rejection Type
-                    </Text>
-                    <TouchableOpacity
-                      style={styles.rejectPermanentBtn}
-                      onPress={() => setRejectionType("permanent")}
-                      data-testid="reject-permanently-btn"
-                    >
-                      <Ionicons name="ban" size={20} color="#FFF" />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.rejectTypeBtnText}>
-                          Reject Permanently
-                        </Text>
-                        <Text style={styles.rejectTypeDesc}>
-                          Case will be stopped. No further phases can proceed.
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.rejectReconsiderBtn}
-                      onPress={() => setRejectionType("reconsider")}
-                      data-testid="reject-reconsider-btn"
-                    >
-                      <Ionicons name="refresh" size={20} color="#FFF" />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.rejectTypeBtnText}>
-                          Reject with Consideration
-                        </Text>
-                        <Text style={styles.rejectTypeDesc}>
-                          Student can edit the rejected phase and resubmit.
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.dialogCancelButton}
-                      onPress={() => {
-                        setShowRejectDialog(false);
-                        setRejectionType(null);
-                      }}
-                    >
-                      <Text style={styles.dialogCancelText}>Cancel</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : (
-                  <>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 12,
-                      }}
-                    >
-                      <Ionicons
-                        name={rejectionType === "permanent" ? "ban" : "refresh"}
-                        size={20}
-                        color={
-                          rejectionType === "permanent" ? "#D32F2F" : "#F57C00"
-                        }
-                      />
-                      <Text style={styles.dialogTitle}>
-                        {rejectionType === "permanent"
-                          ? "Reject Permanently"
-                          : "Reject with Consideration"}
-                      </Text>
-                    </View>
-                    <View
-                      style={{
-                        backgroundColor:
-                          rejectionType === "permanent" ? "#FFEBEE" : "#FFF3E0",
-                        padding: 10,
-                        borderRadius: 8,
-                        marginBottom: 12,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color:
-                            rejectionType === "permanent"
-                              ? "#C62828"
-                              : "#E65100",
-                        }}
-                      >
-                        {rejectionType === "permanent"
-                          ? "This action is final. The case cannot be moved forward after permanent rejection."
-                          : "The student will be notified and can edit this phase based on your feedback, then resubmit for approval."}
-                      </Text>
-                    </View>
-                    <TextInput
-                      style={styles.dialogInput}
-                      value={rejectionReason}
-                      onChangeText={setRejectionReason}
-                      placeholder={
-                        rejectionType === "permanent"
-                          ? "Enter reason for permanent rejection"
-                          : "Enter reason for reconsideration"
-                      }
-                      multiline
-                      numberOfLines={4}
-                      data-testid="rejection-reason-input"
-                    />
-                    <View style={styles.dialogButtons}>
-                      <TouchableOpacity
-                        style={styles.dialogCancelButton}
-                        onPress={() => {
-                          setRejectionType(null);
-                          setRejectionReason("");
-                        }}
-                      >
-                        <Text style={styles.dialogCancelText}>Back</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          rejectionType === "permanent"
-                            ? styles.dialogConfirmButton
-                            : styles.dialogReconsiderConfirmBtn,
-                          actionLoading && styles.buttonDisabled,
-                        ]}
-                        onPress={handleReject}
-                        disabled={actionLoading}
-                        data-testid="confirm-rejection-btn"
-                      >
-                        {actionLoading ? (
-                          <ActivityIndicator color="#FFF" />
-                        ) : (
-                          <Text style={styles.dialogConfirmText}>
-                            {rejectionType === "permanent"
-                              ? "Reject Permanently"
-                              : "Reject & Request Revision"}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                )}
-              </View>
-            )}
 
             {/* iter-385: Transfer Case approval card + Student Contribution
             Timeline — shown for every stakeholder (initiator, recipient,
