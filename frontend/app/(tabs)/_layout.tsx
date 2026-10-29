@@ -12,6 +12,7 @@ import {
   Image,
   Alert,
   useWindowDimensions,
+  ScrollView,
 } from 'react-native';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -79,8 +80,9 @@ function DrawerMenu({
     overlay: [staticStyles.overlay, isTablet && { justifyContent: 'center' as const, alignItems: 'center' as const }],
     sheet: [
       staticStyles.sheet,
-      { paddingTop: insets.top + 14 },
+      { paddingTop: insets.top + 14, paddingBottom: insets.bottom + 20 },
       isTablet && {
+        maxHeight: '90%' as const,
         maxWidth: 600,
         width: '90%' as const,
         borderRadius: 28,
@@ -257,6 +259,9 @@ function DrawerMenu({
           {/* Tile grid — 2 per row, equal width via flexBasis. Tiles fade
               in with a soft 6-px slide-up (no stagger, no zoom) — reads as
               "information being placed" rather than a playful bounce. */}
+          {/* Tiles scroll inside the sheet so Logout below always stays on
+              screen, however many tiles a role has. */}
+          <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false} bounces={false}>
           <View style={t.grid}>
             {allItems.map((item) => (
               <Animated.View
@@ -285,6 +290,7 @@ function DrawerMenu({
               </Animated.View>
             ))}
           </View>
+          </ScrollView>
 
           {/* Logout — separate visual section; same soft reveal as tiles so
               the whole sheet lands with one coherent motion. */}
@@ -320,6 +326,7 @@ const staticStyles = StyleSheet.create({
     backgroundColor: 'rgba(15, 25, 40, 0.45)',
   },
   sheet: {
+    maxHeight: '100%',
     backgroundColor: '#FAFCFF',
     paddingHorizontal: 18,
     paddingBottom: 20,
