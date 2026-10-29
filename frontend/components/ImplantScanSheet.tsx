@@ -28,6 +28,7 @@ import { requireOptionalNativeModule } from 'expo';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import api, { getAuthFileUrl } from '../utils/api';
+import { uploadErrorMessage } from '../utils/consentUpload';
 import { parseGs1, isValidGtin } from '../utils/gs1';
 import { safeLaunchCamera, safeLaunchLibrary } from '../utils/safePicker';
 
@@ -178,10 +179,10 @@ export default function ImplantScanSheet({ visible, onClose, positionLabel, init
     try {
       const fd = new FormData();
       fd.append('file', { uri: picked.uri, name: picked.name, type: picked.type } as any);
-      const res = await api.post('/uploads/media-temp', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const res = await api.post('/uploads/media-temp', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 });
       update({ label_photo: res.data.filename, label_photo_name: res.data.original_name });
     } catch (err: any) {
-      Alert.alert('Upload failed', err?.response?.data?.detail || 'Could not upload the label photo');
+      Alert.alert('Box photo not uploaded', uploadErrorMessage(err, 'Could not upload the label photo'));
     } finally {
       setUploading(false);
     }

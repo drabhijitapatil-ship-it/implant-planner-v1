@@ -52,16 +52,18 @@ export async function uploadConsentFile(procedureId: string, picked: NonNullable
   return res.data;
 }
 
-/** A readable reason for a failed upload, for the error alert. */
-export function consentUploadError(err: any): string {
+/** A readable reason for a failed file upload, for the error alert. */
+export function uploadErrorMessage(err: any, fallback = 'Could not upload the file'): string {
   const status = err?.response?.status;
   const detail = err?.response?.data?.detail;
   if (typeof detail === 'string' && detail) return detail;
   if (status === 413) return 'The file is too large. Please upload a smaller file (under 25 MB) or a photo instead of a scan.';
   if (status === 401) return 'Your session has expired. Please log in again and retry.';
-  if (status === 403) return 'You are not allowed to upload the consent form for this case.';
-  if (status) return `Upload failed (error ${status}). Please try again.`;
+  if (status === 403) return 'You are not allowed to upload this file.';
+  if (status) return `Upload failed on the server (error ${status}). Please try again or contact support.`;
   if (err?.code === 'ECONNABORTED') return 'The upload took too long. Check your internet connection and try again.';
   if (err?.message === 'Network Error') return 'No internet connection, or the file could not be read. Please try again.';
-  return err?.message || 'Could not upload consent form';
+  return err?.message || fallback;
 }
+
+export const consentUploadError = (err: any) => uploadErrorMessage(err, 'Could not upload consent form');

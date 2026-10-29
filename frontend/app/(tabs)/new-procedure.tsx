@@ -4831,6 +4831,23 @@ export default function NewProcedureScreen() {
                               >
                                 {slot.label}
                               </Text>
+                              {/* Custom slots carry a label + start time; show the time too. */}
+                              {slot.label !== slot.time && (
+                                <Text
+                                  style={[
+                                    styles.chipText,
+                                    { fontSize: 11, marginTop: 1, opacity: 0.8, textAlign: "center" },
+                                    isSelected && styles.chipTextActive,
+                                    isBooked && styles.chipBookedText,
+                                  ]}
+                                >
+                                  {(() => {
+                                    const [h, m] = slot.time.split(":").map(Number);
+                                    if (isNaN(h)) return slot.time;
+                                    return `${h % 12 || 12}:${String(m || 0).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+                                  })()}
+                                </Text>
+                              )}
                               {isBooked && (
                                 <Ionicons
                                   name="lock-closed"

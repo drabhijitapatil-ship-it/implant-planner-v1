@@ -9,6 +9,7 @@ import { ActivityIndicator, AppState, StyleSheet, Text, TouchableOpacity, View }
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Updates from 'expo-updates';
+import * as ScreenCapture from 'expo-screen-capture';
 
 export default function UpdateBanner() {
   const insets = useSafeAreaInsets();
@@ -32,6 +33,26 @@ export default function UpdateBanner() {
     Updates.fetchUpdateAsync().catch(() => {}).finally(() => { fetching.current = false; });
   }, [enabled, isUpdateAvailable, isUpdatePending, isDownloading]);
 
+  // Restart into the new update. Screen-capture protection (FLAG_SECURE) is
+  // dropped first: reloading with it on left a stuck black screen. The app
+  // turns it back on as soon as the reloaded app has the user signed in.
+  const restart = async () => {
+    await ScreenCapture.allowScreenCaptureAsync('hipaa-phi-guard').catch(() => {});
+    try {
+      await Updates.reloadAsync({
+        reloadScreenOptions: {
+          backgroundColor: '#FFFFFF',
+          image: require('../assets/images/splash-icon.png'),
+          imageResizeMode: 'contain',
+          spinner: { enabled: true, color: '#1565C0' },
+          fade: true,
+        },
+      });
+    } catch {
+      ScreenCapture.preventScreenCaptureAsync('hipaa-phi-guard').catch(() => {});
+    }
+  };
+
   if (!enabled || !(isDownloading || isUpdatePending)) return null;
 
   const pct = typeof downloadProgress === 'number' && downloadProgress > 0 ? ` ${Math.round(downloadProgress * 100)}%` : '';
@@ -45,7 +66,7 @@ export default function UpdateBanner() {
             <Text style={styles.text}>Update ready</Text>
             <TouchableOpacity
               style={styles.btn}
-              onPress={() => Updates.reloadAsync().catch(() => {})}
+              onPress={restart}
               disabled={isRestarting}
               testID="ota-restart-btn"
             >
