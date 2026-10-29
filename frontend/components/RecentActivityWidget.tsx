@@ -35,60 +35,39 @@ function prettyField(field: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// "Recent" = the last 30 days, at most 20 rows; collapsed shows `limit`.
+const MAX_ROWS = 20;
+const WINDOW_DAYS = 30;
+
 export function RecentActivityWidget({ router, limit = 5, studentId }: { router: any; limit?: number; studentId?: string }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ActivityEntry[]>([]);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  const fetchPage = useCallback(async (skip: number) => {
-    const params = new URLSearchParams({ limit: String(limit), skip: String(skip) });
-    if (studentId) params.set('student_id', studentId);
-    const res = await api.get(`/procedures/recent-activity?${params.toString()}`);
-    return (res.data.activities || []).filter(
-      (a: ActivityEntry) => typeof a.new_value !== 'object' || a.new_value === null,
-    );
-  }, [limit, studentId]);
+  const [expanded, setExpanded] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setExpanded(false);
     try {
-      const first = await fetchPage(0);
-      setItems(first);
-      // probe whether there's a next page (cheap: ask for 1 row at the next offset)
-      try {
-        const params = new URLSearchParams({ limit: '1', skip: String(limit) });
-        if (studentId) params.set('student_id', studentId);
-        const probe = await api.get(`/procedures/recent-activity?${params.toString()}`);
-        setHasMore((probe.data.activities || []).length > 0);
-      } catch { setHasMore(false); }
+      const params = new URLSearchParams({ limit: String(MAX_ROWS), skip: '0' });
+      if (studentId) params.set('student_id', studentId);
+      const res = await api.get(`/procedures/recent-activity?${params.toString()}`);
+      const since = Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
+      setItems((res.data.activities || []).filter((a: ActivityEntry) => {
+        if (typeof a.new_value === 'object' && a.new_value !== null) return false;
+        const t = new Date(a.edited_at).getTime();
+        return !isNaN(t) && t >= since;
+      }));
     } catch (e) {
       setItems([]);
-      setHasMore(false);
     } finally {
       setLoading(false);
     }
-  }, [fetchPage, limit, studentId]);
-
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const next = await fetchPage(items.length);
-      setItems(prev => [...prev, ...next]);
-      // probe next page
-      try {
-        const params = new URLSearchParams({ limit: '1', skip: String(items.length + next.length) });
-        if (studentId) params.set('student_id', studentId);
-        const probe = await api.get(`/procedures/recent-activity?${params.toString()}`);
-        setHasMore((probe.data.activities || []).length > 0);
-      } catch { setHasMore(false); }
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [fetchPage, items.length, hasMore, loadingMore, studentId]);
+  }, [studentId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const shown = expanded ? items : items.slice(0, limit);
+  const canToggle = items.length > limit;
 
   return (
     <View style={styles.section} data-testid="recent-activity-widget">
@@ -109,11 +88,11 @@ export function RecentActivityWidget({ router, limit = 5, studentId }: { router:
         ) : items.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="time-outline" size={28} color="#CFD8DC" />
-            <Text style={styles.emptyText}>No recent edits yet.</Text>
+            <Text style={styles.emptyText}>No edits in the last 30 days.</Text>
             <Text style={styles.emptySubtext}>When you or your team edit any case, recent changes will appear here.</Text>
           </View>
         ) : (
-          items.map((a, idx) => {
+          shown.map((a, idx) => {
             const who = a.edited_by;
             const roleShort = a.edited_by_role === 'implant_incharge' ? 'In-Charge'
               : a.edited_by_role === 'supervisor' ? 'Supervisor'
@@ -125,7 +104,7 @@ export function RecentActivityWidget({ router, limit = 5, studentId }: { router:
             return (
               <TouchableOpacity
                 key={`${a.procedure_id}-${idx}`}
-                style={[styles.row, idx === items.length - 1 && { borderBottomWidth: 0 }]}
+                style={[styles.row, idx === shown.length - 1 && { borderBottomWidth: 0 }]}
                 onPress={() => router.push(`/procedures/${a.procedure_id}`)}
                 activeOpacity={0.7}
                 data-testid={`recent-activity-row-${idx}`}
@@ -150,21 +129,14 @@ export function RecentActivityWidget({ router, limit = 5, studentId }: { router:
             );
           })
         )}
-        {!loading && hasMore && (
+        {!loading && canToggle && (
           <TouchableOpacity
             style={styles.showMoreBtn}
-            onPress={loadMore}
-            disabled={loadingMore}
-            data-testid="recent-activity-show-more"
+            onPress={() => setExpanded(e => !e)}
+            data-testid={expanded ? 'recent-activity-collapse' : 'recent-activity-expand'}
           >
-            {loadingMore ? (
-              <ActivityIndicator size="small" color="#1A73E8" />
-            ) : (
-              <>
-                <Ionicons name="chevron-down" size={14} color="#1A73E8" />
-                <Text style={styles.showMoreText}>Show more</Text>
-              </>
-            )}
+            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color="#1A73E8" />
+            <Text style={styles.showMoreText}>{expanded ? 'Collapse' : `Expand (${items.length})`}</Text>
           </TouchableOpacity>
         )}
       </View>

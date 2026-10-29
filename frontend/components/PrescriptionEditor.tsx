@@ -63,6 +63,8 @@ export default function PrescriptionEditor({
   const [allergies, setAllergies] = useState(rx.allergies || '');
   const [advice, setAdvice] = useState(rx.advice || '');
   const [rxDate, setRxDate] = useState<string>(rx.prescribed_date || todayIST());
+  // Collapsed on the case page (it's long); open while filling the New Case form.
+  const [open, setOpen] = useState(!!local);
   const [saving, setSaving] = useState(false);
   const [showPad, setShowPad] = useState(false);
   const [sigStrokes, setSigStrokes] = useState<number[][][]>([]);
@@ -92,6 +94,7 @@ export default function PrescriptionEditor({
   }, [drugs, diagnosis, allergies, advice, rxDate]);
 
   const hasNamedDrugs = drugs.some(d => (d.name || '').trim());
+  const namedCount = drugs.filter(d => (d.name || '').trim()).length;
   useEffect(() => {
     onStateChange?.({ hasDrugs: hasNamedDrugs, creatorSigned: !!(rx.signatures?.creator) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,7 +182,7 @@ export default function PrescriptionEditor({
 
   return (
     <View style={s.card} testID={preop ? 'preop-prescription-section' : 'prescription-section'} data-testid={preop ? 'preop-prescription-section' : 'prescription-section'}>
-      <View style={s.header}>
+      <TouchableOpacity style={s.header} onPress={() => setOpen(o => !o)} activeOpacity={0.7} testID="rx-toggle">
         <Ionicons name="medkit" size={20} color="#00897B" />
         <Text style={s.title}>{preop ? 'Pre-operative Prescription' : 'Prescription (Rx)'}</Text>
         {sm && (
@@ -187,7 +190,14 @@ export default function PrescriptionEditor({
             <Text style={[s.statusTxt, { color: sm.fg }]}>{sm.label}</Text>
           </View>
         )}
-      </View>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#64748B" />
+      </TouchableOpacity>
+
+      {!open ? (
+        <Text style={s.collapsedLine}>
+          {namedCount ? `${namedCount} medicine${namedCount === 1 ? '' : 's'}` : 'No medicines added'} · tap to {canEdit ? 'view or edit' : 'view'}
+        </Text>
+      ) : (<>
 
       <Text style={s.patientLine}>
         {procedure?.patient_name || '—'} · {procedure?.age ? `${procedure.age} yrs` : 'age —'} · {procedure?.sex || '—'}
@@ -411,6 +421,7 @@ export default function PrescriptionEditor({
       {approved && (
         <Text style={s.lockedNote}>Approved & locked with Phase {preop ? 1 : 2}. Faculty can reopen to make corrections.</Text>
       )}
+      </>)}
     </View>
   );
 }
@@ -420,6 +431,7 @@ const canReopenHelper = (isFaculty: boolean, approved: boolean) => isFaculty && 
 const s = StyleSheet.create({
   card: { backgroundColor: '#FFF', borderRadius: 14, padding: 16, marginBottom: 16, borderLeftWidth: 4, borderLeftColor: '#00897B', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 2 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  collapsedLine: { fontSize: 12, color: '#64748B', marginTop: 6 },
   title: { fontSize: 16, fontWeight: '700', color: '#00695C', flex: 1 },
   statusPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999 },
   statusTxt: { fontSize: 11, fontWeight: '700' },

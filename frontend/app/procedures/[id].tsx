@@ -2020,14 +2020,16 @@ export default function ProcedureDetailScreen() {
         {/* KeyboardAvoidingView so inline inputs (approval/rejection comments,
           field edits) aren't hidden behind the keyboard — the comment box sits
           near the bottom of a long scroll and was fully covered on phones. */}
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
+        {/* iOS: the ScrollView insets itself for the keyboard
+          (automaticallyAdjustKeyboardInsets) instead of KeyboardAvoidingView
+          padding, which resized the page under the scroll and made it bounce. */}
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={undefined}>
           <ScrollView
             ref={mainScrollRef}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"}
           >
             {/* Pre-Op Augmentation Checklist (iter-136) — auto-derived rule-based
             augmentation/grafting plan items. Hidden on completed cases (already

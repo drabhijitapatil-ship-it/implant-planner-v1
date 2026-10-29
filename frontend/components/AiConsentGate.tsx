@@ -16,7 +16,7 @@ import api, { setOnAiConsentRequired } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 
 export const AI_PROVIDERS_TEXT =
-  'Anthropic (Claude) — chat, case summaries, explanations and notes\nOpenAI (GPT) — radiograph comparison notes';
+  'Third-party AI service providers — chat, case summaries, explanations, notes and radiograph comparison notes';
 
 export async function saveAiConsent(granted: boolean) {
   await api.post('/ai/consent', { granted });

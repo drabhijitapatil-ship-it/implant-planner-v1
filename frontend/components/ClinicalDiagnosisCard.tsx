@@ -183,6 +183,9 @@ export default function ClinicalDiagnosisCard({ procedureId, initial, autoGenera
               value={text}
               onChangeText={t => { setText(t); dirty.current = true; }}
               multiline
+              // Capped height + inner scroll: a box that grows with the text
+              // made the page jump back to the cursor on every scroll.
+              scrollEnabled
               textAlignVertical="top"
               placeholder="Diagnosis text"
               testID="dx-text-input" data-testid="dx-text-input"
@@ -239,7 +242,7 @@ const styles = StyleSheet.create({
   gapText: { fontSize: 12, color: '#78909C', lineHeight: 17 },
   textHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
   editedTag: { fontSize: 11, color: '#EF6C00', fontWeight: '600' },
-  input: { borderWidth: 1, borderColor: '#B0BEC5', borderRadius: 10, padding: 12, minHeight: 220, fontSize: 13, lineHeight: 19, color: '#263238', backgroundColor: '#FAFBFD' },
+  input: { borderWidth: 1, borderColor: '#B0BEC5', borderRadius: 10, padding: 12, minHeight: 220, maxHeight: 320, fontSize: 13, lineHeight: 19, color: '#263238', backgroundColor: '#FAFBFD' },
   readText: { fontSize: 13, lineHeight: 19, color: '#263238', backgroundColor: '#FAFBFD', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#ECEFF1' },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 10 },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1565C0', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, minHeight: 44 },

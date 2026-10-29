@@ -93,7 +93,7 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="10. Third-party services">
-          The Service integrates with Google Workspace SMTP, Stripe, Twilio / MSG91, Apple APNs, Google FCM, OpenAI / Anthropic / Google LLMs, App Store and Play Store. We are not responsible for their availability, accuracy, or content. Your use is subject to their own terms and privacy policies.
+          The Service integrates with Google Workspace SMTP, Stripe, Twilio / MSG91, Apple APNs, Google FCM, third-party AI service providers, App Store and Play Store. We are not responsible for their availability, accuracy, or content. Your use is subject to their own terms and privacy policies.
         </Section>
 
         <Section title="11. Service levels & support">

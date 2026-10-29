@@ -69,7 +69,7 @@ export default function PrivacyPolicyScreen() {
           • Legal & regulatory compliance (subpoenas, tax filing, medical record retention).{"\n"}
           • Billing, payments, and GST invoicing.{"\n"}
           • Marketing communications (only with your consent; you can opt out anytime).{"\n\n"}
-          We do NOT use Clinical Content (PHI) to train any AI model. AI features run only after you allow them, and are request-by-request calls to Anthropic and OpenAI — see section 8.
+          We do NOT use Clinical Content (PHI) to train any AI model. AI features run only after you allow them, and are request-by-request calls to third-party AI service providers — see section 8.
         </Section>
 
         <Section title="6. Sharing & sub-processors">
@@ -80,7 +80,7 @@ export default function PrivacyPolicyScreen() {
           • Google Workspace SMTP — transactional email{"\n"}
           • Twilio Verify / MSG91 — mobile-OTP{"\n"}
           • Stripe — payments & subscriptions{"\n"}
-          • Anthropic (Claude) and OpenAI (GPT) — AI features, only with your consent; patient identifiers removed (see section 8){"\n"}
+          • Third-party AI service providers — AI features, only with your consent; patient identifiers removed (see section 8){"\n"}
           • Apple APNs, Google FCM — push notifications{"\n"}
           • Sentry — crash & error monitoring{"\n"}
           • Expo Application Services — mobile build & OTA delivery{"\n\n"}
@@ -100,8 +100,7 @@ export default function PrivacyPolicyScreen() {
           • Radiograph images, only when you use radiograph comparison{"\n\n"}
           What is NOT sent: patient identifiers. Before any request leaves our servers we remove the patient's name, phone number, email address, date of birth and address. We also never send your password or payment details.{"\n\n"}
           Who receives it:{"\n"}
-          • Anthropic, PBC (Claude) — assistant, chat, summaries, notes and explanations{"\n"}
-          • OpenAI, L.L.C. (GPT) — radiograph comparison notes{"\n\n"}
+          • Third-party AI service providers, under commercial API terms — assistant, chat, summaries, notes, explanations and radiograph comparison notes{"\n\n"}
           How they protect it: data is sent over encrypted connections under each provider's commercial API terms. The providers process it only to return the AI response, do not use it to train their models, and keep it only for a limited period for abuse and safety monitoring. These protections are equal to or stronger than our own.{"\n\n"}
           Why: to generate the summaries, answers, explanations and draft notes you ask for. AI output is clinical decision support only and is not a substitute for professional judgment.
         </Section>

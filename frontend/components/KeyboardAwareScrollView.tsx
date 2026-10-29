@@ -44,7 +44,7 @@ type Props = ScrollViewProps & {
 const DEFAULT_OFFSET = 24;
 
 const KeyboardAwareScrollView = forwardRef<RNScrollView, Props>(function KeyboardAwareScrollView(
-  { keyboardAware = true, keyboardBottomOffset = DEFAULT_OFFSET, children, onScroll, onLayout, onTouchEnd, ...rest },
+  { keyboardAware = true, keyboardBottomOffset = DEFAULT_OFFSET, children, onScroll, onLayout, onTouchStart, onTouchEnd, onScrollBeginDrag, ...rest },
   ref,
 ) {
   const scrollRef = useRef<RNScrollView>(null);
@@ -57,6 +57,8 @@ const KeyboardAwareScrollView = forwardRef<RNScrollView, Props>(function Keyboar
   const kbTopRef = useRef(0);
   const offsetY = useRef(0);
   const viewHeight = useRef(0);
+  // True once the current touch turned into a scroll drag.
+  const dragged = useRef(false);
 
   // Scroll so the currently-focused input (if it lives inside this
   // ScrollView) sits above the keyboard. Silently does nothing otherwise.
@@ -137,10 +139,26 @@ const KeyboardAwareScrollView = forwardRef<RNScrollView, Props>(function Keyboar
     [onLayout],
   );
   // Tapping another field while the keyboard is already open doesn't fire a
-  // new keyboard-show event, so re-check after any touch inside the list.
+  // new keyboard-show event, so re-check after a tap inside the list. Not
+  // after a scroll drag: that snapped the page back to the focused input
+  // whenever the user tried to scroll away from it.
+  const handleTouchStart = useCallback(
+    (e: any) => {
+      dragged.current = false;
+      onTouchStart?.(e);
+    },
+    [onTouchStart],
+  );
+  const handleScrollBeginDrag = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      dragged.current = true;
+      onScrollBeginDrag?.(e);
+    },
+    [onScrollBeginDrag],
+  );
   const handleTouchEnd = useCallback(
     (e: any) => {
-      if (kbHeightRef.current) setTimeout(revealFocusedInput, 120);
+      if (kbHeightRef.current && !dragged.current) setTimeout(revealFocusedInput, 120);
       onTouchEnd?.(e);
     },
     [onTouchEnd, revealFocusedInput],
@@ -148,7 +166,15 @@ const KeyboardAwareScrollView = forwardRef<RNScrollView, Props>(function Keyboar
 
   if (!enabled) {
     return (
-      <RNScrollView ref={scrollRef} onScroll={onScroll} onLayout={onLayout} onTouchEnd={onTouchEnd} {...rest}>
+      <RNScrollView
+        ref={scrollRef}
+        onScroll={onScroll}
+        onLayout={onLayout}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onScrollBeginDrag={onScrollBeginDrag}
+        {...rest}
+      >
         {children}
       </RNScrollView>
     );
@@ -163,7 +189,9 @@ const KeyboardAwareScrollView = forwardRef<RNScrollView, Props>(function Keyboar
       {...rest}
       onScroll={handleScroll}
       onLayout={handleLayout}
+      onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
+      onScrollBeginDrag={handleScrollBeginDrag}
     >
       {children}
       {/* Android: room to scroll the last inputs above the keyboard. iOS gets

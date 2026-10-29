@@ -119,6 +119,13 @@ function needsMyApproval(p: any, userId?: string | null): boolean {
   return (isSup && !supDone) || (isInc && !incDone);
 }
 
+// A draft belongs on Home only for the person who created it.
+function isMyDraft(p: any, userId?: string | null): boolean {
+  if (p.status !== "draft" || !userId) return false;
+  const owner = p.created_by_id || p.student_id;
+  return String(owner || "") === String(userId);
+}
+
 function getPhaseFromStatus(status: string): number {
   if (["draft", "pending_phase1"].includes(status)) return 1;
   if (["phase1_approved", "pending_phase2"].includes(status)) return 2;
@@ -1084,9 +1091,11 @@ function SupervisorDashboard({
       ),
     [procedures, userId],
   );
+  // Only this user's own drafts. A Phase 1 "reject with reconsideration"
+  // sends the student's case back to draft, and it must not land here.
   const draftCases = useMemo(
-    () => procedures.filter((p: any) => p.status === "draft"),
-    [procedures],
+    () => procedures.filter((p: any) => isMyDraft(p, userId)),
+    [procedures, userId],
   );
 
   const pipeline = stats.pipeline || {};
@@ -1492,12 +1501,13 @@ function InChargeDashboard({
     (pipeline.completed || 0);
   const studentStats = stats.student_stats || [];
 
+  const { user: me } = useAuth();
+  // Only this user's own drafts (see SupervisorDashboard).
   const draftCases = useMemo(
-    () => procedures.filter((p: any) => p.status === "draft"),
-    [procedures],
+    () => procedures.filter((p: any) => isMyDraft(p, me?.id)),
+    [procedures, me?.id],
   );
 
-  const { user: me } = useAuth();
   const myId = me?.id;
   const pendingApproval = useMemo(
     () => procedures.filter((p: any) => needsMyApproval(p, myId)),

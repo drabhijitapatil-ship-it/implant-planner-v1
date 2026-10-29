@@ -614,7 +614,7 @@ export default function ProfileScreen() {
               <Text style={styles.photoButtonText}>AI features</Text>
               <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
                 {user?.ai_consent
-                  ? 'On — de-identified case data is sent to Anthropic / OpenAI for AI answers'
+                  ? 'On — de-identified case data is used for AI answers'
                   : 'Off — no data is sent to AI providers'}
               </Text>
             </View>
