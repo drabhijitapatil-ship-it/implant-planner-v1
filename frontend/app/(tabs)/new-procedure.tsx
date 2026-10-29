@@ -1854,13 +1854,16 @@ export default function NewProcedureScreen() {
       try {
         const res = await api.get("/users");
         const users = res.data || [];
+        // Clinic orgs store their own role names (dentist / chief_dentist).
+        const roleOf = (u: any) =>
+          ({ chief_dentist: "implant_incharge", dentist: "supervisor" } as Record<string, string>)[u.role] || u.role;
+        const active = users.filter((u: any) => !u.disabled);
         setSupervisors(
-          users.filter(
-            (u: any) =>
-              u.role === "supervisor" || u.role === "implant_incharge",
+          active.filter((u: any) =>
+            ["supervisor", "implant_incharge"].includes(roleOf(u)),
           ),
         );
-        setIncharges(users.filter((u: any) => u.role === "implant_incharge"));
+        setIncharges(active.filter((u: any) => roleOf(u) === "implant_incharge"));
       } catch (e) {
         /* ignore */
       }
@@ -4220,6 +4223,11 @@ export default function NewProcedureScreen() {
                     style={styles.dropdownList}
                     nestedScrollEnabled={true}
                   >
+                    {supervisors.length === 0 && (
+                      <Text style={{ padding: 12, fontSize: 13, color: "#78909C" }}>
+                        No supervisors found for your department. Please ask your Implant In-Charge or admin to add one.
+                      </Text>
+                    )}
                     {supervisors.map((s) => (
                       <TouchableOpacity
                         key={s._id || s.id}
@@ -4264,6 +4272,11 @@ export default function NewProcedureScreen() {
                   style={styles.dropdownList}
                   nestedScrollEnabled={true}
                 >
+                  {incharges.length === 0 && (
+                    <Text style={{ padding: 12, fontSize: 13, color: "#78909C" }}>
+                      No Implant In-Charges found for your department. Please ask your Implant In-Charge or admin to add one.
+                    </Text>
+                  )}
                   {incharges.map((s) => (
                     <TouchableOpacity
                       key={s._id || s.id}

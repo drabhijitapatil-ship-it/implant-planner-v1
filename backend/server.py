@@ -2585,6 +2585,13 @@ async def check_user_email(email: str, current_user: dict = Depends(get_current_
 @api_router.get("/users")
 async def get_users(role: Optional[str] = None, is_admin: Optional[bool] = None, current_user: dict = Depends(get_current_user)):
     query = {} if current_user.get("is_super_admin") else _dept_scope_query(current_user)
+    # A department-scoped caller also sees people who belong to the department
+    # as an additional one (multi-department supervisors / In-Charges), not
+    # only those whose main department it is — otherwise the Supervisor and
+    # In-Charge pickers come up empty.
+    if "department_id" in query:
+        dept = query.pop("department_id")
+        query["$or"] = [{"department_id": dept}, {"department_ids": dept}]
     if role:
         query["role"] = role
     if is_admin is not None:
