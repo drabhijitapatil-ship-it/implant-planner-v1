@@ -22029,6 +22029,9 @@ async def _incharge_department_snapshot(current_user: dict) -> List[Dict[str, An
                 "department_id": d,
                 "department_name": dept_names.get(d),
                 "department_color": dept_colors.get(d),
+                # Per-department case count, so totals across In-Charges can
+                # count each department once (several In-Charges share one).
+                "total": stats["total"],
             })
         decided = completed + rejected
         incharge_stats.append({
@@ -27414,37 +27417,34 @@ async def _get_user_primary_case_context(user_id: str) -> dict:
 
 
 async def _pick_daily_tip_for_user(user_id: str, context: dict | None = None) -> tuple[dict, str | None]:
-    now = datetime.now(timezone.utc)
-    cutoff_180 = (now - timedelta(days=180)).isoformat()
-    cutoff_7 = (now - timedelta(days=7)).isoformat()
-    history_180 = await db.tip_history.find({
-        "user_id": user_id, "shown_at": {"$gte": cutoff_180},
-    }).to_list(length=1000)
-    recent_tip_ids = {h.get("tip_id") for h in history_180 if h.get("tip_id")}
-    cat_counts: dict = {}
-    for h in history_180:
-        if h.get("shown_at", "") < cutoff_7:
-            continue
-        c = h.get("category")
-        if c:
-            cat_counts[c] = cat_counts.get(c, 0) + 1
-    blocked_categories = {c for c, n in cat_counts.items() if n >= 2}
-    candidates = await db.tips.find(
-        {"active": True, "tip_id": {"$nin": list(recent_tip_ids)}},
-        {"_id": 0},
-    ).to_list(length=2000)
-    pool = [t for t in candidates if t.get("category") not in blocked_categories]
-    if not pool:
-        pool = candidates
-    if not pool:
-        all_tips = await db.tips.find({"active": True}, {"_id": 0}).to_list(length=2000)
-        if not all_tips:
-            return {}, None
-        ages = {t["tip_id"]: "0000-00-00" for t in all_tips}
-        for h in history_180:
-            ages[h.get("tip_id", "")] = max(ages.get(h.get("tip_id", ""), ""), h.get("shown_at", ""))
-        all_tips.sort(key=lambda t: ages.get(t["tip_id"], ""))
-        return all_tips[0], None
+    """Daily shuffle across the whole active library. The tips shown most
+    recently (half the library) are held back, every other tip is equally
+    likely, and the same category never shows two days running while another
+    is available — so newly added tips mix in with the older ones instead of
+    crowding them out."""
+    import random
+    all_tips = await db.tips.find({"active": True}, {"_id": 0}).to_list(length=2000)
+    if not all_tips:
+        return {}, None
+    active_ids = {t["tip_id"] for t in all_tips}
+    history = await db.tip_history.find(
+        {"user_id": user_id}, {"_id": 0, "tip_id": 1, "category": 1, "shown_at": 1},
+    ).sort("shown_at", -1).to_list(length=2000)
+
+    hold_back = len(active_ids) // 2
+    recent: set = set()
+    for h in history:
+        if len(recent) >= hold_back:
+            break
+        if h.get("tip_id") in active_ids:
+            recent.add(h["tip_id"])
+    pool = [t for t in all_tips if t["tip_id"] not in recent] or all_tips
+
+    last_cat = history[0].get("category") if history else None
+    varied = [t for t in pool if t.get("category") != last_cat]
+    if varied:
+        pool = varied
+
     preferred_cats: list[str] = []
     rationale: str | None = None
     if context:
@@ -27466,11 +27466,17 @@ async def _pick_daily_tip_for_user(user_id: str, context: dict | None = None) ->
         elif context.get("phase") == "restoration":
             preferred_cats.extend(["Prosthetic", "Occlusion"])
             rationale = rationale or "Surfaced because your active case is in the restorative phase."
-    import random
+    # Light nudge only, so case-relevant tips show up more often without
+    # taking over the daily mix.
     biased = [t for t in pool if t.get("category") in preferred_cats] if preferred_cats else []
-    if biased and random.random() < 0.7:
+    if biased and random.random() < 0.3:
         return random.choice(biased), rationale
-    return random.choice(pool), None
+    # Category first, then a tip in it: every topic gets an equal share of
+    # days, however many tips it holds.
+    by_cat: dict = {}
+    for t in pool:
+        by_cat.setdefault(t.get("category"), []).append(t)
+    return random.choice(by_cat[random.choice(list(by_cat))]), None
 
 
 async def _compute_tip_streak(user_id: str) -> dict:

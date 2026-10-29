@@ -4934,6 +4934,46 @@ export default function ProcedureDetailScreen() {
                           label="Registration Number"
                           value={procedure.registration_number}
                         />
+                        {!!(procedure.age || procedure.sex) && (
+                          <InfoRow
+                            icon="person-outline"
+                            label="Age / Sex"
+                            value={[procedure.age, procedure.sex].filter(Boolean).join(" / ")}
+                            readOnly
+                          />
+                        )}
+                        {!!procedure.profession && (
+                          <InfoRow
+                            icon="briefcase-outline"
+                            label="Profession"
+                            value={procedure.profession}
+                            readOnly
+                          />
+                        )}
+                        {!!procedure.mobile_number && (
+                          <InfoRow
+                            icon="call-outline"
+                            label="Mobile Number"
+                            value={procedure.mobile_number}
+                            readOnly
+                          />
+                        )}
+                        {!!procedure.patient_email && (
+                          <InfoRow
+                            icon="mail-outline"
+                            label="Email"
+                            value={procedure.patient_email}
+                            readOnly
+                          />
+                        )}
+                        {!!procedure.chief_complaint && (
+                          <InfoRow
+                            icon="chatbox-ellipses-outline"
+                            label="Chief Complaint"
+                            value={procedure.chief_complaint}
+                            readOnly
+                          />
+                        )}
                         <InfoRow
                           icon="medical"
                           label="Implant Site"
@@ -5165,6 +5205,20 @@ export default function ProcedureDetailScreen() {
                         procedure={procedure}
                         onChanged={loadProcedure}
                       />
+
+                      <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Payment</Text>
+                        <InfoRow
+                          icon="receipt"
+                          label="Receipt Number"
+                          value={procedure.receipt_number}
+                        />
+                        <InfoRow
+                          icon="cash"
+                          label="Amount Paid"
+                          value={`₹${procedure.amount_paid}`}
+                        />
+                      </View>
 
                       <View style={styles.section}>
                         <View style={resStyles.sectionHeaderRow}>
@@ -6531,6 +6585,235 @@ export default function ProcedureDetailScreen() {
                         );
                       })()}
 
+                      {procedure.ios_file && (
+                        <View
+                          style={styles.section}
+                          data-testid="ios-file-section"
+                        >
+                          <Text style={styles.sectionTitle}>
+                            IOS or Intra-oral Photos
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.cbctFileRow}
+                            onPress={async () => {
+                              try {
+                                const fileUrl = await mintFileToken(
+                                  procedure.ios_file,
+                                );
+                                await openDocument(fileUrl, procedure.ios_file);
+                              } catch (e) {
+                                Alert.alert("Error", "Could not open file");
+                              }
+                            }}
+                            data-testid="ios-file-download"
+                          >
+                            <Ionicons name="camera" size={22} color="#007AFF" />
+                            <Text style={styles.cbctFileName} numberOfLines={1}>
+                              {procedure.ios_original_name ||
+                                "Intra-oral Photo"}
+                            </Text>
+                            <Ionicons
+                              name="download-outline"
+                              size={20}
+                              color="#007AFF"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      )}
+
+                      {/* CBCT Reports - Thumbnails */}
+                      {(procedure.cbct_files?.length > 0 ||
+                        procedure.cbct_file) && (
+                        <View
+                          style={styles.section}
+                          data-testid="cbct-file-section"
+                        >
+                          <Text style={styles.sectionTitle}>CBCT Reports</Text>
+                          {procedure.cbct_files?.length > 0 ? (
+                            procedure.cbct_files.map((f: any, idx: number) => {
+                              const fileUrl = cbctToken
+                                ? cbctFileUrl(cbctToken, f.filename)
+                                : "";
+                              const isImage =
+                                f.filename?.match(/\.(png|jpg|jpeg)$/i);
+                              return (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    marginBottom: 10,
+                                    gap: 10,
+                                    backgroundColor: "#E3F2FD",
+                                    padding: 8,
+                                    borderRadius: 10,
+                                  }}
+                                  data-testid={`cbct-thumb-${idx}`}
+                                >
+                                  {isImage && fileUrl ? (
+                                    <Image
+                                      source={{ uri: fileUrl }}
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: "#90CAF9",
+                                      }}
+                                      resizeMode="cover"
+                                    />
+                                  ) : (
+                                    <View
+                                      style={{
+                                        width: 50,
+                                        height: 50,
+                                        borderRadius: 8,
+                                        backgroundColor: "#BBDEFB",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name="document-attach"
+                                        size={24}
+                                        color="#1565C0"
+                                      />
+                                    </View>
+                                  )}
+                                  <View style={{ flex: 1 }}>
+                                    <Text
+                                      style={{
+                                        fontSize: 13,
+                                        fontWeight: "700",
+                                        color: "#333",
+                                      }}
+                                    >
+                                      CBCT Report {idx + 1}
+                                    </Text>
+                                    <Text
+                                      style={{ fontSize: 11, color: "#888" }}
+                                      numberOfLines={1}
+                                    >
+                                      {f.original_name}
+                                    </Text>
+                                  </View>
+                                  <TouchableOpacity
+                                    style={{
+                                      backgroundColor: "#4CAF50",
+                                      borderRadius: 8,
+                                      paddingVertical: 6,
+                                      paddingHorizontal: 12,
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 4,
+                                    }}
+                                    onPress={async () => {
+                                      try {
+                                        const t =
+                                          cbctToken ||
+                                          (await mintCbctToken(id as string));
+                                        if (!cbctToken) setCbctToken(t);
+                                        await Linking.openURL(
+                                          cbctViewUrl(t, f.filename),
+                                        );
+                                      } catch {
+                                        Alert.alert(
+                                          "Error",
+                                          "Could not open file",
+                                        );
+                                      }
+                                    }}
+                                    data-testid={`view-cbct-detail-${idx}`}
+                                  >
+                                    <Ionicons
+                                      name="open-outline"
+                                      size={14}
+                                      color="#FFF"
+                                    />
+                                    <Text
+                                      style={{
+                                        color: "#FFF",
+                                        fontSize: 12,
+                                        fontWeight: "700",
+                                      }}
+                                    >
+                                      View
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                              );
+                            })
+                          ) : (
+                            <TouchableOpacity
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 8,
+                                backgroundColor: "#4CAF50",
+                                borderRadius: 10,
+                                paddingVertical: 14,
+                                paddingHorizontal: 20,
+                              }}
+                              onPress={async () => {
+                                try {
+                                  const t =
+                                    cbctToken ||
+                                    (await mintCbctToken(id as string));
+                                  if (!cbctToken) setCbctToken(t);
+                                  await Linking.openURL(
+                                    cbctViewUrl(t, procedure.cbct_file),
+                                  );
+                                } catch (e) {
+                                  Alert.alert("Error", "Could not open file");
+                                }
+                              }}
+                              data-testid="cbct-file-download"
+                            >
+                              <Ionicons
+                                name="document-attach"
+                                size={20}
+                                color="#FFF"
+                              />
+                              <Text
+                                style={{
+                                  color: "#FFF",
+                                  fontSize: 15,
+                                  fontWeight: "700",
+                                  flex: 1,
+                                }}
+                              >
+                                View CBCT Report
+                              </Text>
+                              <Ionicons
+                                name="open-outline"
+                                size={18}
+                                color="#FFF"
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Patient Intra-oral Photograph Section — visible to student,
+                supervisor, in-charge, administrator (same as CBCT). Renders
+                as a list with thumbnails. Slot labels come from the Phase-1
+                upload (Occlusal, Lateral/Frontal, or extras). */}
+                      <IntraoralPhotoCard
+                        photos={procedure.intraoral_photos}
+                        authToken={authToken}
+                      />
+
+                      {/* Phase 1 Pre-Surgical Checklist — shown right after Phase 1 data */}
+                      {procedure.checklist?.pre_surgical && (
+                        <>
+                          {renderChecklistSection(
+                            "pre_surgical",
+                            "Phase 1: Pre-Surgical Protocol",
+                          )}
+                        </>
+                      )}
+
                       {/* Medical Assessment */}
                       {procedure.medical_assessment &&
                         Object.keys(procedure.medical_assessment).length >
@@ -7277,9 +7560,14 @@ export default function ProcedureDetailScreen() {
                           </View>
                         )}
 
-                      {/* Pre-operative Prescription (Phase 1) — after Medical Assessment / ASA */}
+                      {/* Pre-operative Prescription (Phase 1) — after Medical Assessment / ASA.
+                          Also offered while Phase 1 is open, so it can be added to cases
+                          created without it; the editor hides itself from non-editors. */}
                       {(procedure.preop_prescription_required ||
-                        (procedure.preop_prescription?.drugs || []).length > 0) && (
+                        (procedure.preop_prescription?.drugs || []).length > 0 ||
+                        ["draft", "pending_phase1", "rejected_phase1"].includes(
+                          procedure.status,
+                        )) && (
                         <PrescriptionEditor
                           kind="preop"
                           procedure={procedure}
@@ -7287,19 +7575,16 @@ export default function ProcedureDetailScreen() {
                         />
                       )}
 
-                      <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Payment</Text>
-                        <InfoRow
-                          icon="receipt"
-                          label="Receipt Number"
-                          value={procedure.receipt_number}
-                        />
-                        <InfoRow
-                          icon="cash"
-                          label="Amount Paid"
-                          value={`₹${procedure.amount_paid}`}
-                        />
-                      </View>
+                      {procedure.bone_graft_specifications && (
+                        <View style={styles.section}>
+                          <Text style={styles.sectionTitle}>
+                            Bone Graft/Membrane
+                          </Text>
+                          <Text style={styles.specText}>
+                            {procedure.bone_graft_specifications}
+                          </Text>
+                        </View>
+                      )}
 
                       {(procedure.implant_region ||
                         procedure.implant_company) && (
@@ -7323,17 +7608,6 @@ export default function ProcedureDetailScreen() {
                               </Text>
                             </View>
                           )}
-                        </View>
-                      )}
-
-                      {procedure.bone_graft_specifications && (
-                        <View style={styles.section}>
-                          <Text style={styles.sectionTitle}>
-                            Bone Graft/Membrane
-                          </Text>
-                          <Text style={styles.specText}>
-                            {procedure.bone_graft_specifications}
-                          </Text>
                         </View>
                       )}
 
@@ -7562,225 +7836,77 @@ export default function ProcedureDetailScreen() {
                         </View>
                       )}
 
-                      {procedure.ios_file && (
-                        <View
-                          style={styles.section}
-                          data-testid="ios-file-section"
-                        >
-                          <Text style={styles.sectionTitle}>
-                            IOS or Intra-oral Photos
-                          </Text>
-                          <TouchableOpacity
-                            style={styles.cbctFileRow}
-                            onPress={async () => {
-                              try {
-                                const fileUrl = await mintFileToken(
-                                  procedure.ios_file,
-                                );
-                                await openDocument(fileUrl, procedure.ios_file);
-                              } catch (e) {
-                                Alert.alert("Error", "Could not open file");
-                              }
-                            }}
-                            data-testid="ios-file-download"
-                          >
-                            <Ionicons name="camera" size={22} color="#007AFF" />
-                            <Text style={styles.cbctFileName} numberOfLines={1}>
-                              {procedure.ios_original_name ||
-                                "Intra-oral Photo"}
-                            </Text>
-                            <Ionicons
-                              name="download-outline"
-                              size={20}
-                              color="#007AFF"
-                            />
-                          </TouchableOpacity>
-                        </View>
-                      )}
-
-                      {/* CBCT Reports - Thumbnails */}
-                      {(procedure.cbct_files?.length > 0 ||
-                        procedure.cbct_file) && (
-                        <View
-                          style={styles.section}
-                          data-testid="cbct-file-section"
-                        >
-                          <Text style={styles.sectionTitle}>CBCT Reports</Text>
-                          {procedure.cbct_files?.length > 0 ? (
-                            procedure.cbct_files.map((f: any, idx: number) => {
-                              const fileUrl = cbctToken
-                                ? cbctFileUrl(cbctToken, f.filename)
-                                : "";
-                              const isImage =
-                                f.filename?.match(/\.(png|jpg|jpeg)$/i);
-                              return (
-                                <View
-                                  key={idx}
-                                  style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    marginBottom: 10,
-                                    gap: 10,
-                                    backgroundColor: "#E3F2FD",
-                                    padding: 8,
-                                    borderRadius: 10,
-                                  }}
-                                  data-testid={`cbct-thumb-${idx}`}
-                                >
-                                  {isImage && fileUrl ? (
-                                    <Image
-                                      source={{ uri: fileUrl }}
-                                      style={{
-                                        width: 50,
-                                        height: 50,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: "#90CAF9",
-                                      }}
-                                      resizeMode="cover"
-                                    />
-                                  ) : (
-                                    <View
-                                      style={{
-                                        width: 50,
-                                        height: 50,
-                                        borderRadius: 8,
-                                        backgroundColor: "#BBDEFB",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                      }}
-                                    >
-                                      <Ionicons
-                                        name="document-attach"
-                                        size={24}
-                                        color="#1565C0"
-                                      />
-                                    </View>
-                                  )}
-                                  <View style={{ flex: 1 }}>
-                                    <Text
-                                      style={{
-                                        fontSize: 13,
-                                        fontWeight: "700",
-                                        color: "#333",
-                                      }}
-                                    >
-                                      CBCT Report {idx + 1}
-                                    </Text>
-                                    <Text
-                                      style={{ fontSize: 11, color: "#888" }}
-                                      numberOfLines={1}
-                                    >
-                                      {f.original_name}
-                                    </Text>
-                                  </View>
-                                  <TouchableOpacity
-                                    style={{
-                                      backgroundColor: "#4CAF50",
-                                      borderRadius: 8,
-                                      paddingVertical: 6,
-                                      paddingHorizontal: 12,
-                                      flexDirection: "row",
-                                      alignItems: "center",
-                                      gap: 4,
-                                    }}
-                                    onPress={async () => {
-                                      try {
-                                        const t =
-                                          cbctToken ||
-                                          (await mintCbctToken(id as string));
-                                        if (!cbctToken) setCbctToken(t);
-                                        await Linking.openURL(
-                                          cbctViewUrl(t, f.filename),
-                                        );
-                                      } catch {
-                                        Alert.alert(
-                                          "Error",
-                                          "Could not open file",
-                                        );
-                                      }
-                                    }}
-                                    data-testid={`view-cbct-detail-${idx}`}
-                                  >
-                                    <Ionicons
-                                      name="open-outline"
-                                      size={14}
-                                      color="#FFF"
-                                    />
-                                    <Text
-                                      style={{
-                                        color: "#FFF",
-                                        fontSize: 12,
-                                        fontWeight: "700",
-                                      }}
-                                    >
-                                      View
-                                    </Text>
-                                  </TouchableOpacity>
-                                </View>
-                              );
-                            })
-                          ) : (
-                            <TouchableOpacity
+                      {/* Implant Planning (Phase 1 Step 2) — placed in the order the student fills it in */}
+                      {procedure.status === "pending_phase1" &&
+                        procedure.case_origin !== "existing_implants" && (
+                          <View style={{ marginTop: 4 }}>
+                            <View
                               style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                gap: 8,
-                                backgroundColor: "#4CAF50",
-                                borderRadius: 10,
-                                paddingVertical: 14,
-                                paddingHorizontal: 20,
+                                backgroundColor: "#E3F2FD",
+                                padding: 12,
+                                marginBottom: 0,
                               }}
-                              onPress={async () => {
-                                try {
-                                  const t =
-                                    cbctToken ||
-                                    (await mintCbctToken(id as string));
-                                  if (!cbctToken) setCbctToken(t);
-                                  await Linking.openURL(
-                                    cbctViewUrl(t, procedure.cbct_file),
-                                  );
-                                } catch (e) {
-                                  Alert.alert("Error", "Could not open file");
-                                }
-                              }}
-                              data-testid="cbct-file-download"
                             >
-                              <Ionicons
-                                name="document-attach"
-                                size={20}
-                                color="#FFF"
-                              />
                               <Text
                                 style={{
-                                  color: "#FFF",
-                                  fontSize: 15,
+                                  fontSize: 14,
                                   fontWeight: "700",
-                                  flex: 1,
+                                  color: "#1565C0",
+                                  textAlign: "center",
                                 }}
                               >
-                                View CBCT Report
+                                Phase 1 Required: Complete Implant Planning Below
                               </Text>
-                              <Ionicons
-                                name="open-outline"
-                                size={18}
-                                color="#FFF"
-                              />
-                            </TouchableOpacity>
-                          )}
+                            </View>
+                            <CaseImplantPlanning
+                              procedureId={id as string}
+                              isOwner={
+                                user?.id === procedure.student_id ||
+                                user?.id === procedure.created_by_id
+                              }
+                              userRole={user?.role || ""}
+                              torqueValues={procedure.torque_values}
+                              procedureStatus={procedure.status}
+                              procedureType={procedure.implant_procedure_type}
+                              patientName={procedure.patient_name}
+                              patientId={procedure.patient_id}
+                              procedureDate={procedure.procedure_date}
+                              missingTeeth={procedure.missing_teeth}
+                            />
+                          </View>
+                        )}
+
+                      {/* Phase 1 Clinical Diagnosis (Atlas engine) — last item of Phase 1, right before Phase 2. Editable by creator, supervisor, in-charge */}
+                      {procedure.phase1_diagnosis?.text && (
+                        <View
+                          style={{ marginHorizontal: -4, marginBottom: 12 }}
+                          testID="dx-section"
+                          data-testid="dx-section"
+                        >
+                          <ClinicalDiagnosisCard
+                            procedureId={id as string}
+                            initial={procedure.phase1_diagnosis}
+                            autoGenerate={false}
+                            compact
+                            readOnly={
+                              procedure.status === "completed" ||
+                              !(
+                                user?.role === "implant_incharge" ||
+                                user?.role === "administrator" ||
+                                user?.id === procedure.student_id ||
+                                user?.id === procedure.created_by_id ||
+                                (user?.role === "supervisor" &&
+                                  user?.id === procedure.supervisor_id)
+                              )
+                            }
+                            onChange={(dx) =>
+                              setProcedure((p: any) =>
+                                p ? { ...p, phase1_diagnosis: dx } : p,
+                              )
+                            }
+                          />
                         </View>
                       )}
-
-                      {/* Patient Intra-oral Photograph Section — visible to student,
-                supervisor, in-charge, administrator (same as CBCT). Renders
-                as a list with thumbnails. Slot labels come from the Phase-1
-                upload (Occlusal, Lateral/Frontal, or extras). */}
-                      <IntraoralPhotoCard
-                        photos={procedure.intraoral_photos}
-                        authToken={authToken}
-                      />
-
                       {procedure.remark && (
                         <View style={styles.section}>
                           <Text style={styles.sectionTitle}>
@@ -7870,47 +7996,6 @@ export default function ProcedureDetailScreen() {
                         </View>
                       )}
 
-                      {/* Phase 1 Pre-Surgical Checklist — shown right after Phase 1 data */}
-                      {procedure.checklist?.pre_surgical && (
-                        <>
-                          {renderChecklistSection(
-                            "pre_surgical",
-                            "Phase 1: Pre-Surgical Protocol",
-                          )}
-                        </>
-                      )}
-
-                      {/* Phase 1 Clinical Diagnosis (Atlas engine) — last item of Phase 1, right before Phase 2. Editable by creator, supervisor, in-charge */}
-                      {procedure.phase1_diagnosis?.text && (
-                        <View
-                          style={{ marginHorizontal: -4, marginBottom: 12 }}
-                          testID="dx-section"
-                          data-testid="dx-section"
-                        >
-                          <ClinicalDiagnosisCard
-                            procedureId={id as string}
-                            initial={procedure.phase1_diagnosis}
-                            autoGenerate={false}
-                            compact
-                            readOnly={
-                              procedure.status === "completed" ||
-                              !(
-                                user?.role === "implant_incharge" ||
-                                user?.role === "administrator" ||
-                                user?.id === procedure.student_id ||
-                                user?.id === procedure.created_by_id ||
-                                (user?.role === "supervisor" &&
-                                  user?.id === procedure.supervisor_id)
-                              )
-                            }
-                            onChange={(dx) =>
-                              setProcedure((p: any) =>
-                                p ? { ...p, phase1_diagnosis: dx } : p,
-                              )
-                            }
-                          />
-                        </View>
-                      )}
                     </>
                   )}
                 </>
@@ -8019,132 +8104,6 @@ export default function ProcedureDetailScreen() {
                         color="#64748B"
                       />
                     </TouchableOpacity>
-
-                    {/* Prescription (Rx) — faculty review/correct & sign during Phase 2;
-                        creator/nurse can download the signed PDF once approved.
-                        Kept outside the accordion body so it stays visible. */}
-                    {(!!procedure.prescription?.drugs?.length ||
-                      procedure.status === "pending_phase2") && (
-                      <View style={{ marginHorizontal: 12 }}>
-                        <PrescriptionEditor
-                          procedure={procedure}
-                          onChanged={loadProcedure}
-                        />
-                      </View>
-                    )}
-
-                    {isOpen2 && (
-                      <>
-                        <IntraoralPhotoCard
-                          photos={procedure.phase2_data?.intraoral_photos}
-                          authToken={authToken}
-                          title="Patient Intra-oral Photograph — Phase 2"
-                          testPrefix="phase2-intraoral"
-                        />
-                        {/* Implant Traceability + Torque Values Achieved — Phase 2 data, shown
-                            inside the Phase 2 accordion (moved out of Phase 1). */}
-                        <ImplantTraceabilityCard
-                          traceability={
-                            procedure.phase2_data?.implant_traceability
-                          }
-                          labelFor={(pos) => `Implant ${pos}`}
-                        />
-
-                        {procedure.torque_values &&
-                          procedure.torque_values.length > 0 && (
-                            <View
-                              style={styles.section}
-                              data-testid="torque-values-section"
-                            >
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 8,
-                                  marginBottom: 12,
-                                }}
-                              >
-                                <Ionicons
-                                  name="speedometer"
-                                  size={20}
-                                  color="#FF6D00"
-                                />
-                                <Text
-                                  style={[
-                                    styles.sectionTitle,
-                                    { marginBottom: 0, color: "#E65100" },
-                                  ]}
-                                >
-                                  Torque Values Achieved
-                                </Text>
-                              </View>
-                              {procedure.torque_values.map(
-                                (tv: number, idx: number) => {
-                                  const toothLabel = procedure.implant_plans?.[
-                                    idx
-                                  ]?.position
-                                    ? `Implant ${procedure.implant_plans[idx].position}`
-                                    : `Implant ${idx + 1}`;
-                                  return (
-                                    <View
-                                      key={idx}
-                                      style={{
-                                        flexDirection: "row",
-                                        alignItems: "center",
-                                        paddingVertical: 8,
-                                        borderBottomWidth:
-                                          idx <
-                                          procedure.torque_values.length - 1
-                                            ? 1
-                                            : 0,
-                                        borderBottomColor: "#F0F0F0",
-                                      }}
-                                    >
-                                      <View
-                                        style={{
-                                          backgroundColor: "#FFF3E0",
-                                          borderRadius: 8,
-                                          paddingHorizontal: 10,
-                                          paddingVertical: 6,
-                                          marginRight: 12,
-                                        }}
-                                      >
-                                        <Text
-                                          style={{
-                                            fontSize: 13,
-                                            fontWeight: "600",
-                                            color: "#BF360C",
-                                          }}
-                                        >
-                                          {toothLabel}
-                                        </Text>
-                                      </View>
-                                      <Text
-                                        style={{
-                                          fontSize: 18,
-                                          fontWeight: "700",
-                                          color: "#E65100",
-                                        }}
-                                      >
-                                        {tv}
-                                      </Text>
-                                      <Text
-                                        style={{
-                                          fontSize: 13,
-                                          color: "#888",
-                                          marginLeft: 4,
-                                        }}
-                                      >
-                                        Ncm
-                                      </Text>
-                                    </View>
-                                  );
-                                },
-                              )}
-                            </View>
-                          )}
-                      </>
-                    )}
 
                     {/* Phase 2 Content */}
                     {isOpen2 && (
@@ -8470,6 +8429,109 @@ export default function ProcedureDetailScreen() {
                               }
                               fieldKey="phase2_data.implant_seated_comment"
                             />
+                          )}
+                          {/* Torque + Implant Traceability — right after Implant Insertion, as in the Phase 2 form */}
+                        {/* Implant Traceability + Torque Values Achieved — Phase 2 data, shown
+                            inside the Phase 2 accordion (moved out of Phase 1). */}
+                        <ImplantTraceabilityCard
+                          traceability={
+                            procedure.phase2_data?.implant_traceability
+                          }
+                          labelFor={(pos) => `Implant ${pos}`}
+                        />
+
+                        {procedure.torque_values &&
+                          procedure.torque_values.length > 0 && (
+                            <View
+                              style={styles.section}
+                              data-testid="torque-values-section"
+                            >
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  marginBottom: 12,
+                                }}
+                              >
+                                <Ionicons
+                                  name="speedometer"
+                                  size={20}
+                                  color="#FF6D00"
+                                />
+                                <Text
+                                  style={[
+                                    styles.sectionTitle,
+                                    { marginBottom: 0, color: "#E65100" },
+                                  ]}
+                                >
+                                  Torque Values Achieved
+                                </Text>
+                              </View>
+                              {procedure.torque_values.map(
+                                (tv: number, idx: number) => {
+                                  const toothLabel = procedure.implant_plans?.[
+                                    idx
+                                  ]?.position
+                                    ? `Implant ${procedure.implant_plans[idx].position}`
+                                    : `Implant ${idx + 1}`;
+                                  return (
+                                    <View
+                                      key={idx}
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        paddingVertical: 8,
+                                        borderBottomWidth:
+                                          idx <
+                                          procedure.torque_values.length - 1
+                                            ? 1
+                                            : 0,
+                                        borderBottomColor: "#F0F0F0",
+                                      }}
+                                    >
+                                      <View
+                                        style={{
+                                          backgroundColor: "#FFF3E0",
+                                          borderRadius: 8,
+                                          paddingHorizontal: 10,
+                                          paddingVertical: 6,
+                                          marginRight: 12,
+                                        }}
+                                      >
+                                        <Text
+                                          style={{
+                                            fontSize: 13,
+                                            fontWeight: "600",
+                                            color: "#BF360C",
+                                          }}
+                                        >
+                                          {toothLabel}
+                                        </Text>
+                                      </View>
+                                      <Text
+                                        style={{
+                                          fontSize: 18,
+                                          fontWeight: "700",
+                                          color: "#E65100",
+                                        }}
+                                      >
+                                        {tv}
+                                      </Text>
+                                      <Text
+                                        style={{
+                                          fontSize: 13,
+                                          color: "#888",
+                                          marginLeft: 4,
+                                        }}
+                                      >
+                                        Ncm
+                                      </Text>
+                                    </View>
+                                  );
+                                },
+                              )}
+                            </View>
                           )}
                           {/* iter-210: removed the duplicate Torque Values chips from the
                   Phase 2 readback. The dedicated orange "Torque Values
@@ -9455,6 +9517,26 @@ export default function ProcedureDetailScreen() {
                             </View>
                           )}
 
+                        {/* Phase 2 photos + Prescription — after the Post-Operative Checklist, as in the Phase 2 form */}
+                        <IntraoralPhotoCard
+                          photos={procedure.phase2_data?.intraoral_photos}
+                          authToken={authToken}
+                          title="Patient Intra-oral Photograph — Phase 2"
+                          testPrefix="phase2-intraoral"
+                        />
+                    {/* Prescription (Rx) — faculty review/correct & sign during Phase 2;
+                        creator/nurse can download the signed PDF once approved. Placed after
+                        the photos, matching the order of the Phase 2 form. */}
+                    {(!!procedure.prescription?.drugs?.length ||
+                      procedure.status === "pending_phase2") && (
+                      <View style={{ marginHorizontal: 12 }}>
+                        <PrescriptionEditor
+                          procedure={procedure}
+                          onChanged={loadProcedure}
+                        />
+                      </View>
+                    )}
+
                         {/* Notes & Remarks */}
                         {(procedure.phase2_student_notes ||
                           procedure.phase2_remark) && (
@@ -9915,14 +9997,6 @@ export default function ProcedureDetailScreen() {
                       />
                     </TouchableOpacity>
 
-                    {isOpen3 && (
-                      <IntraoralPhotoCard
-                        photos={procedure.phase3_data?.intraoral_photos}
-                        authToken={authToken}
-                        title="Patient Intra-oral Photograph — Phase 3"
-                        testPrefix="phase3-intraoral"
-                      />
-                    )}
                     {/* Phase 3 Content */}
                     {isOpen3 && (
                       <View
@@ -10673,6 +10747,13 @@ export default function ProcedureDetailScreen() {
                             </View>
                           )}
 
+                        {/* Phase 3 photos — before the notes, as in the Phase 3 form */}
+                          <IntraoralPhotoCard
+                            photos={procedure.phase3_data?.intraoral_photos}
+                            authToken={authToken}
+                            title="Patient Intra-oral Photograph — Phase 3"
+                            testPrefix="phase3-intraoral"
+                          />
                         {/* Notes & Remarks */}
                         {(procedure.phase3_student_notes ||
                           procedure.stage2_surgical_remark) && (
@@ -11706,14 +11787,6 @@ export default function ProcedureDetailScreen() {
                       />
                     </TouchableOpacity>
 
-                    {isOpen4 && (
-                      <IntraoralPhotoCard
-                        photos={procedure.phase4_step1_data?.intraoral_photos}
-                        authToken={authToken}
-                        title="Patient Intra-oral Photograph — Phase 4"
-                        testPrefix="phase4-intraoral"
-                      />
-                    )}
                     {/* Phase 4 Content */}
                     {isOpen4 && (
                       <>
@@ -11873,6 +11946,13 @@ export default function ProcedureDetailScreen() {
                               </View>
                             )}
 
+                            {/* Phase 4 photos — before the notes, as in the Phase 4 form */}
+                            <IntraoralPhotoCard
+                              photos={procedure.phase4_step1_data?.intraoral_photos}
+                              authToken={authToken}
+                              title="Patient Intra-oral Photograph — Phase 4"
+                              testPrefix="phase4-intraoral"
+                            />
                             {/* Notes & Remarks */}
                             {(procedure.phase4_step1_student_notes ||
                               procedure.stage2_prosthetic_remark) && (
@@ -12302,56 +12382,6 @@ export default function ProcedureDetailScreen() {
                                 </View>
                               )}
 
-                            {/* Confirmation Statement */}
-                            {procedure.phase4_step2_data
-                              ?.confirmation_statement !== undefined && (
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  marginBottom: 12,
-                                  padding: 10,
-                                  backgroundColor: procedure.phase4_step2_data
-                                    .confirmation_statement
-                                    ? "#E8F5E9"
-                                    : "#FFEBEE",
-                                  borderRadius: 8,
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <Ionicons
-                                  name={
-                                    procedure.phase4_step2_data
-                                      .confirmation_statement
-                                      ? "checkmark-circle"
-                                      : "close-circle"
-                                  }
-                                  size={22}
-                                  color={
-                                    procedure.phase4_step2_data
-                                      .confirmation_statement
-                                      ? "#4CAF50"
-                                      : "#F44336"
-                                  }
-                                />
-                                <Text
-                                  style={{
-                                    marginLeft: 10,
-                                    fontSize: 14,
-                                    fontWeight: "600",
-                                    color: "#333",
-                                    flexShrink: 1,
-                                  }}
-                                >
-                                  Confirmation:{" "}
-                                  {procedure.phase4_step2_data
-                                    .confirmation_statement
-                                    ? "Treatment Confirmed Complete"
-                                    : "Not Confirmed"}
-                                </Text>
-                              </View>
-                            )}
-
                             {/* Notes & Remarks */}
                             {procedure.phase4_step2_student_notes && (
                               <View
@@ -12442,6 +12472,56 @@ export default function ProcedureDetailScreen() {
                                   }}
                                 >
                                   {procedure.phase4_step2_incharge_notes}
+                                </Text>
+                              </View>
+                            )}
+
+                            {/* Confirmation Statement */}
+                            {procedure.phase4_step2_data
+                              ?.confirmation_statement !== undefined && (
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  marginBottom: 12,
+                                  padding: 10,
+                                  backgroundColor: procedure.phase4_step2_data
+                                    .confirmation_statement
+                                    ? "#E8F5E9"
+                                    : "#FFEBEE",
+                                  borderRadius: 8,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <Ionicons
+                                  name={
+                                    procedure.phase4_step2_data
+                                      .confirmation_statement
+                                      ? "checkmark-circle"
+                                      : "close-circle"
+                                  }
+                                  size={22}
+                                  color={
+                                    procedure.phase4_step2_data
+                                      .confirmation_statement
+                                      ? "#4CAF50"
+                                      : "#F44336"
+                                  }
+                                />
+                                <Text
+                                  style={{
+                                    marginLeft: 10,
+                                    fontSize: 14,
+                                    fontWeight: "600",
+                                    color: "#333",
+                                    flexShrink: 1,
+                                  }}
+                                >
+                                  Confirmation:{" "}
+                                  {procedure.phase4_step2_data
+                                    .confirmation_statement
+                                    ? "Treatment Confirmed Complete"
+                                    : "Not Confirmed"}
                                 </Text>
                               </View>
                             )}
@@ -12548,46 +12628,6 @@ export default function ProcedureDetailScreen() {
             facts (case ID, operator, procedure, implant count, completion
             date) are now merged into the green Treatment Complete banner
             at the top of the page so the case summary lives in one place. */}
-
-            {/* Implant Planning - Part of Phase 1 Workflow */}
-            {procedure.status === "pending_phase1" &&
-              procedure.case_origin !== "existing_implants" && (
-                <View style={{ marginTop: 4 }}>
-                  <View
-                    style={{
-                      backgroundColor: "#E3F2FD",
-                      padding: 12,
-                      marginBottom: 0,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "700",
-                        color: "#1565C0",
-                        textAlign: "center",
-                      }}
-                    >
-                      Phase 1 Required: Complete Implant Planning Below
-                    </Text>
-                  </View>
-                  <CaseImplantPlanning
-                    procedureId={id as string}
-                    isOwner={
-                      user?.id === procedure.student_id ||
-                      user?.id === procedure.created_by_id
-                    }
-                    userRole={user?.role || ""}
-                    torqueValues={procedure.torque_values}
-                    procedureStatus={procedure.status}
-                    procedureType={procedure.implant_procedure_type}
-                    patientName={procedure.patient_name}
-                    patientId={procedure.patient_id}
-                    procedureDate={procedure.procedure_date}
-                    missingTeeth={procedure.missing_teeth}
-                  />
-                </View>
-              )}
 
             {/* ── APPROVAL SECTION (Phase 2-4) ── */}
             {procedure.status !== "pending_phase1" && renderApprovalActions()}

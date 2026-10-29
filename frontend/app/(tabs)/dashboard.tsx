@@ -945,6 +945,21 @@ function InsightsTiles({
   const incharges = (stats.incharge_stats || []).filter((x: any) => x.incharge_name);
   const sum = (rows: any[], k: string) => rows.reduce((a, r) => a + (Number(r[k]) || 0), 0);
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  // Each In-Charge row's "total" is every case in their department(s), and a
+  // department can have several In-Charges, so summing rows counts it once
+  // per In-Charge. Count each department once instead.
+  const inchargeCaseTotal = (() => {
+    const byDept = new Map<string, number>();
+    let unknown = 0;
+    for (const ic of incharges) {
+      const depts = (ic.departments || []).filter((d: any) => d?.department_id && d.total != null);
+      if (depts.length === 0) { unknown = Math.max(unknown, Number(ic.total) || 0); continue; }
+      for (const d of depts) byDept.set(d.department_id, Number(d.total) || 0);
+    }
+    let n = unknown;
+    byDept.forEach((v) => { n += v; });
+    return n;
+  })();
 
   const tiles: InsightTile[] = [];
   if (isAdmin && variant === "incharge") {
@@ -974,7 +989,7 @@ function InsightsTiles({
     tiles.push({
       key: "incharges", icon: "medal-outline", color: "#00695C", bg: "#E0F2F1",
       title: "In-Charges", figure: String(incharges.length),
-      sub: `${sum(incharges, "total")} cases`, route: "/admin/incharges-performance",
+      sub: `${inchargeCaseTotal} cases`, route: "/admin/incharges-performance",
     });
   }
   tiles.push({
