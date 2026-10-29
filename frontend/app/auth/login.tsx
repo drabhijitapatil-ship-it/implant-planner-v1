@@ -23,6 +23,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Constants from "expo-constants";
 import { HIDE_COMMERCE } from "../../utils/storePolicy";
+import { appVersionLabel } from "../../utils/appVersion";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -427,7 +428,7 @@ export default function LoginScreen() {
                 </TouchableOpacity>
 
                 <Text style={styles.versionText} data-testid="app-version">
-                  Version {appVersion}
+                  Version {appVersionLabel() || appVersion}
                 </Text>
               </View>
             </View>

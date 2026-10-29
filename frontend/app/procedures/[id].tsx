@@ -7570,11 +7570,13 @@ export default function ProcedureDetailScreen() {
                         ["draft", "pending_phase1", "rejected_phase1"].includes(
                           procedure.status,
                         )) && (
-                        <PrescriptionEditor
-                          kind="preop"
-                          procedure={procedure}
-                          onChanged={() => loadProcedure()}
-                        />
+                        <View style={{ marginHorizontal: 12 }}>
+                          <PrescriptionEditor
+                            kind="preop"
+                            procedure={procedure}
+                            onChanged={() => loadProcedure()}
+                          />
+                        </View>
                       )}
 
                       {procedure.bone_graft_specifications && (
@@ -7841,17 +7843,27 @@ export default function ProcedureDetailScreen() {
                       {/* Implant Planning (Phase 1 Step 2) — placed in the order the student fills it in */}
                       {procedure.status === "pending_phase1" &&
                         procedure.case_origin !== "existing_implants" && (
-                          <View style={{ marginTop: 4 }}>
+                          <View
+                            style={{
+                              marginHorizontal: 12,
+                              marginBottom: 12,
+                              borderRadius: 16,
+                              overflow: "hidden",
+                              backgroundColor: "#FFF",
+                              borderWidth: 1,
+                              borderColor: "#E8EDF5",
+                            }}
+                          >
                             <View
                               style={{
                                 backgroundColor: "#E3F2FD",
-                                padding: 12,
-                                marginBottom: 0,
+                                paddingVertical: 10,
+                                paddingHorizontal: 12,
                               }}
                             >
                               <Text
                                 style={{
-                                  fontSize: 14,
+                                  fontSize: 13,
                                   fontWeight: "700",
                                   color: "#1565C0",
                                   textAlign: "center",
@@ -9531,7 +9543,7 @@ export default function ProcedureDetailScreen() {
                         the photos, matching the order of the Phase 2 form. */}
                     {(!!procedure.prescription?.drugs?.length ||
                       procedure.status === "pending_phase2") && (
-                      <View style={{ marginHorizontal: 12 }}>
+                      <View>
                         <PrescriptionEditor
                           procedure={procedure}
                           onChanged={loadProcedure}

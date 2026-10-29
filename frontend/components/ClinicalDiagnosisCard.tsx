@@ -44,6 +44,8 @@ export default function ClinicalDiagnosisCard({ procedureId, initial, autoGenera
   const [saving, setSaving] = useState(false);
   const [showFindings, setShowFindings] = useState(!compact);
   const [editing, setEditing] = useState(false);
+  // Collapsed on the case page (it's long); open in the New Case form.
+  const [open, setOpen] = useState(!compact);
   const dirty = useRef(false);
 
   const apply = useCallback((d: Phase1Diagnosis) => {
@@ -105,9 +107,13 @@ export default function ClinicalDiagnosisCard({ procedureId, initial, autoGenera
   return (
     <View style={styles.card} testID="clinical-diagnosis-card" data-testid="clinical-diagnosis-card">
       <View style={styles.header}>
-        <Ionicons name="medkit" size={20} color="#1565C0" />
-        <Text style={styles.title}>Clinical Diagnosis</Text>
-        {!readOnly && (
+        <TouchableOpacity onPress={() => setOpen(o => !o)} style={styles.titleTap} activeOpacity={0.7}
+          accessibilityRole="button" testID="dx-collapse-toggle" data-testid="dx-collapse-toggle">
+          <Ionicons name="medkit" size={20} color="#1565C0" />
+          <Text style={styles.title}>Clinical Diagnosis</Text>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color="#64748B" />
+        </TouchableOpacity>
+        {open && !readOnly && (
           <TouchableOpacity onPress={regenerate} disabled={loading} style={styles.iconBtn} accessibilityRole="button"
             testID="dx-regenerate-btn" data-testid="dx-regenerate-btn">
             {loading ? <ActivityIndicator size="small" color="#1565C0" /> : <Ionicons name="refresh" size={18} color="#1565C0" />}
@@ -115,6 +121,11 @@ export default function ClinicalDiagnosisCard({ procedureId, initial, autoGenera
           </TouchableOpacity>
         )}
       </View>
+      {!open ? (
+        <Text style={styles.collapsedLine}>
+          {dx ? `Overall: ${dx.verdict} · ${dx.findings.length} findings` : 'Not generated yet'} · tap to {readOnly ? 'view' : 'view or edit'}
+        </Text>
+      ) : (<>
       <Text style={styles.sub}>Generated from the Phase 1 record against the department&apos;s diagnostic criteria. Review and edit before submission.</Text>
 
       {!dx && loading && <ActivityIndicator style={{ marginVertical: 16 }} color="#1565C0" />}
@@ -214,6 +225,7 @@ export default function ClinicalDiagnosisCard({ procedureId, initial, autoGenera
           )}
         </>
       )}
+      </>)}
     </View>
   );
 }
@@ -221,7 +233,9 @@ export default function ClinicalDiagnosisCard({ procedureId, initial, autoGenera
 const styles = StyleSheet.create({
   card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginHorizontal: 16, marginTop: 12, borderWidth: 1, borderColor: '#E3EAF2', ...Platform.select({ web: { boxShadow: '0 1px 3px rgba(0,0,0,0.06)' } as any, default: { elevation: 1 } }) },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  titleTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1, fontSize: 16, fontWeight: '700', color: '#1E3A5F' },
+  collapsedLine: { fontSize: 12, color: '#64748B', marginTop: 6 },
   iconBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: '#E3F2FD', minHeight: 36 },
   iconBtnText: { fontSize: 12, fontWeight: '700', color: '#1565C0' },
   sub: { fontSize: 12, color: '#78909C', marginTop: 4, marginBottom: 12, lineHeight: 17 },

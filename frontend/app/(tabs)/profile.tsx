@@ -25,6 +25,7 @@ import BackToDashboard from '../../components/BackToDashboard';
 import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
+import { appVersionLabel } from '../../utils/appVersion';
 import PhotoOptionsModal from '../../components/PhotoOptionsModal';
 import PasswordRequirements, { isPasswordValid } from '../../components/PasswordRequirements';
 import AssistantLogbookCard from '../../components/AssistantLogbookCard';
@@ -674,6 +675,9 @@ export default function ProfileScreen() {
             Delete Account
           </Text>
         </TouchableOpacity>
+        <Text style={{ textAlign: 'center', color: '#94A3B8', fontSize: 11, marginTop: -24, marginBottom: 24 }} testID="profile-app-version">
+          Version {appVersionLabel()}
+        </Text>
       </ScrollView>
 
       {/* Change Password Modal — OTP verify + set new password */}

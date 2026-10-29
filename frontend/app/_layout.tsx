@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TabletFrame } from '../components/TabletFrame';
 import { useScreenCaptureProtection } from '../hooks/useScreenCaptureProtection';
 import AttachPickerModalRoot from '../components/AttachPickerModal';
+import UpdateBanner from '../components/UpdateBanner';
 // Native splash hides as soon as the app mounts
 SplashScreen.hideAsync().catch(() => {});
 
@@ -126,6 +127,7 @@ export default function RootLayout() {
             <AttachPickerModalRoot />
             <AiConsentGate />
           </ActivityTracker>
+          <UpdateBanner />
         </TabletFrame>
       </AuthProvider>
     </GestureHandlerRootView>
