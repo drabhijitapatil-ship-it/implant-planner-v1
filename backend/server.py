@@ -9732,6 +9732,75 @@ async def update_case_assistant(
 
 
 
+class StaffChangeBody(BaseModel):
+    supervisor_id: Optional[str] = Field(None, max_length=64)
+    implant_incharge_id: Optional[str] = Field(None, max_length=64)
+
+
+@api_router.patch("/procedures/{procedure_id}/staff")
+async def change_procedure_staff(procedure_id: str, body: StaffChangeBody, current_user: dict = Depends(get_current_user)):
+    """Reassign the case's Supervisor and/or Implant In-Charge.
+    In-Charge / admin: any time before completion. Case creator: only while
+    Phase 1 is still open (draft / pending / returned)."""
+    proc = await _get_proc_or_404(procedure_id)
+    if proc.get("status") in ("completed", "cancelled", "permanently_rejected"):
+        raise HTTPException(status_code=403, detail="Staff can't be changed on a closed case.")
+    # Cases don't carry org_id; the shared guard derives it from the case's people.
+    await _assert_procedure_org_access(proc, current_user)
+    role = normalize_role(current_user.get("role", ""))
+    uid = current_user["_id"]
+    is_lead = current_user.get("is_admin") or role in ("implant_incharge", "administrator")
+    is_creator = uid in (proc.get("created_by_id"), proc.get("student_id"))
+    phase1_open = proc.get("status") in ("draft", "pending_phase1", "rejected_phase1")
+    if not (is_lead or (is_creator and phase1_open)):
+        raise HTTPException(status_code=403, detail="Only the Implant In-Charge or admin can change staff at this stage.")
+
+    slots = [
+        ("supervisor_id", "supervisor_name", body.supervisor_id, ("supervisor", "implant_incharge"), "Supervisor"),
+        ("implant_incharge_id", "implant_incharge_name", body.implant_incharge_id, ("implant_incharge",), "Implant In-Charge"),
+    ]
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update: Dict[str, Any] = {}
+    log_entries = []
+    newly_assigned = []
+    for id_key, name_key, new_id, roles, label in slots:
+        if not new_id or new_id == proc.get(id_key):
+            continue
+        if not ObjectId.is_valid(new_id):
+            raise HTTPException(status_code=400, detail=f"Invalid {label}")
+        target = await db.users.find_one({"_id": ObjectId(new_id)})
+        if (not target or target.get("disabled")
+                or (not current_user.get("is_super_admin") and target.get("org_id") != current_user.get("org_id"))
+                or normalize_role(target.get("role", "")) not in roles):
+            raise HTTPException(status_code=400, detail=f"Choose a valid {label} from your organization.")
+        update[id_key] = new_id
+        update[name_key] = target.get("name", "")
+        log_entries.append({
+            "field": label, "old_value": proc.get(name_key), "new_value": target.get("name", ""),
+            "edited_by": current_user.get("name") or uid, "edited_by_role": current_user.get("role", ""),
+            "edited_at": now_iso,
+        })
+        newly_assigned.append(new_id)
+    if not update:
+        return {"ok": True, "changed": False}
+
+    update.update({"updated_at": now_iso, "last_edited_by": current_user.get("name") or uid, "last_edited_at": now_iso})
+    await db.procedures.update_one(
+        {"_id": ObjectId(procedure_id)},
+        {"$set": update, "$push": {"edit_log": {"$each": log_entries}}},
+    )
+    patient = proc.get("patient_name") or "a patient"
+    for nid in newly_assigned:
+        if nid == uid:
+            continue
+        await db.notifications.insert_one({
+            "user_id": nid, "procedure_id": procedure_id, "type": "assigned", "read": False,
+            "message": f"{current_user.get('name', 'Your In-Charge')} assigned you to the case for {patient}.",
+            "created_at": datetime.utcnow(),
+        })
+    return {"ok": True, "changed": True, **{k: v for k, v in update.items() if k.endswith(("_id", "_name"))}}
+
+
 @api_router.patch("/procedures/{procedure_id}/edit-fields")
 async def edit_procedure_fields(procedure_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     """Flexible field-level editing for In-Charge and Supervisors."""

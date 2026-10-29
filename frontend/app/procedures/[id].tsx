@@ -150,6 +150,8 @@ import AugmentationChecklist from "../../components/AugmentationChecklist";
 import ClinicalEvaluationBanner from "../../components/ClinicalEvaluationBanner";
 import EndTreatmentPendingBanner from "../../components/EndTreatmentPendingBanner";
 import PatientHistoryStrip from "../../components/PatientHistoryStrip";
+import StaffPickerRow from "../../components/StaffPickerRow";
+import { uploadConsentFile, consentUploadError } from "../../utils/consentUpload";
 import PulsingDoubleArrow from "../../components/onboarding/primitives/PulsingDoubleArrow";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, {
@@ -725,25 +727,16 @@ export default function ProcedureDetailScreen() {
       ]);
       if (!picked) return;
       setUploadingConsent(true);
-      const payload = new FormData();
-      payload.append("file", {
-        uri: picked.uri,
-        name: picked.name || "consent_form.pdf",
-        type: picked.type || "application/pdf",
-      } as any);
-      const res = await api.post(`/procedures/${id}/upload-consent`, payload, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setProcedure(res.data);
+      await uploadConsentFile(String(id), picked);
+      // Reload through GET so the case keeps its computed fields (id, active
+      // implants, referral) — the upload response is the raw record.
+      await loadProcedure();
       Alert.alert(
         "Uploaded",
         "Patient consent form uploaded. Phase 2 is now unlocked.",
       );
     } catch (err: any) {
-      Alert.alert(
-        "Upload Failed",
-        err.response?.data?.detail || "Could not upload consent form",
-      );
+      Alert.alert("Upload Failed", consentUploadError(err));
     } finally {
       setUploadingConsent(false);
     }
@@ -1856,6 +1849,16 @@ export default function ProcedureDetailScreen() {
       </View>
     );
   }
+
+  // Who may reassign Supervisor / In-Charge (mirrors PATCH /procedures/{id}/staff):
+  // In-Charge / admin until the case closes; the creator while Phase 1 is open.
+  const canChangeStaff =
+    !["completed", "cancelled", "permanently_rejected"].includes(procedure.status) &&
+    !procedure.viewer_is_assistant &&
+    (user?.is_admin ||
+      ["implant_incharge", "administrator", "chief_dentist"].includes(user?.role || "") ||
+      ([procedure.created_by_id, procedure.student_id].includes(user?.id) &&
+        ["draft", "pending_phase1", "rejected_phase1"].includes(procedure.status)));
 
   return (
     <EditContext.Provider
@@ -5146,30 +5149,38 @@ export default function ProcedureDetailScreen() {
                           </>
                         ) : procedure.created_by_role === "implant_incharge" ? (
                           // In-Charge scheduled the case — show only Implant In-Charge.
-                          <InfoRow
-                            icon="medkit"
+                          <StaffPickerRow
+                            procedureId={String(id)}
+                            slot="implant_incharge_id"
                             label="Implant Incharge"
-                            value={
-                              procedure.implant_incharge_name ||
-                              procedure.created_by_name
-                            }
+                            icon="medkit"
+                            name={procedure.implant_incharge_name || procedure.created_by_name}
+                            currentId={procedure.implant_incharge_id}
+                            canChange={canChangeStaff}
+                            onChanged={loadProcedure}
                           />
                         ) : procedure.created_by_role === "supervisor" ? (
                           // Supervisor scheduled the case — show Supervisor + Implant In-Charge only.
                           <>
-                            <InfoRow
-                              icon="school"
+                            <StaffPickerRow
+                              procedureId={String(id)}
+                              slot="supervisor_id"
                               label="Supervisor"
-                              value={
-                                procedure.original_supervisor_name ||
-                                procedure.supervisor_name ||
-                                procedure.created_by_name
-                              }
+                              icon="school"
+                              name={procedure.supervisor_name || procedure.original_supervisor_name || procedure.created_by_name}
+                              currentId={procedure.supervisor_id}
+                              canChange={canChangeStaff}
+                              onChanged={loadProcedure}
                             />
-                            <InfoRow
-                              icon="medkit"
+                            <StaffPickerRow
+                              procedureId={String(id)}
+                              slot="implant_incharge_id"
                               label="Implant Incharge"
-                              value={procedure.implant_incharge_name}
+                              icon="medkit"
+                              name={procedure.implant_incharge_name}
+                              currentId={procedure.implant_incharge_id}
+                              canChange={canChangeStaff}
+                              onChanged={loadProcedure}
                             />
                           </>
                         ) : (
@@ -5186,18 +5197,25 @@ export default function ProcedureDetailScreen() {
                                 }
                               />
                             ) : null}
-                            <InfoRow
-                              icon="school"
+                            <StaffPickerRow
+                              procedureId={String(id)}
+                              slot="supervisor_id"
                               label="Supervisor"
-                              value={
-                                procedure.original_supervisor_name ||
-                                procedure.supervisor_name
-                              }
+                              icon="school"
+                              name={procedure.supervisor_name || procedure.original_supervisor_name}
+                              currentId={procedure.supervisor_id}
+                              canChange={canChangeStaff}
+                              onChanged={loadProcedure}
                             />
-                            <InfoRow
-                              icon="medkit"
+                            <StaffPickerRow
+                              procedureId={String(id)}
+                              slot="implant_incharge_id"
                               label="Implant Incharge"
-                              value={procedure.implant_incharge_name}
+                              icon="medkit"
+                              name={procedure.implant_incharge_name}
+                              currentId={procedure.implant_incharge_id}
+                              canChange={canChangeStaff}
+                              onChanged={loadProcedure}
                             />
                           </>
                         )}

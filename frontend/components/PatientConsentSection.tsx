@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import api from '../utils/api';
 import { showUploadPicker } from '../utils/uploadPicker';
+import { uploadConsentFile, consentUploadError } from '../utils/consentUpload';
 import { downloadConsentTemplate, printConsentTemplate } from '../utils/consentPdf';
 import ExportPrintMenu from './ExportPrintMenu';
 
@@ -56,20 +57,12 @@ export function PatientConsentSection({ router }: { router: any }) {
       const picked = await showUploadPicker(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
       if (!picked) return;
       setUploadingId(id);
-      const payload = new FormData();
-      payload.append('file', {
-        uri: picked.uri,
-        name: picked.name || 'consent_form.pdf',
-        type: picked.type || 'application/pdf',
-      } as any);
-      await api.post(`/procedures/${id}/upload-consent`, payload, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await uploadConsentFile(id, picked);
       // Remove from list on success
       setCases(prev => prev.filter(c => c.id !== id));
       Alert.alert('Uploaded', 'Patient consent form uploaded. Phase 2 is now unlocked for this case.');
     } catch (err: any) {
-      Alert.alert('Upload Failed', err.response?.data?.detail || 'Could not upload consent form');
+      Alert.alert('Upload Failed', consentUploadError(err));
     } finally {
       setUploadingId(null);
     }
