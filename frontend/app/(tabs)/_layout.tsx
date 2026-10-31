@@ -672,7 +672,7 @@ export default function TabsLayout() {
             title: 'Home',
             tabBarIcon: ({ color, focused }) => (
               <GlassTabIcon focused={focused}>
-                <Ionicons name={focused ? 'home' : 'home-outline'} size={19} color={color} />
+                <Ionicons name={focused ? 'home' : 'home-outline'} size={21} color={color} />
               </GlassTabIcon>
             ),
           }}
@@ -683,7 +683,7 @@ export default function TabsLayout() {
             title: 'New Case',
             tabBarIcon: ({ color, focused }) => (
               <GlassTabIcon focused={focused}>
-                <Ionicons name="document-text-outline" size={19} color={color} />
+                <Ionicons name="document-text-outline" size={21} color={color} />
               </GlassTabIcon>
             ),
             href: isNurse ? null : '/new-procedure',
@@ -697,7 +697,7 @@ export default function TabsLayout() {
             title: 'Catalog',
             tabBarIcon: ({ color, focused }) => (
               <GlassTabIcon focused={focused}>
-                <ImplantIcon size={21} color={color} />
+                <ImplantIcon size={23} color={color} />
               </GlassTabIcon>
             ),
             href: isNurse ? null : '/implant-selection',
@@ -709,7 +709,7 @@ export default function TabsLayout() {
             title: isNurse ? 'Cases' : 'My Cases',
             tabBarIcon: ({ color, focused }) => (
               <GlassTabIcon focused={focused}>
-                <Ionicons name={focused ? 'folder-open' : 'folder-open-outline'} size={19} color={color} />
+                <Ionicons name={focused ? 'folder-open' : 'folder-open-outline'} size={21} color={color} />
                 {pendingApprovalCount > 0 && (
                   <View style={badgeStyles.badge} data-testid="cases-pending-badge">
                     <Text style={badgeStyles.badgeText}>
@@ -748,7 +748,7 @@ export default function TabsLayout() {
             title: 'Profile',
             tabBarIcon: ({ color, focused }) => (
               <GlassTabIcon focused={focused}>
-                <Ionicons name={focused ? 'person' : 'person-outline'} size={19} color={color} />
+                <Ionicons name={focused ? 'person' : 'person-outline'} size={21} color={color} />
               </GlassTabIcon>
             ),
           }}

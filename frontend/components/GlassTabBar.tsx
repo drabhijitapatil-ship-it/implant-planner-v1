@@ -10,9 +10,10 @@
 import React, { useEffect, useState } from 'react';
 import { LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import Animated, { Keyframe, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Keyframe, ReduceMotion, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 export const GLASS_BAR_HEIGHT = 70;
 const BAR_PADDING = 6;
@@ -23,13 +24,16 @@ const INACTIVE = '#8E8E93';
 
 // One highlight that slides to the tapped tab, overshooting a little
 // before it settles; the new tab's icon gives a small hop as it arrives.
-const SLIDE_SPRING = { damping: 24, stiffness: 220, mass: 0.8 };
+// ReduceMotion.Never: Reanimated otherwise follows the iOS "Reduce Motion"
+// setting and jumps straight to the end, so the slide never showed on those
+// iPhones. The motion here is small and short.
+const SLIDE_SPRING = { damping: 24, stiffness: 220, mass: 0.8, reduceMotion: ReduceMotion.Never };
 const ICON_HOP = new Keyframe({
   0: { transform: [{ translateY: 0 }, { scale: 1 }] },
   40: { transform: [{ translateY: -4 }, { scale: 1.12 }] },
   70: { transform: [{ translateY: 1 }, { scale: 0.96 }] },
   100: { transform: [{ translateY: 0 }, { scale: 1 }] },
-}).duration(420);
+}).duration(420).reduceMotion(ReduceMotion.Never);
 
 export default function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -61,16 +65,35 @@ export default function GlassTabBar({ state, descriptors, navigation }: BottomTa
   if ((focusedOptions?.tabBarStyle as any)?.display === 'none') return null;
 
   return (
-    <View pointerEvents="box-none" style={[styles.wrap, { bottom: Math.max(insets.bottom, 10) }]}>
+    <View pointerEvents="box-none" style={[styles.wrap, { bottom: Math.max(insets.bottom - 6, 6) }]}>
       <View style={styles.bar} onLayout={(e: LayoutChangeEvent) => setBarWidth(e.nativeEvent.layout.width)}>
         <View style={[StyleSheet.absoluteFill, styles.clip]}>
+          {/* Liquid glass: thin blur, barely any tint, a bright sheen across
+              the top and a slight shade at the bottom for depth. */}
+          {/* Blur on both platforms. On Android (expo-blur's experimental
+              method) the snapshot also catches this bar's own icons, so a
+              stronger white layer sits over the blur to keep that faint
+              ghost out of sight and the icons crisp. */}
           <BlurView
-            intensity={Platform.OS === 'ios' ? 40 : 30}
-            tint="light"
+            intensity={Platform.OS === 'ios' ? 60 : 26}
+            tint={Platform.OS === 'ios' ? 'systemThinMaterialLight' : 'light'}
             experimentalBlurMethod="dimezisBlurView"
             style={StyleSheet.absoluteFill}
           />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.35)' }]} />
+          <View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: Platform.OS === 'ios' ? 'rgba(255,255,255,0.32)' : 'rgba(250,252,255,0.52)' },
+            ]}
+          />
+          <LinearGradient
+            pointerEvents="none"
+            colors={Platform.OS === 'ios'
+              ? ['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0)', 'rgba(15,40,80,0.03)']
+              : ['rgba(255,255,255,0.75)', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0)', 'rgba(15,40,80,0.05)']}
+            locations={[0, 0.35, 0.65, 1]}
+            style={StyleSheet.absoluteFill}
+          />
         </View>
 
         {itemWidth > 0 && (
@@ -124,13 +147,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: BAR_PADDING,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.75)',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOpacity: 0.10,
+    shadowRadius: 18,
+    elevation: 6,
   },
   clip: { borderRadius: GLASS_BAR_HEIGHT / 2, overflow: 'hidden' },
   item: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center' },
@@ -140,8 +163,10 @@ const styles = StyleSheet.create({
     top: (GLASS_BAR_HEIGHT - PILL_HEIGHT) / 2 - 1,
     height: PILL_HEIGHT,
     borderRadius: PILL_HEIGHT / 2,
-    backgroundColor: 'rgba(21,101,192,0.13)',
+    backgroundColor: 'rgba(21,101,192,0.22)',
+    borderWidth: 1,
+    borderColor: 'rgba(21,101,192,0.18)',
   },
-  icon: { height: 22, alignItems: 'center', justifyContent: 'center' },
+  icon: { height: 24, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 11, fontWeight: '600', marginTop: 2 },
 });

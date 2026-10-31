@@ -87,7 +87,7 @@ export default function AskImplanrAIFab() {
     <>
       {/* Floating round button */}
       {/* Sits above the floating glass tab bar (bar height 72 + its gap). */}
-      <View style={[styles.fab, { bottom: Math.max(insets.bottom, 10) + 72 + 14 }]} pointerEvents="box-none">
+      <View style={[styles.fab, { bottom: Math.max(insets.bottom - 6, 6) + 72 + 14 }]} pointerEvents="box-none">
         <TouchableOpacity
           style={styles.fabBtn}
           onPress={() => setOpen(true)}
