@@ -10753,32 +10753,10 @@ ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg', '.heif', '.heic'}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
-@api_router.get("/procedures/{procedure_id}/consent-form-template")
-async def generate_consent_template(
-    procedure_id: str,
-    current_user: dict = Depends(get_current_user),
-):
-    """Generate a printable Patient Consent Form pre-filled with case data plus signature fields.
-    Users print this, collect the patient's handwritten signature, then upload the signed copy
-    via /upload-consent.
-    """
-    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
-    if not procedure:
-        raise HTTPException(status_code=404, detail="Procedure not found")
-    await _assert_procedure_org_access(procedure, current_user)
-    
-    role = current_user.get("role")
-    uid = current_user.get("_id")
-    is_stakeholder = (
-        procedure.get("created_by_id") == uid or
-        procedure.get("student_id") == uid or
-        procedure.get("supervisor_id") == uid or
-        procedure.get("implant_incharge_id") == uid or
-        role in ("nurse", "implant_incharge", "administrator", "supervisor")
-    )
-    if not is_stakeholder:
-        raise HTTPException(status_code=403, detail="Not allowed to view this consent form")
-
+async def _build_consent_pdf(procedure: dict) -> bytes:
+    """The printable Patient Consent Form for a case. Once the patient has
+    e-signed, the signature, date and witness line are filled in, so the same
+    PDF is the complete signed form."""
     branding = await _get_procedure_org_branding(procedure)
     org_name = branding["name"]
 
@@ -10977,6 +10955,8 @@ async def generate_consent_template(
     esign = procedure.get("consent_esign") or {}
     patient_sig_cell = sig_line
     patient_date_cell = "____________"
+    if esign.get("filename"):
+        await _s3_ensure_local_async(UPLOADS_DIR / esign["filename"])
     if esign.get("filename") and (UPLOADS_DIR / esign["filename"]).exists():
         from reportlab.platypus import Image as RLImage
         patient_sig_cell = RLImage(str(UPLOADS_DIR / esign["filename"]), width=48*mm, height=14*mm, kind='proportional')
@@ -11012,7 +10992,36 @@ async def generate_consent_template(
         ))
     
     doc.build(story)
-    buf.seek(0)
+    return buf.getvalue()
+
+
+@api_router.get("/procedures/{procedure_id}/consent-form-template")
+async def generate_consent_template(
+    procedure_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate a printable Patient Consent Form pre-filled with case data plus signature fields.
+    Users print this, collect the patient's handwritten signature, then upload the signed copy
+    via /upload-consent.
+    """
+    procedure = await db.procedures.find_one({"_id": ObjectId(procedure_id)})
+    if not procedure:
+        raise HTTPException(status_code=404, detail="Procedure not found")
+    await _assert_procedure_org_access(procedure, current_user)
+    
+    role = current_user.get("role")
+    uid = current_user.get("_id")
+    is_stakeholder = (
+        procedure.get("created_by_id") == uid or
+        procedure.get("student_id") == uid or
+        procedure.get("supervisor_id") == uid or
+        procedure.get("implant_incharge_id") == uid or
+        role in ("nurse", "implant_incharge", "administrator", "supervisor")
+    )
+    if not is_stakeholder:
+        raise HTTPException(status_code=403, detail="Not allowed to view this consent form")
+
+    buf = io.BytesIO(await _build_consent_pdf(procedure))
     filename = f"Consent_{(procedure.get('patient_name') or 'Patient').replace(' ', '_')}.pdf"
     return StreamingResponse(
         buf,
@@ -11315,6 +11324,29 @@ async def esign_consent(procedure_id: str, body: ConsentEsignBody, current_user:
     if previous_esign:
         update_op["$push"]["consent_esign_voided"] = {**previous_esign, "voided_at": now_iso, "voided_by": current_user.get("name", "")}
     await db.procedures.update_one({"_id": procedure["_id"]}, update_op)
+
+    # Store the complete consent form (case details + consent text + the
+    # patient's e-signature) as the case's consent file, so everyone who opens
+    # "Patient Consent Form" sees the signed form, not just the signature.
+    # The bare signature stays in consent_esign.filename.
+    try:
+        signed = await db.procedures.find_one({"_id": procedure["_id"]})
+        pdf_bytes = await _build_consent_pdf(signed)
+        pdf_name = f"consent_signed_{uuid.uuid4().hex}.pdf"
+        pdf_path = UPLOADS_DIR / pdf_name
+        with open(pdf_path, "wb") as f:
+            f.write(pdf_bytes)
+        await _s3_put_async(pdf_path, content_type="application/pdf")
+        consent_entry = {
+            **consent_entry,
+            "filename": pdf_name,
+            "original_name": f"Consent-eSigned-v{version}.pdf",
+            "content_type": "application/pdf",
+            "signature_filename": unique_name,
+        }
+        await db.procedures.update_one({"_id": procedure["_id"]}, {"$set": {"patient_consent_form": consent_entry}})
+    except Exception as exc:
+        logging.warning("Signed consent PDF not generated for %s (signature image kept): %s", procedure_id, exc)
     return {"ok": True, "consent_esign": esign_meta, "patient_consent_form": consent_entry}
 
 

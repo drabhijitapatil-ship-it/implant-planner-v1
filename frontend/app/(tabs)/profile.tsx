@@ -31,6 +31,7 @@ import PasswordRequirements, { isPasswordValid } from '../../components/Password
 import AssistantLogbookCard from '../../components/AssistantLogbookCard';
 import InstitutionNameSetting from '../../components/InstitutionNameSetting';
 import { HIDE_COMMERCE } from '../../utils/storePolicy';
+import { TAB_BAR_CLEARANCE } from "../../constants/tabBar";
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -291,7 +292,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
         {/* Header Block */}
         <View style={styles.profileHeader}>
           <TouchableOpacity 

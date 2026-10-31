@@ -32,6 +32,7 @@ import TransferCaseModal from "../../components/TransferCaseModal";
 import ReferredCaseAssignModal from "../../components/ReferredCaseAssignModal";
 import SafeDeleteModal from "../../components/SafeDeleteModal";
 import CaseRiskPills from '../../components/CaseRiskPills';
+import { TAB_BAR_CLEARANCE } from "../../constants/tabBar";
 
 
 export default function ProceduresScreen() {
@@ -1207,6 +1208,7 @@ function DefaultProceduresScreen() {
           }
           contentContainerStyle={[
             styles.listContainer,
+            { paddingBottom: TAB_BAR_CLEARANCE },
             isTablet && {
               maxWidth: 960,
               alignSelf: "center",

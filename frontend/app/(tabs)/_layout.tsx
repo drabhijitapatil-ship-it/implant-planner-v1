@@ -22,6 +22,22 @@ import { usePushNotifications } from '../../utils/usePushNotifications';
 import ImplantIcon from '../../components/ImplantIcon';
 import api from '../../utils/api';
 import LogoutConfirmModal from '../../components/LogoutConfirmModal';
+import GlassTabBar from '../../components/GlassTabBar';
+
+// Fixed-size icon box so every tab's icon lines up in the glass bar.
+function GlassTabIcon({ focused, children }: { focused: boolean; children: React.ReactNode }) {
+  return (
+    <View
+      style={{
+        width: 32, height: 28,
+        alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
 
 // ── Tile-Grid Menu ──────────────────────────────────────────
 // Tactile-feedback helper: silent on web (Haptics is a no-op), light tap on
@@ -632,6 +648,7 @@ export default function TabsLayout() {
         hasUnreadForum={hasUnreadForum}
       />
       <Tabs
+        tabBar={(props) => <GlassTabBar {...props} />}
         screenOptions={{
           tabBarActiveTintColor: '#1565C0',
           tabBarInactiveTintColor: '#8E8E93',
@@ -647,37 +664,16 @@ export default function TabsLayout() {
             </Text>
           ),
           headerTitleAlign: 'center',
-          tabBarStyle: {
-            backgroundColor: '#FFF',
-            borderTopWidth: 1,
-            borderTopColor: '#E5E5EA',
-            // iter-246: shift icons + labels upward inside the same 70-px
-            // white strip — paddingBottom 14 (was 4) pushes the content
-            // up; paddingTop 4 (was 8) compensates so the strip height
-            // stays the same.
-            paddingBottom: 14,
-            paddingTop: 4,
-            height: 70,
-          },
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: '600',
-            marginTop: 2,
-          },
-          tabBarIconStyle: {
-            marginBottom: 0,
-          },
-          tabBarItemStyle: {
-            paddingVertical: 0,
-          },
         }}
       >
         <Tabs.Screen
           name="dashboard"
           options={{
             title: 'Home',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="home-outline" size={24} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <GlassTabIcon focused={focused}>
+                <Ionicons name={focused ? 'home' : 'home-outline'} size={19} color={color} />
+              </GlassTabIcon>
             ),
           }}
         />
@@ -685,8 +681,10 @@ export default function TabsLayout() {
           name="new-procedure"
           options={{
             title: 'New Case',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="document-text-outline" size={24} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <GlassTabIcon focused={focused}>
+                <Ionicons name="document-text-outline" size={19} color={color} />
+              </GlassTabIcon>
             ),
             href: isNurse ? null : '/new-procedure',
             headerShown: false,
@@ -697,8 +695,10 @@ export default function TabsLayout() {
           name="implant-selection"
           options={{
             title: 'Catalog',
-            tabBarIcon: ({ color }) => (
-              <ImplantIcon size={28} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <GlassTabIcon focused={focused}>
+                <ImplantIcon size={21} color={color} />
+              </GlassTabIcon>
             ),
             href: isNurse ? null : '/implant-selection',
           }}
@@ -707,9 +707,9 @@ export default function TabsLayout() {
           name="procedures"
           options={{
             title: isNurse ? 'Cases' : 'My Cases',
-            tabBarIcon: ({ color }) => (
-              <View>
-                <Ionicons name="folder-open-outline" size={24} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <GlassTabIcon focused={focused}>
+                <Ionicons name={focused ? 'folder-open' : 'folder-open-outline'} size={19} color={color} />
                 {pendingApprovalCount > 0 && (
                   <View style={badgeStyles.badge} data-testid="cases-pending-badge">
                     <Text style={badgeStyles.badgeText}>
@@ -717,7 +717,7 @@ export default function TabsLayout() {
                     </Text>
                   </View>
                 )}
-              </View>
+              </GlassTabIcon>
             ),
           }}
           listeners={{
@@ -746,8 +746,10 @@ export default function TabsLayout() {
           name="profile"
           options={{
             title: 'Profile',
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="person-outline" size={24} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <GlassTabIcon focused={focused}>
+                <Ionicons name={focused ? 'person' : 'person-outline'} size={19} color={color} />
+              </GlassTabIcon>
             ),
           }}
         />

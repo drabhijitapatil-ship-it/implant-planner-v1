@@ -6,6 +6,7 @@ import { useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import SafeDeleteModal from '../../components/SafeDeleteModal';
+import { TAB_BAR_CLEARANCE } from "../../constants/tabBar";
 
 export default function ArchivedScreen() {
   const { user } = useAuth();
@@ -110,7 +111,7 @@ export default function ArchivedScreen() {
           <Text style={s.emptyText}>No archived cases</Text>
         </View>
       ) : (
-        <FlatList data={filtered} renderItem={renderItem} keyExtractor={item => item.id || item._id || Math.random().toString()} contentContainerStyle={{ padding: 16 }} />
+        <FlatList data={filtered} renderItem={renderItem} keyExtractor={item => item.id || item._id || Math.random().toString()} contentContainerStyle={{ padding: 16, paddingBottom: TAB_BAR_CLEARANCE }} />
       )}
       {safeDeleteCase && (
         <SafeDeleteModal

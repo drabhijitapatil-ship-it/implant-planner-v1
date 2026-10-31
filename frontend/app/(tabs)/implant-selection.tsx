@@ -21,6 +21,7 @@ import DrillingProtocolScreen from '../../components/DrillingProtocol';
 import { getImplantDetails } from '../../constants/implantIndications';
 import ColorStripe from '../../components/ColorStripe';
 import { evaluateImplantSafety, annotateImplantSafety, shortSafetyChip, rankImplantsByCloseness, type SafetyVerdict } from '../../utils/implantSafety';
+import { TAB_BAR_CLEARANCE } from "../../constants/tabBar";
 
 // ── Types ──────────────────────────────────────────────────
 type ImplantSystem = {
@@ -273,7 +274,7 @@ export default function ImplantSelectionScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.scroll, { paddingBottom: TAB_BAR_CLEARANCE }]} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={s.header}>
           <Ionicons name="medical" size={26} color="#1E88E5" />

@@ -58,7 +58,7 @@ export default function UpdateBanner() {
   const pct = typeof downloadProgress === 'number' && downloadProgress > 0 ? ` ${Math.round(downloadProgress * 100)}%` : '';
 
   return (
-    <View pointerEvents="box-none" style={[styles.wrap, { bottom: insets.bottom + 12 }]}>
+    <View pointerEvents="box-none" style={[styles.wrap, { bottom: insets.bottom + 88 }]}>
       <View style={styles.banner} testID="ota-update-banner">
         {isUpdatePending ? (
           <>

@@ -34,6 +34,7 @@ import {
 } from "../../utils/departmentBadge";
 import AssistingTodayStrip from "../../components/AssistingTodayStrip";
 import { HIDE_COMMERCE } from "../../utils/storePolicy";
+import { TAB_BAR_CLEARANCE } from "../../constants/tabBar";
 
 // ── Status helpers ────────────────────────────────────────
 const ACTION_NEEDED_MAP: Record<
@@ -2804,6 +2805,7 @@ export default function DashboardScreen() {
         }
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
       >
         <Header user={user} router={router} />
 

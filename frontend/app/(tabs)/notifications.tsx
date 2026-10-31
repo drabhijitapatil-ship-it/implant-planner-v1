@@ -16,6 +16,7 @@ import api from '../../utils/api';
 import { useRouter } from 'expo-router';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { TAB_BAR_CLEARANCE } from "../../constants/tabBar";
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
@@ -262,7 +263,7 @@ export default function NotificationsScreen() {
           renderItem={renderNotification}
           keyExtractor={(item: any) => item.id}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={styles.listContainer}
+          contentContainerStyle={[styles.listContainer, { paddingBottom: TAB_BAR_CLEARANCE }]}
         />
       )}
     </View>

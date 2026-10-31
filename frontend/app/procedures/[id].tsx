@@ -3940,10 +3940,14 @@ export default function ProcedureDetailScreen() {
               const canUpload = user?.role === "nurse" || isOwner;
               const canViewOnly =
                 !canUpload &&
-                (user?.role === "supervisor" ||
-                  user?.role === "implant_incharge" ||
-                  user?.role === "administrator" ||
-                  user?.role === "super_admin");
+                [
+                  "supervisor",
+                  "implant_incharge",
+                  "administrator",
+                  "super_admin",
+                  "dentist",
+                  "chief_dentist",
+                ].includes(user?.role || "");
               const phase1Window =
                 procedure.status === "pending_phase1" ||
                 procedure.status === "phase1_approved";
@@ -3957,6 +3961,15 @@ export default function ProcedureDetailScreen() {
                 const filename = procedure.patient_consent_form?.filename;
                 const openLockedConsent = async () => {
                   try {
+                    // Legacy e-signed consent stored only the signature image:
+                    // open the complete signed form instead.
+                    if (
+                      procedure.consent_esign?.filename &&
+                      (!filename || /\.png$/i.test(filename))
+                    ) {
+                      await downloadConsentTemplate(String(id));
+                      return;
+                    }
                     if (!filename) {
                       Alert.alert("Error", "Consent form filename missing");
                       return;
@@ -4004,6 +4017,16 @@ export default function ProcedureDetailScreen() {
                   // token happened to be in state when the screen loaded (which
                   // may have since expired, causing this to "sometimes" fail).
                   const filename = procedure.patient_consent_form?.filename;
+                  // Consents e-signed before the server started saving the full
+                  // signed PDF stored only the signature image — show the
+                  // complete form (generated with that signature) instead.
+                  if (
+                    procedure.consent_esign?.filename &&
+                    (!filename || /\.png$/i.test(filename))
+                  ) {
+                    await downloadConsentTemplate(String(id));
+                    return;
+                  }
                   if (!filename) {
                     Alert.alert("Error", "Consent form filename missing");
                     return;
