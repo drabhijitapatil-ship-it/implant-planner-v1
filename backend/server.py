@@ -13869,6 +13869,132 @@ async def list_ai_logs(
     return {"logs": rows, "total": total}
 
 
+class AiPriceIn(BaseModel):
+    input_per_million: float = Field(..., ge=0, le=10000)
+    output_per_million: float = Field(..., ge=0, le=10000)
+
+
+class AiPricingUpdate(BaseModel):
+    currency: str = Field("USD", max_length=8)
+    models: Dict[str, AiPriceIn] = Field(default_factory=dict)
+
+
+async def _ai_pricing() -> dict:
+    doc = await db.platform_settings.find_one({"_id": "ai_pricing"}) or {}
+    return {"currency": doc.get("currency") or "USD", "models": doc.get("models") or {}}
+
+
+@api_router.get("/admin/ai-pricing")
+async def get_ai_pricing(current_user: dict = Depends(get_current_user)):
+    """Per-model token prices the super admin enters (from their AI provider
+    plan) so AI Logs can estimate cost. Also lists every model seen in the
+    logs so each one can be priced."""
+    _require_platform_admin(current_user)
+    pricing = await _ai_pricing()
+    seen = [m for m in await db.ai_logs.distinct("model") if m]
+    return {**pricing, "models_seen": sorted(seen)}
+
+
+@api_router.put("/admin/ai-pricing")
+async def update_ai_pricing(payload: AiPricingUpdate, current_user: dict = Depends(get_current_user)):
+    _require_platform_admin(current_user)
+    models = {k[:80]: v.model_dump() for k, v in payload.models.items() if k}
+    await db.platform_settings.update_one(
+        {"_id": "ai_pricing"},
+        {"$set": {"currency": (payload.currency or "USD").upper()[:8], "models": models,
+                  "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": current_user.get("name")}},
+        upsert=True,
+    )
+    return await _ai_pricing()
+
+
+def _ai_period_key(at: datetime, group: str) -> str:
+    if group == "month":
+        return at.strftime("%Y-%m")
+    if group == "week":
+        monday = at.date() - timedelta(days=at.weekday())
+        return monday.isoformat()
+    return at.date().isoformat()
+
+
+@api_router.get("/admin/ai-logs/usage")
+async def ai_logs_usage(group: str = "day", current_user: dict = Depends(get_current_user)):
+    """AI usage per day (last 30 days), per week (last 12 weeks, starting
+    Monday) or per month (last 12 months): requests, failures, tokens and —
+    when prices are set — estimated cost, plus the busiest feature."""
+    _require_platform_admin(current_user)
+    group = group if group in ("day", "week", "month") else "day"
+    now = datetime.now(timezone.utc)
+    if group == "day":
+        keys = [(now - timedelta(days=i)).date().isoformat() for i in range(29, -1, -1)]
+        since = now - timedelta(days=30)
+    elif group == "week":
+        this_monday = now.date() - timedelta(days=now.weekday())
+        keys = [(this_monday - timedelta(weeks=i)).isoformat() for i in range(11, -1, -1)]
+        since = datetime.combine(this_monday - timedelta(weeks=11), datetime.min.time(), tzinfo=timezone.utc)
+    else:
+        y, m = now.year, now.month
+        months = []
+        for _ in range(12):
+            months.append(f"{y:04d}-{m:02d}")
+            m -= 1
+            if m == 0:
+                y, m = y - 1, 12
+        keys = list(reversed(months))
+        first = keys[0]
+        since = datetime(int(first[:4]), int(first[5:7]), 1, tzinfo=timezone.utc)
+
+    pricing = await _ai_pricing()
+    prices = pricing["models"]
+    periods: Dict[str, Dict[str, Any]] = {
+        k: {"period": k, "calls": 0, "failed": 0, "input_tokens": 0, "output_tokens": 0,
+            "cost": 0.0, "unpriced_calls": 0, "features": {}}
+        for k in keys
+    }
+    async for d in db.ai_logs.find({"at": {"$gte": since}}, {"_id": 0, "at": 1, "ok": 1, "model": 1, "feature": 1,
+                                                             "input_tokens": 1, "output_tokens": 1}):
+        at = d.get("at")
+        if not isinstance(at, datetime):
+            continue
+        at = at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+        p = periods.get(_ai_period_key(at, group))
+        if p is None:
+            continue
+        p["calls"] += 1
+        if not d.get("ok"):
+            p["failed"] += 1
+        ti, to = d.get("input_tokens") or 0, d.get("output_tokens") or 0
+        p["input_tokens"] += ti
+        p["output_tokens"] += to
+        f = d.get("feature") or "Other"
+        p["features"][f] = p["features"].get(f, 0) + 1
+        price = prices.get(d.get("model") or "")
+        if price and (ti or to):
+            p["cost"] += ti / 1_000_000 * price["input_per_million"] + to / 1_000_000 * price["output_per_million"]
+        elif ti or to:
+            p["unpriced_calls"] += 1
+
+    rows = []
+    for k in keys:
+        p = periods[k]
+        top = max(p["features"].items(), key=lambda kv: kv[1])[0] if p["features"] else None
+        rows.append({**{x: p[x] for x in ("period", "calls", "failed", "input_tokens", "output_tokens", "unpriced_calls")},
+                     "cost": round(p["cost"], 4), "top_feature": top})
+    return {
+        "group": group,
+        "currency": pricing["currency"],
+        "priced": bool(prices),
+        "periods": rows,
+        "totals": {
+            "calls": sum(r["calls"] for r in rows),
+            "failed": sum(r["failed"] for r in rows),
+            "input_tokens": sum(r["input_tokens"] for r in rows),
+            "output_tokens": sum(r["output_tokens"] for r in rows),
+            "cost": round(sum(r["cost"] for r in rows), 4),
+        },
+    }
+
+
 @api_router.get("/admin/ai-logs/summary")
 async def ai_logs_summary(days: int = 30, current_user: dict = Depends(get_current_user)):
     _require_platform_admin(current_user)
