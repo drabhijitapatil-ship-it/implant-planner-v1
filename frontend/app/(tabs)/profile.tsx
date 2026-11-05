@@ -389,7 +389,7 @@ export default function ProfileScreen() {
           )}
 
           {/* Organization Settings (scheduling, logo, etc.) — Implant In-Charge only. */}
-          {isIncharge && (
+          {(isIncharge || isOrgAdmin) && (
             <TouchableOpacity
               style={isOrgAdmin ? styles.rowItem : [styles.rowItem, styles.rowItemLast]}
               onPress={() => router.push('/admin/scheduling-settings')}

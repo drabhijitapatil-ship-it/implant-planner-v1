@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../../utils/api';
 import CenteredHeader from '../../components/CenteredHeader';
 import { useAuth } from '../../contexts/AuthContext';
+import { setScreenshotsAllowedLocally } from '../../hooks/useScreenshotPolicy';
 
 /**
  * Organization Settings. Implant In-Charge only.
@@ -107,6 +108,13 @@ export default function SchedulingSettingsScreen() {
   const [enforceRestriction, setEnforceRestriction] = useState(true);
   const [restrictionSaving, setRestrictionSaving] = useState(false);
 
+  // Screenshots for this organization: true / false = its own choice,
+  // null = follow the Implanr (super admin) default.
+  const isOrgAdmin = !!user?.is_admin;
+  const [orgShots, setOrgShots] = useState<boolean | null>(null);
+  const [platformShots, setPlatformShots] = useState(true);
+  const [shotsSaving, setShotsSaving] = useState(false);
+
   const [mode, setMode] = useState<'default' | 'custom' | 'open'>('default');
   const [customSlots, setCustomSlots] = useState<CustomSlot[]>([emptySlot()]);
   const [openWindowHours, setOpenWindowHours] = useState('2');
@@ -148,6 +156,27 @@ export default function SchedulingSettingsScreen() {
     }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    api.get('/app-config').then((r) => {
+      setOrgShots(typeof r.data?.org_screenshots_allowed === 'boolean' ? r.data.org_screenshots_allowed : null);
+      setPlatformShots(r.data?.platform_screenshots_allowed !== false);
+    }).catch(() => {});
+  }, []);
+
+  const saveShots = async (value: boolean | null) => {
+    const prev = orgShots;
+    setOrgShots(value);
+    setShotsSaving(true);
+    try {
+      const r = await api.put('/organizations/me/screenshots', { allowed: value });
+      setScreenshotsAllowedLocally(r.data?.screenshots_allowed !== false);
+    } catch (e: any) {
+      setOrgShots(prev);
+      Alert.alert('Error', e?.response?.data?.detail || 'Could not update this setting');
+    } finally {
+      setShotsSaving(false);
+    }
+  };
 
   const handlePickLogo = async () => {
     // System photo picker needs no media-library permission (Play policy: READ_MEDIA_* removed).
@@ -317,6 +346,42 @@ export default function SchedulingSettingsScreen() {
               )}
             </View>
           </View>
+
+          {/* ── Screenshots (organization admin) ── */}
+          {isOrgAdmin && (
+            <View style={s.card} testID="org-screenshot-setting">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Ionicons name="camera-outline" size={20} color="#1A73E8" />
+                <Text style={[s.cardTitle, { flex: 1 }]}>Screenshots</Text>
+                {shotsSaving && <ActivityIndicator color="#1A73E8" />}
+              </View>
+              <Text style={s.hint}>
+                Choose whether everyone in your organization can take screenshots and screen recordings in the app. Blocking them protects patient data; allowing them lets users attach screenshots to "Report an Issue". Changes apply when users next open the app.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                {([
+                  { v: true, label: 'Allowed' },
+                  { v: false, label: 'Blocked' },
+                  { v: null, label: `Implanr default (${platformShots ? 'Allowed' : 'Blocked'})` },
+                ] as { v: boolean | null; label: string }[]).map((o) => {
+                  const active = orgShots === o.v;
+                  return (
+                    <TouchableOpacity
+                      key={String(o.v)}
+                      onPress={() => !active && !shotsSaving && saveShots(o.v)}
+                      style={{
+                        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1.5,
+                        borderColor: active ? '#1A73E8' : '#CBD5E1', backgroundColor: active ? '#1A73E8' : '#FFF',
+                      }}
+                      testID={`org-screenshots-${o.v === null ? 'default' : o.v ? 'allowed' : 'blocked'}`}
+                    >
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#FFF' : '#334155' }}>{o.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           {/* ── Time Slot Mode ── */}
           <View style={s.card}>

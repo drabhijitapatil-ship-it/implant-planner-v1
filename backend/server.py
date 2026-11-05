@@ -5513,11 +5513,46 @@ class SecuritySettingsUpdate(BaseModel):
     screenshots_allowed: Optional[bool] = None
 
 
+class OrgScreenshotUpdate(BaseModel):
+    # True / False = this organization's choice; None = follow the platform default.
+    allowed: Optional[bool] = None
+
+
+async def _org_doc(current_user: dict) -> Optional[dict]:
+    org_id = current_user.get("org_id")
+    if not org_id or not ObjectId.is_valid(str(org_id)):
+        return None
+    return await db.organizations.find_one({"_id": ObjectId(str(org_id))}, {"screenshots_allowed": 1})
+
+
 @api_router.get("/app-config")
 async def get_app_config(current_user: dict = Depends(get_current_user)):
-    """Settings every signed-in app reads on launch / resume."""
+    """Settings every signed-in app reads on launch / resume. Screenshots
+    follow the user's organization when its admin has chosen, otherwise the
+    super admin's platform default."""
     doc = await db.platform_settings.find_one({"_id": "security"}) or {}
-    return {k: doc.get(k, d) for k, d in SECURITY_SETTINGS_DEFAULTS.items()}
+    platform_default = doc.get("screenshots_allowed", SECURITY_SETTINGS_DEFAULTS["screenshots_allowed"])
+    org = await _org_doc(current_user)
+    org_value = (org or {}).get("screenshots_allowed")
+    return {
+        "screenshots_allowed": org_value if isinstance(org_value, bool) else platform_default,
+        "platform_screenshots_allowed": platform_default,
+        "org_screenshots_allowed": org_value if isinstance(org_value, bool) else None,
+    }
+
+
+@api_router.put("/organizations/me/screenshots")
+async def update_org_screenshots(payload: OrgScreenshotUpdate, current_user: dict = Depends(get_current_user)):
+    """College / clinic admin turns screenshots on or off for their own
+    organization (allowed: null goes back to the platform default)."""
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Only your organization's admin can change this setting")
+    org = await _org_doc(current_user)
+    if not org:
+        raise HTTPException(status_code=400, detail="No organization associated with this account")
+    op = {"$set": {"screenshots_allowed": payload.allowed}} if payload.allowed is not None else {"$unset": {"screenshots_allowed": ""}}
+    await db.organizations.update_one({"_id": org["_id"]}, op)
+    return await get_app_config(current_user)
 
 
 @api_router.put("/admin/app-config")
@@ -5530,7 +5565,7 @@ async def update_app_config(payload: SecuritySettingsUpdate, current_user: dict 
     updates["updated_by"] = current_user.get("name") or current_user.get("email")
     await db.platform_settings.update_one({"_id": "security"}, {"$set": updates}, upsert=True)
     doc = await db.platform_settings.find_one({"_id": "security"}) or {}
-    return {k: doc.get(k, d) for k, d in SECURITY_SETTINGS_DEFAULTS.items()}
+    return {"screenshots_allowed": doc.get("screenshots_allowed", SECURITY_SETTINGS_DEFAULTS["screenshots_allowed"])}
 
 
 async def _seed_trial_settings() -> None:

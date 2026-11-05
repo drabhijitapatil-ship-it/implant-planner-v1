@@ -44,7 +44,7 @@ function ScreenshotSettingCard({ wide }: { wide: boolean }) {
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    api.get('/app-config').then((r) => setAllowed(!!r.data?.screenshots_allowed)).catch(() => setAllowed(null));
+    api.get('/app-config').then((r) => setAllowed(r.data?.platform_screenshots_allowed ?? !!r.data?.screenshots_allowed)).catch(() => setAllowed(null));
   }, []);
   const save = async (v: boolean) => {
     const prev = allowed;
@@ -52,6 +52,7 @@ function ScreenshotSettingCard({ wide }: { wide: boolean }) {
     setSaving(true);
     try {
       const r = await api.put('/admin/app-config', { screenshots_allowed: v });
+      // Super admins have no organization, so the default is what applies to them.
       setScreenshotsAllowedLocally(!!r.data?.screenshots_allowed);
     } catch (e: any) {
       setAllowed(prev);
@@ -67,13 +68,13 @@ function ScreenshotSettingCard({ wide }: { wide: boolean }) {
           <Ionicons name="camera-outline" size={22} color="#EF6C00" />
         </View>
         <View style={s.navCardTextWrap}>
-          <Text style={s.navCardLabel}>Allow screenshots</Text>
+          <Text style={s.navCardLabel}>Allow screenshots (default)</Text>
           <Text style={s.navCardSub} numberOfLines={3}>
             {allowed === null
               ? 'Loading…'
               : allowed
-                ? 'On — all users can take screenshots and screen recordings.'
-                : 'Off — screenshots and screen recordings are blocked to protect patient data.'}
+                ? 'On — allowed for every organization whose admin hasn’t chosen otherwise.'
+                : 'Off — blocked for every organization whose admin hasn’t chosen otherwise.'}
           </Text>
         </View>
       </View>
