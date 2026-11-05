@@ -5502,6 +5502,37 @@ async def update_trial_settings(payload: TrialSettingsUpdate, current_user: dict
     return _serialize_trial(doc)
 
 
+# ── App security settings (super admin) ─────────────────────────────────
+# screenshots_allowed: when False the app blocks screenshots / screen
+# recording for signed-in users (HIPAA guard). Default True so users can
+# attach screenshots to "Report an Issue".
+SECURITY_SETTINGS_DEFAULTS = {"screenshots_allowed": True}
+
+
+class SecuritySettingsUpdate(BaseModel):
+    screenshots_allowed: Optional[bool] = None
+
+
+@api_router.get("/app-config")
+async def get_app_config(current_user: dict = Depends(get_current_user)):
+    """Settings every signed-in app reads on launch / resume."""
+    doc = await db.platform_settings.find_one({"_id": "security"}) or {}
+    return {k: doc.get(k, d) for k, d in SECURITY_SETTINGS_DEFAULTS.items()}
+
+
+@api_router.put("/admin/app-config")
+async def update_app_config(payload: SecuritySettingsUpdate, current_user: dict = Depends(get_current_user)):
+    _require_platform_admin(current_user)
+    updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    updates["updated_by"] = current_user.get("name") or current_user.get("email")
+    await db.platform_settings.update_one({"_id": "security"}, {"$set": updates}, upsert=True)
+    doc = await db.platform_settings.find_one({"_id": "security"}) or {}
+    return {k: doc.get(k, d) for k, d in SECURITY_SETTINGS_DEFAULTS.items()}
+
+
 async def _seed_trial_settings() -> None:
     """Only creates the doc if missing — never overwrites, so an admin's
     saved trial config is permanent once set."""

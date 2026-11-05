@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  Switch,
+  Alert,
 } from 'react-native';
 import ScrollView from '@/components/KeyboardAwareScrollView';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +18,7 @@ import { router, useFocusEffect } from 'expo-router';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import LogoutConfirmModal from '../components/LogoutConfirmModal';
+import { setScreenshotsAllowedLocally } from '../hooks/useScreenshotPolicy';
 
 type PlatformSummary = {
   organizations: { total: number; colleges: number; clinics: number; other: number };
@@ -33,6 +36,53 @@ type NavCard = {
   bg: string;
   badge?: string;
 };
+
+// Platform-wide "Allow screenshots" switch. Off = the app blocks screenshots
+// and screen recording for signed-in users (HIPAA guard); phones pick the
+// change up when the app opens or returns to the foreground.
+function ScreenshotSettingCard({ wide }: { wide: boolean }) {
+  const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    api.get('/app-config').then((r) => setAllowed(!!r.data?.screenshots_allowed)).catch(() => setAllowed(null));
+  }, []);
+  const save = async (v: boolean) => {
+    const prev = allowed;
+    setAllowed(v);
+    setSaving(true);
+    try {
+      const r = await api.put('/admin/app-config', { screenshots_allowed: v });
+      setScreenshotsAllowedLocally(!!r.data?.screenshots_allowed);
+    } catch (e: any) {
+      setAllowed(prev);
+      Alert.alert('Could not save', e?.response?.data?.detail || 'Please try again');
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <View style={[s.navCard, wide && s.navCardTablet, { marginTop: 4 }]} data-testid="super-admin-screenshot-setting">
+      <View style={s.navCardLeft}>
+        <View style={[s.navCardIconWrap, { backgroundColor: '#FFF3E0' }]}>
+          <Ionicons name="camera-outline" size={22} color="#EF6C00" />
+        </View>
+        <View style={s.navCardTextWrap}>
+          <Text style={s.navCardLabel}>Allow screenshots</Text>
+          <Text style={s.navCardSub} numberOfLines={3}>
+            {allowed === null
+              ? 'Loading…'
+              : allowed
+                ? 'On — all users can take screenshots and screen recordings.'
+                : 'Off — screenshots and screen recordings are blocked to protect patient data.'}
+          </Text>
+        </View>
+      </View>
+      {saving ? <ActivityIndicator color="#1565C0" /> : (
+        <Switch value={!!allowed} onValueChange={save} disabled={allowed === null} testID="super-admin-screenshot-switch" />
+      )}
+    </View>
+  );
+}
 
 const NAV_CARDS: NavCard[] = [
   {
@@ -265,6 +315,8 @@ export default function SuperAdminDashboard() {
             </TouchableOpacity>
           ))}
         </View>
+
+        <ScreenshotSettingCard wide={isTablet} />
 
         {/* Footer info */}
         <View style={s.footer}>

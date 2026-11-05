@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { TabletFrame } from '../components/TabletFrame';
 import { useScreenCaptureProtection } from '../hooks/useScreenCaptureProtection';
+import { useScreenshotPolicy } from '../hooks/useScreenshotPolicy';
 import AttachPickerModalRoot from '../components/AttachPickerModal';
 import UpdateBanner from '../components/UpdateBanner';
 // Native splash hides as soon as the app mounts
@@ -27,9 +28,10 @@ SplashScreen.hideAsync().catch(() => {});
 function ActivityTracker({ children }: { children: React.ReactNode }) {
   const { recordActivity, user, loading } = useAuth();
   const pathname = usePathname();
-  // Screenshot blocking is switched off so users can capture problems for
-  // "Report an Issue". Pass !!user again to turn the HIPAA guard back on.
-  useScreenCaptureProtection(false);
+  // Screenshot blocking follows the super admin's "Allow screenshots" switch
+  // (on by default so users can attach screenshots to "Report an Issue").
+  const screenshotsAllowed = useScreenshotPolicy(!!user);
+  useScreenCaptureProtection(!!user && !screenshotsAllowed);
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
