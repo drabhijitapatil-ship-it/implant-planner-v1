@@ -6225,6 +6225,199 @@ async def get_platform_summary(current_user: dict = Depends(get_current_user)):
     }
 
 
+# ── super_admin: platform analytics (Super Admin → Platform Analytics) ──────
+
+def _as_utc(v: Any) -> Optional[datetime]:
+    """Stored timestamps are naive-UTC datetimes on older docs, ISO strings on
+    newer ones; normalise both to aware UTC (None when unparseable)."""
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+    if isinstance(v, str) and v:
+        try:
+            d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+_PHASE_OF_STATUS = {
+    "draft": "Draft",
+    "pending_phase1": "Phase 1", "phase1_approved": "Phase 1", "rejected_phase1": "Phase 1",
+    "pending_phase2": "Phase 2", "phase2_approved": "Phase 2", "rejected_phase2": "Phase 2",
+    "pending_stage2_surgical": "Phase 3", "stage2_surgical_approved": "Phase 3", "stage2_surgical_rejected": "Phase 3",
+    "pending_stage2_prosthetic": "Phase 4", "stage2_prosthetic_approved": "Phase 4", "stage2_prosthetic_rejected": "Phase 4",
+    "pending_phase4_step1": "Phase 4", "phase4_step1_approved": "Phase 4",
+    "pending_phase4_step2": "Phase 4", "phase4_step2_approved": "Phase 4",
+    "completed": "Completed", "treatment_ended": "Completed",
+    "permanently_rejected": "Rejected", "cancelled": "Cancelled",
+}
+
+
+@api_router.get("/platform/analytics")
+async def get_platform_analytics(current_user: dict = Depends(get_current_user)):
+    """Cross-organization numbers for the super admin: organizations and
+    their plans, users and activity, cases and their pipeline, top
+    institutions, and what is waiting for the Implanr team."""
+    if not current_user.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Only super admin can view platform analytics")
+
+    now = datetime.now(timezone.utc)
+    d7, d30 = now - timedelta(days=7), now - timedelta(days=30)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # Organizations + current subscription of each
+    orgs = await db.organizations.find({}, {"name": 1, "org_type": 1, "created_at": 1, "state": 1, "state_of_practice": 1}).to_list(5000)
+    org_name = {str(o["_id"]): o.get("name", "") for o in orgs}
+    org_type = {str(o["_id"]): o.get("org_type", "") for o in orgs}
+    subs: Dict[str, dict] = {}
+    async for sub in db.org_subscriptions.find({}).sort("started_at", 1):
+        subs[sub.get("org_id")] = sub  # last one per org wins (latest started_at)
+    plan_counts: Dict[str, int] = {}
+    status_counts: Dict[str, int] = {}
+    trials_ending: List[dict] = []
+    for o in orgs:
+        oid = str(o["_id"])
+        sub = subs.get(oid) or {}
+        status = sub.get("status") or "none"
+        status_counts[status] = status_counts.get(status, 0) + 1
+        plan = sub.get("plan_name") or ("Trial" if status == "trial" else "No plan")
+        plan_counts[plan] = plan_counts.get(plan, 0) + 1
+        ends = _as_utc(sub.get("trial_ends_at"))
+        if status == "trial" and ends and now <= ends <= now + timedelta(days=7):
+            trials_ending.append({"id": oid, "name": o.get("name", ""), "ends_at": ends.isoformat()})
+    new_orgs_30 = sum(1 for o in orgs if (_as_utc(o.get("created_at")) or now - timedelta(days=9999)) >= d30)
+    states: Dict[str, int] = {}
+    for o in orgs:
+        st = o.get("state") or o.get("state_of_practice")
+        if st:
+            states[st] = states.get(st, 0) + 1
+
+    # Users
+    users = await db.users.find({}, {"role": 1, "org_id": 1, "created_at": 1, "last_active_at": 1, "disabled": 1}).to_list(100000)
+    by_role: Dict[str, int] = {}
+    active_7 = active_30 = new_users_30 = disabled = 0
+    org_users: Dict[str, int] = {}
+    org_active: Dict[str, Optional[datetime]] = {}
+    for u in users:
+        role = normalize_role(u.get("role") or "unknown")
+        by_role[role] = by_role.get(role, 0) + 1
+        if u.get("disabled"):
+            disabled += 1
+        la = _as_utc(u.get("last_active_at"))
+        if la and la >= d7:
+            active_7 += 1
+        if la and la >= d30:
+            active_30 += 1
+        ca = _as_utc(u.get("created_at"))
+        if ca and ca >= d30:
+            new_users_30 += 1
+        oid = u.get("org_id")
+        if oid:
+            org_users[oid] = org_users.get(oid, 0) + 1
+            if la and (org_active.get(oid) is None or la > org_active[oid]):
+                org_active[oid] = la
+
+    # Cases (archived excluded); attribute each case to its creator's org
+    user_org = {str(u["_id"]): u.get("org_id") for u in users}
+    procs = await db.procedures.find(
+        {"archived": {"$ne": True}},
+        {"status": 1, "created_at": 1, "completed_at": 1, "implant_procedure_type": 1, "created_by_id": 1,
+         "student_id": 1, "implant_plans": 1, "number_of_implants": 1},
+    ).to_list(200000)
+    pipeline: Dict[str, int] = {}
+    types: Dict[str, int] = {}
+    org_cases: Dict[str, int] = {}
+    org_cases_30: Dict[str, int] = {}
+    per_day: Dict[str, int] = {}
+    cases_month = cases_30 = completed = implants = 0
+    durations: List[float] = []
+    for p in procs:
+        st = p.get("status") or "draft"
+        phase = _PHASE_OF_STATUS.get(st, "Other")
+        pipeline[phase] = pipeline.get(phase, 0) + 1
+        if phase == "Completed":
+            completed += 1
+        t = (p.get("implant_procedure_type") or "").strip()
+        if t:
+            types[t] = types.get(t, 0) + 1
+        plans = p.get("implant_plans") or []
+        implants += len(plans) if isinstance(plans, list) and plans else int(p.get("number_of_implants") or 0)
+        ca = _as_utc(p.get("created_at"))
+        oid = user_org.get(p.get("created_by_id") or "") or user_org.get(p.get("student_id") or "")
+        if oid:
+            org_cases[oid] = org_cases.get(oid, 0) + 1
+        if ca:
+            if ca >= month_start:
+                cases_month += 1
+            if ca >= d30:
+                cases_30 += 1
+                day = ca.date().isoformat()
+                per_day[day] = per_day.get(day, 0) + 1
+                if oid:
+                    org_cases_30[oid] = org_cases_30.get(oid, 0) + 1
+            done = _as_utc(p.get("completed_at"))
+            if done and done > ca:
+                durations.append((done - ca).total_seconds() / 86400)
+    trend = []
+    for i in range(29, -1, -1):
+        day = (now - timedelta(days=i)).date().isoformat()
+        trend.append({"date": day, "count": per_day.get(day, 0)})
+
+    top_orgs = sorted(org_cases.items(), key=lambda kv: -kv[1])[:10]
+    inactive = [
+        {"id": oid, "name": org_name.get(oid, ""), "org_type": org_type.get(oid, ""),
+         "last_active_at": org_active[oid].isoformat() if org_active.get(oid) else None}
+        for oid in org_name
+        if not org_active.get(oid) or org_active[oid] < d30
+    ][:20]
+
+    return {
+        "generated_at": now.isoformat(),
+        "organizations": {
+            "total": len(orgs),
+            "colleges": sum(1 for o in orgs if o.get("org_type") == "college"),
+            "clinics": sum(1 for o in orgs if o.get("org_type") == "clinic"),
+            "new_last_30_days": new_orgs_30,
+            "by_subscription_status": status_counts,
+            "by_plan": plan_counts,
+            "trials_ending_7_days": sorted(trials_ending, key=lambda x: x["ends_at"]),
+            "by_state": dict(sorted(states.items(), key=lambda kv: -kv[1])[:10]),
+            "inactive_30_days": inactive,
+        },
+        "users": {
+            "total": len(users),
+            "by_role": by_role,
+            "active_7_days": active_7,
+            "active_30_days": active_30,
+            "new_last_30_days": new_users_30,
+            "disabled": disabled,
+        },
+        "cases": {
+            "total": len(procs),
+            "completed": completed,
+            "created_this_month": cases_month,
+            "created_last_30_days": cases_30,
+            "implants_planned": implants,
+            "avg_days_to_complete": round(sum(durations) / len(durations), 1) if durations else None,
+            "pipeline": pipeline,
+            "top_procedure_types": dict(sorted(types.items(), key=lambda kv: -kv[1])[:8]),
+            "daily_last_30_days": trend,
+        },
+        "top_organizations": [
+            {"id": oid, "name": org_name.get(oid, "Unknown"), "org_type": org_type.get(oid, ""),
+             "cases": n, "cases_last_30_days": org_cases_30.get(oid, 0), "users": org_users.get(oid, 0),
+             "last_active_at": org_active[oid].isoformat() if org_active.get(oid) else None}
+            for oid, n in top_orgs
+        ],
+        "inbox": {
+            "access_requests_new": await db.access_requests.count_documents({"status": "new"}),
+            "issue_reports_new": await db.issue_reports.count_documents({"status": "new"}),
+            "upgrade_requests": await db.org_subscriptions.count_documents({"requested_plan_key": {"$nin": [None, ""]}}),
+        },
+    }
+
+
 # ── super_admin: list all organizations (for the cross-org "Add User" picker) ──
 
 @api_router.get("/organizations")
@@ -6238,7 +6431,7 @@ async def list_organizations(current_user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/organizations/details")
-async def list_organizations_detailed(skip: int = 0, limit: int = 20, current_user: dict = Depends(get_current_user)):
+async def list_organizations_detailed(skip: int = 0, limit: int = 20, org_type: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Full onboarding details + live headcounts for every organization on the
     platform. super_admin only — this is the cross-org oversight view.
     Paginated (skip/limit) for infinite-scroll on the Organizations screen."""
@@ -6247,10 +6440,11 @@ async def list_organizations_detailed(skip: int = 0, limit: int = 20, current_us
 
     limit = max(1, min(int(limit or 20), 50))
     skip = max(0, int(skip or 0))
-    total = await db.organizations.count_documents({})
+    q: Dict[str, Any] = {"org_type": org_type} if org_type in ("college", "clinic") else {}
+    total = await db.organizations.count_documents(q)
 
     results = []
-    async for org in db.organizations.find({}).sort("created_at", -1).skip(skip).limit(limit):
+    async for org in db.organizations.find(q).sort("created_at", -1).skip(skip).limit(limit):
         org_id = str(org["_id"])
 
         role_pipeline = [

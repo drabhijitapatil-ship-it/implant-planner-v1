@@ -400,7 +400,9 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.rowContent}>
                 <Text style={styles.rowLabel}>Settings</Text>
-                <Text style={styles.rowValue}>Organization logo, scheduling &amp; more</Text>
+                <Text style={styles.rowValue}>
+                  {isOrgAdmin ? 'Organization logo, scheduling, screenshots & more' : 'Organization logo, scheduling & more'}
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>

@@ -87,6 +87,15 @@ function ScreenshotSettingCard({ wide }: { wide: boolean }) {
 
 const NAV_CARDS: NavCard[] = [
   {
+    key: 'platform-analytics',
+    label: 'Platform Analytics',
+    sub: 'Usage, activity, plans & trends across all institutions',
+    icon: 'analytics-outline',
+    route: '/admin/platform-analytics',
+    color: '#0F766E',
+    bg: '#CCFBF1',
+  },
+  {
     key: 'issue-reports',
     label: 'Issue Reports',
     sub: 'Problems users reported from the app',
@@ -253,6 +262,7 @@ export default function SuperAdminDashboard() {
           <StatTile
             label="Colleges"
             value={summary?.organizations?.colleges ?? 0}
+            onPress={() => router.push('/admin/organizations?type=college' as any)}
             color="#4F46E5"
             bg="#EEF2FF"
             icon="school-outline"
@@ -260,6 +270,7 @@ export default function SuperAdminDashboard() {
           <StatTile
             label="Clinics"
             value={summary?.organizations?.clinics ?? 0}
+            onPress={() => router.push('/admin/organizations?type=clinic' as any)}
             color="#059669"
             bg="#ECFDF5"
             icon="medkit-outline"
@@ -267,6 +278,7 @@ export default function SuperAdminDashboard() {
           <StatTile
             label="Total Users"
             value={summary?.users?.total ?? 0}
+            onPress={() => router.push('/admin/platform-analytics' as any)}
             color="#0284C7"
             bg="#F0F9FF"
             icon="people-outline"
@@ -274,6 +286,7 @@ export default function SuperAdminDashboard() {
           <StatTile
             label="Total Cases"
             value={summary?.cases?.total ?? 0}
+            onPress={() => router.push('/admin/platform-analytics' as any)}
             subValue={summary?.cases?.completed ? `${summary.cases.completed} done` : undefined}
             color="#D97706"
             bg="#FFFBEB"
@@ -346,6 +359,7 @@ function StatTile({
   color,
   bg,
   icon,
+  onPress,
 }: {
   label: string;
   value: number;
@@ -353,9 +367,16 @@ function StatTile({
   color: string;
   bg: string;
   icon: keyof typeof Ionicons.glyphMap;
+  onPress?: () => void;
 }) {
   return (
-    <View style={[s.statTile, { backgroundColor: '#FFF', borderColor: '#E2E8F0' }]} data-testid={`super-admin-stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+    <TouchableOpacity
+      style={[s.statTile, { backgroundColor: '#FFF', borderColor: '#E2E8F0' }]}
+      onPress={onPress}
+      disabled={!onPress}
+      activeOpacity={0.75}
+      data-testid={`super-admin-stat-${label.toLowerCase().replace(/\s+/g, '-')}`}
+    >
       <View style={s.statHeader}>
         <View style={[s.statIconWrap, { backgroundColor: bg }]}>
           <Ionicons name={icon} size={18} color={color} />
@@ -368,7 +389,7 @@ function StatTile({
       </View>
       <Text style={s.statValue}>{value}</Text>
       <Text style={s.statLabel}>{label}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 

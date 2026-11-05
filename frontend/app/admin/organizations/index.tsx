@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import api from '../../../utils/api';
 import { useAuth } from '../../../contexts/AuthContext';
 import CenteredHeader from '../../../components/CenteredHeader';
@@ -79,9 +79,13 @@ export default function OrganizationsScreen() {
     }
   }, [user]);
 
+  // ?type=college / ?type=clinic — opened from the Super Admin dashboard tiles.
+  const { type } = useLocalSearchParams<{ type?: string }>();
+  const orgType = type === 'college' || type === 'clinic' ? type : undefined;
+
   const load = useCallback(async (skip: number, replace: boolean) => {
     try {
-      const res = await api.get('/organizations/details', { params: { skip, limit: PAGE_SIZE } });
+      const res = await api.get('/organizations/details', { params: { skip, limit: PAGE_SIZE, ...(orgType ? { org_type: orgType } : {}) } });
       const page: OrgDetail[] = res.data?.organizations || [];
       setTotal(res.data?.total || 0);
       setOrgs((prev) => (replace ? page : [...prev, ...page]));
@@ -91,7 +95,7 @@ export default function OrganizationsScreen() {
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [orgType]);
 
   useEffect(() => { load(0, true); }, [load]);
 
@@ -177,7 +181,11 @@ export default function OrganizationsScreen() {
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
-      <CenteredHeader title="Organizations" subtitle={`${total} onboarded`} fallback="/profile" />
+      <CenteredHeader
+        title={orgType === 'college' ? 'Colleges' : orgType === 'clinic' ? 'Clinics' : 'Organizations'}
+        subtitle={`${total} onboarded`}
+        fallback="/profile"
+      />
       {loading ? (
         <View style={s.loadingContainer}>
           <ActivityIndicator size="large" color="#1565C0" />
