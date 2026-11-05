@@ -388,11 +388,13 @@ export default function OrganizationDetailScreen() {
           )}
 
           <View style={s.subCard} data-testid="org-subscription-card">
-            <View style={s.subHeaderRow}>
-              <Text style={s.sectionTitle}>Subscription</Text>
+            {/* Title on its own line, actions on a wrapping row below — the
+                title and two buttons didn't fit side by side on phones. */}
+            <Text style={[s.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Subscription</Text>
+            <View style={s.subActionsRow}>
               {profile?.org_type === 'college' && (
                 <TouchableOpacity
-                  style={[s.subEditBtn, { marginLeft: 'auto', marginRight: 8 }]}
+                  style={s.subEditBtn}
                   onPress={() => router.push({ pathname: '/admin/organizations/licences', params: { id: String(id), name: profile?.name || '' } } as any)}
                   data-testid="org-licences-btn"
                 >
@@ -798,6 +800,7 @@ const s = StyleSheet.create({
     backgroundColor: '#FFF', borderRadius: 14, padding: 14, marginBottom: 4,
     borderWidth: 1, borderColor: '#E8EEF5',
   },
+  subActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 12 },
   subHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 0 },
   subEditBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, borderWidth: 1, borderColor: '#BBDEFB', backgroundColor: '#E3F2FD' },
   subEditBtnText: { fontSize: 12, fontWeight: '700', color: '#0D47A1' },

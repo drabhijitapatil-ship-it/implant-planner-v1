@@ -549,6 +549,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         await _touch_last_active(user)
         _AI_CONSENT.set(bool(user.get("ai_consent")))
         user["_id"] = str(user["_id"])
+        _AI_USER.set({"id": user["_id"], "name": user.get("name", ""), "role": user.get("role", ""), "org_id": user.get("org_id")})
         user["_original_role"] = user.get("role", "")
         # super_admin is a platform-wide role with no org_id of its own. It is never
         # granted through any user-editable path (invite / create-user / edit-user all
@@ -1711,6 +1712,10 @@ async def _ensure_access_log_indexes() -> None:
         await db.access_logs.create_index([("user_id", 1), ("created_at", -1)])
         await db.access_logs.create_index([("resource_type", 1), ("resource_id", 1), ("created_at", -1)])
         await db.gtin_map.create_index([("gtin_key", 1)], unique=True)
+        # AI usage log: kept one year, queried newest-first and by status/feature.
+        await db.ai_logs.create_index("at", expireAfterSeconds=365 * 24 * 3600)
+        await db.ai_logs.create_index([("ok", 1), ("at", -1)])
+        await db.ai_logs.create_index([("feature", 1), ("at", -1)])
     except Exception as e:
         logging.warning(f"[audit] index creation skipped: {e}")
 
@@ -13664,6 +13669,8 @@ except ImportError:
                     messages=[{"role": "user", "content": content}],
                     **kwargs,
                 )
+                usage = getattr(resp, "usage", None)
+                self._last_usage = {"input_tokens": getattr(usage, "input_tokens", None), "output_tokens": getattr(usage, "output_tokens", None)}
                 return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
 
             async def _send_openai(self, message: "UserMessage") -> str:
@@ -13681,6 +13688,8 @@ except ImportError:
                     content = message.text  # type: ignore[assignment]
                 msgs = list(self._messages) + [{"role": "user", "content": content}]
                 resp = await client.chat.completions.create(model=self._model, messages=msgs)  # type: ignore[arg-type]
+                usage = getattr(resp, "usage", None)
+                self._last_usage = {"input_tokens": getattr(usage, "prompt_tokens", None), "output_tokens": getattr(usage, "completion_tokens", None)}
                 return resp.choices[0].message.content or ""
 
         logging.info("emergentintegrations not installed — using openai/anthropic SDKs directly.")
@@ -13709,6 +13718,33 @@ import contextvars as _contextvars
 _AI_CONSENT: "_contextvars.ContextVar[bool]" = _contextvars.ContextVar("ai_consent", default=False)
 _AI_PHI_PROCS: "_contextvars.ContextVar[tuple]" = _contextvars.ContextVar("ai_phi_procs", default=())
 AI_CONSENT_REQUIRED = "AI_CONSENT_REQUIRED"
+# For the AI usage log (Super Admin → AI Logs): who made the request and
+# which endpoint it came from. Set per request; no prompt text is logged.
+_AI_USER: "_contextvars.ContextVar[Optional[dict]]" = _contextvars.ContextVar("ai_user", default=None)
+_AI_ROUTE: "_contextvars.ContextVar[str]" = _contextvars.ContextVar("ai_route", default="")
+
+
+@app.middleware("http")
+async def _ai_route_context(request: Request, call_next):
+    _AI_ROUTE.set(f"{request.method} {request.url.path}")
+    return await call_next(request)
+
+
+# Endpoint path → the feature name shown in the log.
+_AI_FEATURES = (
+    ("radiograph", "Radiograph comparison"), ("iopa", "Radiograph comparison"), ("cbct", "Radiograph comparison"),
+    ("exit-summary", "Exit summary"), ("assistant", "Ask Implanr AI"), ("summary", "Case summary"), ("explain", "Recommendation explanation"), ("note", "Clinical notes"),
+    ("ask", "Ask Implanr AI"), ("chat", "Ask Implanr AI"), ("diagnosis", "Clinical diagnosis"),
+    ("prosthetic", "Prosthetic planner"), ("research", "Research"), ("tip", "Smart tips"),
+)
+
+
+def _ai_feature_for(route: str) -> str:
+    low = (route or "").lower()
+    for key, label in _AI_FEATURES:
+        if key in low:
+            return label
+    return "Other"
 
 
 def _ai_track_proc(proc: Optional[dict]) -> None:
@@ -13758,10 +13794,142 @@ if hasattr(LlmChat, "send_message") and not getattr(LlmChat, "_consent_guarded",
         except Exception as exc:  # never send unscrubbed text silently
             logging.error("AI outgoing scrub failed: %s", exc)
             raise HTTPException(status_code=500, detail="Could not prepare AI request safely")
-        return await _llm_original_send(self, message, *a, **kw)
+        import time as _t
+        started = _t.monotonic()
+        self._last_usage = None  # set by the SDK call; never carry over a previous call's counts
+        try:
+            result = await _llm_original_send(self, message, *a, **kw)
+        except Exception as exc:
+            await _ai_log_call(self, message, started, None, exc)
+            raise
+        await _ai_log_call(self, message, started, result, None)
+        return result
 
     LlmChat.send_message = _llm_guarded_send  # type: ignore[assignment]
     LlmChat._consent_guarded = True  # type: ignore[attr-defined]
+
+
+async def _ai_log_call(chat: Any, message: Any, started: float, result: Any, error: Optional[Exception]) -> None:
+    """One row per AI call in db.ai_logs — metadata only, never the prompt
+    or the answer (they can describe patients). Best-effort: a logging
+    failure never affects the AI request."""
+    import time as _t
+    try:
+        user = _AI_USER.get() or {}
+        route = _AI_ROUTE.get()
+        usage = getattr(chat, "_last_usage", None) or {}
+        images = len(getattr(message, "file_contents", None) or [])
+        await db.ai_logs.insert_one({
+            "at": datetime.now(timezone.utc),
+            "user_id": user.get("id"), "user_name": user.get("name"), "user_role": user.get("role"),
+            "org_id": user.get("org_id"),
+            "route": route, "feature": _ai_feature_for(route),
+            "provider": getattr(chat, "_provider", None), "model": getattr(chat, "_model", None),
+            "duration_ms": int((_t.monotonic() - started) * 1000),
+            "prompt_chars": len(getattr(message, "text", "") or ""),
+            "response_chars": len(result) if isinstance(result, str) else None,
+            "images": images,
+            "input_tokens": usage.get("input_tokens"), "output_tokens": usage.get("output_tokens"),
+            "ok": error is None,
+            "error": (f"{type(error).__name__}: {str(error)[:300]}" if error else None),
+        })
+    except Exception as exc:  # pragma: no cover
+        logging.warning("AI log write skipped: %s", exc)
+
+
+@api_router.get("/admin/ai-logs")
+async def list_ai_logs(
+    status: Optional[str] = None, feature: Optional[str] = None, org_id: Optional[str] = None,
+    skip: int = 0, limit: int = 50, current_user: dict = Depends(get_current_user),
+):
+    _require_platform_admin(current_user)
+    q: Dict[str, Any] = {}
+    if status == "failed":
+        q["ok"] = False
+    elif status == "ok":
+        q["ok"] = True
+    if feature:
+        q["feature"] = feature
+    if org_id:
+        q["org_id"] = org_id
+    limit = max(1, min(int(limit or 50), 200))
+    total = await db.ai_logs.count_documents(q)
+    org_names: Dict[str, str] = {}
+    rows = []
+    async for d in db.ai_logs.find(q).sort("at", -1).skip(max(0, int(skip or 0))).limit(limit):
+        oid = d.get("org_id")
+        if oid and oid not in org_names and ObjectId.is_valid(str(oid)):
+            o = await db.organizations.find_one({"_id": ObjectId(str(oid))}, {"name": 1})
+            org_names[oid] = (o or {}).get("name", "")
+        d["id"] = str(d.pop("_id"))
+        d["org_name"] = org_names.get(oid) if oid else None
+        if isinstance(d.get("at"), datetime):
+            d["at"] = d["at"].isoformat()
+        rows.append(d)
+    return {"logs": rows, "total": total}
+
+
+@api_router.get("/admin/ai-logs/summary")
+async def ai_logs_summary(days: int = 30, current_user: dict = Depends(get_current_user)):
+    _require_platform_admin(current_user)
+    days = max(1, min(int(days or 30), 365))
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    calls = failed = in_tok = out_tok = 0
+    durations: List[int] = []
+    by_feature: Dict[str, int] = {}
+    by_model: Dict[str, int] = {}
+    by_org: Dict[str, int] = {}
+    by_user: Dict[str, Dict[str, Any]] = {}
+    per_day: Dict[str, int] = {}
+    async for d in db.ai_logs.find({"at": {"$gte": since}}, {"_id": 0}):
+        calls += 1
+        if not d.get("ok"):
+            failed += 1
+        in_tok += d.get("input_tokens") or 0
+        out_tok += d.get("output_tokens") or 0
+        if d.get("duration_ms") is not None:
+            durations.append(d["duration_ms"])
+        f = d.get("feature") or "Other"
+        by_feature[f] = by_feature.get(f, 0) + 1
+        m = d.get("model") or "unknown"
+        by_model[m] = by_model.get(m, 0) + 1
+        if d.get("org_id"):
+            by_org[d["org_id"]] = by_org.get(d["org_id"], 0) + 1
+        if d.get("user_id"):
+            u = by_user.setdefault(d["user_id"], {"name": d.get("user_name") or "", "role": d.get("user_role") or "", "calls": 0})
+            u["calls"] += 1
+        at = d.get("at")
+        if isinstance(at, datetime):
+            day = (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).date().isoformat()
+            per_day[day] = per_day.get(day, 0) + 1
+    org_names: Dict[str, str] = {}
+    for oid in list(by_org)[:50]:
+        if ObjectId.is_valid(str(oid)):
+            o = await db.organizations.find_one({"_id": ObjectId(str(oid))}, {"name": 1})
+            org_names[oid] = (o or {}).get("name", "") or oid
+    now = datetime.now(timezone.utc)
+    durations.sort()
+    return {
+        "days": days,
+        "calls": calls, "failed": failed,
+        "success_rate": round((calls - failed) / calls * 100, 1) if calls else None,
+        "input_tokens": in_tok, "output_tokens": out_tok,
+        "avg_ms": int(sum(durations) / len(durations)) if durations else None,
+        "p95_ms": durations[int(len(durations) * 0.95) - 1] if len(durations) >= 20 else None,
+        "by_feature": dict(sorted(by_feature.items(), key=lambda kv: -kv[1])),
+        "by_model": dict(sorted(by_model.items(), key=lambda kv: -kv[1])),
+        "top_organizations": [
+            {"id": oid, "name": org_names.get(oid, oid), "calls": n}
+            for oid, n in sorted(by_org.items(), key=lambda kv: -kv[1])[:10]
+        ],
+        "top_users": sorted(
+            [{"id": uid, **info} for uid, info in by_user.items()], key=lambda x: -x["calls"])[:10],
+        "daily": [
+            {"date": (now - timedelta(days=i)).date().isoformat(),
+             "count": per_day.get((now - timedelta(days=i)).date().isoformat(), 0)}
+            for i in range(min(days, 30) - 1, -1, -1)
+        ],
+    }
 
 
 def _redact_phi_from_ai_text(text: str, proc: Optional[dict]) -> str:

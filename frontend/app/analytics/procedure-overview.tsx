@@ -164,9 +164,21 @@ export default function ProcedureOverviewScreen() {
           <Ionicons name="chevron-back" size={22} color="#1A2332" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle} data-testid="analytics-title">Procedure Analytics</Text>
+          <Text style={s.headerTitle} numberOfLines={1} data-testid="analytics-title">Procedure Analytics</Text>
           <Text style={s.headerSub}>{scopeLabel} · <Text style={{ textTransform: 'capitalize' }}>{roleLabel}</Text></Text>
         </View>
+        <TouchableOpacity
+          onPress={() => router.push('/analytics/guide?tab=overview')}
+          style={[s.exportBtn, { marginLeft: 6, paddingHorizontal: 8 }]}
+          testID="analytics-guide-link"
+          /* @ts-ignore */ data-testid="analytics-guide-link"
+          accessibilityLabel="How to read this view"
+        >
+          <Ionicons name="help-circle-outline" size={18} color="#1E88E5" />
+        </TouchableOpacity>
+      </View>
+      {/* Actions on their own row — beside the title they didn't fit on phones. */}
+      <View style={s.headerActions}>
         <TouchableOpacity
           onPress={handleExport}
           style={s.exportBtn}
@@ -178,21 +190,12 @@ export default function ProcedureOverviewScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => router.push('/analytics/advanced')}
-          style={[s.exportBtn, { marginLeft: 6, borderColor: '#2E7D32' }]}
+          style={[s.exportBtn, { borderColor: '#2E7D32' }]}
           testID="analytics-advanced-link"
           /* @ts-ignore */ data-testid="analytics-advanced-link"
         >
           <Ionicons name="analytics-outline" size={16} color="#2E7D32" />
           <Text style={[s.exportBtnTxt, { color: '#2E7D32' }]}>Advanced</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => router.push('/analytics/guide?tab=overview')}
-          style={[s.exportBtn, { marginLeft: 6, paddingHorizontal: 8 }]}
-          testID="analytics-guide-link"
-          /* @ts-ignore */ data-testid="analytics-guide-link"
-          accessibilityLabel="How to read this view"
-        >
-          <Ionicons name="help-circle-outline" size={18} color="#1E88E5" />
         </TouchableOpacity>
       </View>
 
@@ -692,6 +695,7 @@ function EmptyRow() {
 
 // ── Styles ─────────────────────────────────────────────────
 const s = StyleSheet.create({
+  headerActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEF2F6' },
   container: { flex: 1, backgroundColor: '#F5F7FB' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F7FB' },
   header: {

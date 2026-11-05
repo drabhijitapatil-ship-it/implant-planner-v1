@@ -70,6 +70,7 @@ export default function RootLayout() {
               <Stack.Screen name="admin/access-requests" options={{ headerShown: false }} />
               <Stack.Screen name="admin/issue-reports" options={{ headerShown: false }} />
               <Stack.Screen name="admin/platform-analytics" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/ai-logs" options={{ headerShown: false }} />
               <Stack.Screen name="report-issue" options={{ headerShown: false }} />
               <Stack.Screen name="admin/organizations/licences" options={{ headerShown: false }} />
               <Stack.Screen name="research/index" options={{ headerShown: false }} />

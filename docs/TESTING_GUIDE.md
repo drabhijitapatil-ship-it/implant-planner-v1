@@ -56,6 +56,9 @@ Open College App → tap Sign In.
 | Student           | `Gaurav.pandey@student.dental.edu` | `Student@123`    |
 | Nurse             | `Nurse.1@dental.edu`               | `Nurse@123`      |
 
+Admin Id : admin@implanr.app
+Admin password: Admin#implanr@2026
+
 Login should succeed and land on dashboard. If it fails, check backend terminal for errors.
 
 ---

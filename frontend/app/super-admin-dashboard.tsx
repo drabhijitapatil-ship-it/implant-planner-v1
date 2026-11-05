@@ -96,6 +96,15 @@ const NAV_CARDS: NavCard[] = [
     bg: '#CCFBF1',
   },
   {
+    key: 'ai-logs',
+    label: 'AI Logs',
+    sub: 'Every AI request — who, which feature, speed, tokens, errors',
+    icon: 'sparkles-outline',
+    route: '/admin/ai-logs',
+    color: '#7C3AED',
+    bg: '#EDE9FE',
+  },
+  {
     key: 'issue-reports',
     label: 'Issue Reports',
     sub: 'Problems users reported from the app',
