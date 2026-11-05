@@ -1493,6 +1493,7 @@ _PUSH_TITLE_BY_TYPE = {
     "rejection": "Case returned", "assigned": "New case assigned", "new_case": "New case scheduled",
     "scheduled": "Case scheduled", "reminder": "Reminder", "nudge": "Reminder",
     "access_request": "New access request",
+    "issue_report": "Issue report",
 }
 
 
@@ -4702,6 +4703,129 @@ async def update_access_request(request_id: str, body: AccessRequestUpdate, curr
     res = await db.access_requests.update_one({"_id": ObjectId(request_id)}, {"$set": upd})
     if not res.matched_count:
         raise HTTPException(status_code=404, detail="Request not found")
+    return {"message": "Updated"}
+
+
+# ── Report an Issue ──────────────────────────────────────────────────────
+# Any signed-in user can report a problem with a description and up to 5
+# screenshots; Implanr super admins triage them. Screenshots can show patient
+# data, so their files are readable only by the reporter and super admins
+# (see serve_upload).
+ISSUE_CATEGORIES = ("not_working", "wrong_data", "slow_or_crash", "suggestion", "other")
+ISSUE_STATUSES = ("new", "in_progress", "resolved", "closed")
+ISSUE_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
+
+
+class IssueReportIn(BaseModel):
+    category: str = Field("other", max_length=30)
+    description: str = Field(..., min_length=10, max_length=4000)
+    screen: Optional[str] = Field(None, max_length=200)
+    app_version: Optional[str] = Field(None, max_length=80)
+    platform: Optional[str] = Field(None, max_length=20)
+    device: Optional[str] = Field(None, max_length=120)
+    attachments: List[str] = Field(default_factory=list, max_length=5)
+
+
+class IssueReportUpdate(BaseModel):
+    status: Optional[str] = Field(None, max_length=20)
+    admin_note: Optional[str] = Field(None, max_length=2000)
+
+
+@api_router.post("/issues/upload")
+async def upload_issue_screenshot(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    ext = Path(file.filename or "").suffix.lower() or ".jpg"
+    if ext not in ISSUE_IMAGE_EXTS:
+        raise HTTPException(status_code=400, detail="Please attach a screenshot or photo (PNG, JPG or HEIC).")
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Screenshot is larger than 10 MB.")
+    unique_name = f"issue_{uuid.uuid4().hex}{ext}"
+    file_path = UPLOADS_DIR / unique_name
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    import mimetypes as _mt_issue
+    await _s3_put_async(file_path, content_type=_mt_issue.guess_type(str(file_path))[0])
+    await db.issue_uploads.insert_one({"filename": unique_name, "user_id": current_user["_id"], "created_at": datetime.utcnow()})
+    return {"filename": unique_name, "original_name": file.filename}
+
+
+@api_router.post("/issues")
+async def create_issue_report(body: IssueReportIn, current_user: dict = Depends(get_current_user)):
+    uid = current_user["_id"]
+    # Only screenshots this user uploaded can be attached.
+    names = [n for n in body.attachments if isinstance(n, str) and n.startswith("issue_")]
+    own = set()
+    if names:
+        async for u in db.issue_uploads.find({"filename": {"$in": names}, "user_id": uid}, {"filename": 1}):
+            own.add(u["filename"])
+    org_name = None
+    if current_user.get("org_id") and ObjectId.is_valid(str(current_user["org_id"])):
+        org = await db.organizations.find_one({"_id": ObjectId(str(current_user["org_id"]))}, {"name": 1})
+        org_name = (org or {}).get("name")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "category": body.category if body.category in ISSUE_CATEGORIES else "other",
+        "description": body.description.strip(),
+        "screen": body.screen, "app_version": body.app_version, "platform": body.platform, "device": body.device,
+        "attachments": [n for n in names if n in own],
+        "status": "new",
+        "user_id": uid, "user_name": current_user.get("name", ""), "user_email": current_user.get("email", ""),
+        "user_role": current_user.get("role", ""), "org_id": current_user.get("org_id"), "org_name": org_name,
+        "created_at": now, "updated_at": now,
+    }
+    res = await db.issue_reports.insert_one(doc)
+    async for admin in db.users.find({"$or": [{"role": "super_admin"}, {"is_super_admin": True}]}, {"_id": 1}):
+        await db.notifications.insert_one({
+            "user_id": str(admin["_id"]), "type": "issue_report", "read": False, "created_at": datetime.utcnow(),
+            "message": f"New issue report from {doc['user_name'] or 'a user'}" + (f" ({org_name})" if org_name else "") + ".",
+        })
+    return {"id": str(res.inserted_id), "status": "new"}
+
+
+@api_router.get("/issues/mine")
+async def list_my_issue_reports(current_user: dict = Depends(get_current_user)):
+    out = []
+    async for d in db.issue_reports.find({"user_id": current_user["_id"]}).sort("created_at", -1).limit(50):
+        d["id"] = str(d.pop("_id"))
+        out.append(d)
+    return out
+
+
+@api_router.get("/admin/issues")
+async def list_issue_reports(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    _require_platform_admin(current_user)
+    q: Dict[str, Any] = {"status": status} if status in ISSUE_STATUSES else {}
+    out = []
+    async for d in db.issue_reports.find(q).sort("created_at", -1).limit(500):
+        d["id"] = str(d.pop("_id"))
+        out.append(d)
+    return out
+
+
+@api_router.patch("/admin/issues/{issue_id}")
+async def update_issue_report(issue_id: str, body: IssueReportUpdate, current_user: dict = Depends(get_current_user)):
+    _require_platform_admin(current_user)
+    if not ObjectId.is_valid(issue_id):
+        raise HTTPException(status_code=404, detail="Report not found")
+    upd: Dict[str, Any] = {}
+    if body.status is not None:
+        if body.status not in ISSUE_STATUSES:
+            raise HTTPException(status_code=400, detail="Unknown status")
+        upd["status"] = body.status
+    if body.admin_note is not None:
+        upd["admin_note"] = body.admin_note.strip()
+    if not upd:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    upd.update({"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": current_user.get("name")})
+    report = await db.issue_reports.find_one_and_update({"_id": ObjectId(issue_id)}, {"$set": upd})
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if upd.get("status") in ("resolved", "closed") and report.get("status") != upd["status"]:
+        await db.notifications.insert_one({
+            "user_id": report["user_id"], "type": "issue_report", "read": False, "created_at": datetime.utcnow(),
+            "message": "Your reported issue has been marked " + ("resolved" if upd["status"] == "resolved" else "closed")
+                       + ". Thank you for letting us know.",
+        })
     return {"message": "Updated"}
 
 
@@ -12069,6 +12193,12 @@ async def serve_upload(
             pass
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
+    # Issue-report screenshots may show patient data: reporter + super admins only.
+    if filename.startswith("issue_"):
+        is_platform_admin = user.get("role") == "super_admin" or user.get("is_super_admin")
+        owner = await db.issue_uploads.find_one({"filename": filename}, {"user_id": 1})
+        if not is_platform_admin and not (owner and owner.get("user_id") == str(user["_id"])):
+            raise HTTPException(status_code=403, detail="Access denied")
 
     # Only supervisor, implant_incharge, administrator, and the procedure's student can view
     procedure = await db.procedures.find_one({"$or": [

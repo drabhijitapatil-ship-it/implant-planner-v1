@@ -36,6 +36,15 @@ type NavCard = {
 
 const NAV_CARDS: NavCard[] = [
   {
+    key: 'issue-reports',
+    label: 'Issue Reports',
+    sub: 'Problems users reported from the app',
+    icon: 'bug-outline',
+    route: '/admin/issue-reports',
+    color: '#C62828',
+    bg: '#FFEBEE',
+  },
+  {
     key: 'access-requests',
     label: 'Access Requests',
     sub: 'Colleges & clinics asking to join Implanr',

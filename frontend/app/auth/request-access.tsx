@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import api from "../../utils/api";
+import { DENTAL_COLLEGES, type DentalCollege } from "../../constants/dentalColleges";
 
 // "Request access" — replaces self-service registration on iOS (see
 // utils/storePolicy). Sends the details to the Implanr team, who contact the
@@ -27,6 +28,23 @@ const SIZES: Record<Kind, string[]> = {
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Every word typed must appear in the name or state ("bharati pune" finds
+// "Bharati Vidyapeeth Dental College & Hospital, Pune").
+function matchColleges(q: string): DentalCollege[] {
+  const words = q.toLowerCase().split(/[\s,.&]+/).filter(Boolean);
+  if (!words.length) return [];
+  return DENTAL_COLLEGES.filter((c) => {
+    const hay = `${c.name} ${c.state}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  }).slice(0, 6);
+}
+
+// DCI names mostly end with the town: "…, Pune" → "Pune".
+function cityFromName(name: string): string {
+  const i = name.lastIndexOf(",");
+  return i > 0 ? name.slice(i + 1).trim() : "";
+}
 
 export default function RequestAccessScreen() {
   const router = useRouter();
@@ -42,6 +60,17 @@ export default function RequestAccessScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const [pickedCollege, setPickedCollege] = useState<string | null>(null);
+  const suggestions = useMemo(
+    () => (kind === "college" && institution.trim().length >= 2 && institution !== pickedCollege ? matchColleges(institution) : []),
+    [kind, institution, pickedCollege],
+  );
+  const pickCollege = (c: DentalCollege) => {
+    setInstitution(c.name);
+    setPickedCollege(c.name);
+    const town = cityFromName(c.name);
+    if (town && !city.trim()) setCity(town);
+  };
 
   const submit = async () => {
     setError("");
@@ -135,7 +164,26 @@ export default function RequestAccessScreen() {
           </View>
 
           <Field label={kind === "college" ? "College name" : "Clinic name"} value={institution} onChangeText={setInstitution}
-            placeholder={kind === "college" ? "e.g. ABC Dental College & Hospital" : "e.g. Smile Dental Clinic"} />
+            placeholder={kind === "college" ? "Start typing, e.g. Bharati Vidyapeeth" : "e.g. Smile Dental Clinic"}
+            containerStyle={suggestions.length ? { marginBottom: 4 } : undefined} testID="request-access-institution" />
+          {suggestions.length > 0 && (
+            <View style={styles.suggestBox} testID="college-suggestions">
+              {suggestions.map((c, i) => (
+                <TouchableOpacity
+                  key={c.name}
+                  style={[styles.suggestRow, i === suggestions.length - 1 && { borderBottomWidth: 0 }]}
+                  onPress={() => pickCollege(c)}
+                >
+                  <Ionicons name="school-outline" size={16} color="#1565C0" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.suggestName} numberOfLines={2}>{c.name}</Text>
+                    <Text style={styles.suggestMeta}>{c.state} · {c.type === "Govt" ? "Government" : "Private"}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+              <Text style={styles.suggestHint}>Not listed? Just keep typing the full name.</Text>
+            </View>
+          )}
           <Field label="City" value={city} onChangeText={setCity} placeholder="e.g. Pune" />
           <Field label="Your full name" value={name} onChangeText={setName} placeholder="e.g. Dr. Priya Sharma" autoCapitalize="words" />
           <Field label="Designation (optional)" value={designation} onChangeText={setDesignation}
@@ -170,10 +218,10 @@ export default function RequestAccessScreen() {
   );
 }
 
-function Field(props: React.ComponentProps<typeof TextInput> & { label: string }) {
-  const { label, multiline, style, ...rest } = props;
+function Field(props: React.ComponentProps<typeof TextInput> & { label: string; containerStyle?: object }) {
+  const { label, multiline, style, containerStyle, ...rest } = props;
   return (
-    <View style={{ marginBottom: 14 }}>
+    <View style={[{ marginBottom: 14 }, containerStyle]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         {...rest}
@@ -187,6 +235,11 @@ function Field(props: React.ComponentProps<typeof TextInput> & { label: string }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  suggestBox: { backgroundColor: "#FFF", borderWidth: 1, borderColor: "#BBDEFB", borderRadius: 12, marginBottom: 14, overflow: "hidden" },
+  suggestRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#EEF2F6" },
+  suggestName: { fontSize: 14, fontWeight: "600", color: "#1A1A1A" },
+  suggestMeta: { fontSize: 11, color: "#78909C", marginTop: 1 },
+  suggestHint: { fontSize: 11, color: "#90A4AE", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#F8FAFC" },
   scroll: { padding: 20, paddingBottom: 48 },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#FFF", alignItems: "center", justifyContent: "center", marginBottom: 12 },
   header: { marginBottom: 20 },

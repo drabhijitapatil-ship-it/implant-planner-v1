@@ -94,6 +94,11 @@ export default function NotificationsScreen() {
       router.push((notification.research_study_id ? `/research/${notification.research_study_id}` : '/research') as any);
       return;
     }
+    if (t === 'issue_report') {
+      const isPlatformAdmin = user?.role === 'super_admin' || (user as any)?.is_super_admin;
+      router.push((isPlatformAdmin ? '/admin/issue-reports' : '/report-issue') as any);
+      return;
+    }
     router.push(`/procedures/${notification.procedure_id}`);
   };
 
@@ -118,6 +123,8 @@ export default function NotificationsScreen() {
         return 'flask';
       case 'research_inclusion':
         return 'paper-plane';
+      case 'issue_report':
+        return 'bug';
       default:
         return 'information-circle';
     }
@@ -135,6 +142,8 @@ export default function NotificationsScreen() {
       case 'referral_approval':
       case 'referral_status':
         return '#6A1B9A';
+      case 'issue_report':
+        return '#C62828';
       default:
         return '#007AFF';
     }

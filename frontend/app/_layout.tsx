@@ -27,7 +27,9 @@ SplashScreen.hideAsync().catch(() => {});
 function ActivityTracker({ children }: { children: React.ReactNode }) {
   const { recordActivity, user, loading } = useAuth();
   const pathname = usePathname();
-  useScreenCaptureProtection(!!user);
+  // Screenshot blocking is switched off so users can capture problems for
+  // "Report an Issue". Pass !!user again to turn the HIPAA guard back on.
+  useScreenCaptureProtection(false);
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
@@ -64,6 +66,8 @@ export default function RootLayout() {
               <Stack.Screen name="auth/register" options={{ headerShown: false }} />
               <Stack.Screen name="auth/request-access" options={{ headerShown: false }} />
               <Stack.Screen name="admin/access-requests" options={{ headerShown: false }} />
+              <Stack.Screen name="admin/issue-reports" options={{ headerShown: false }} />
+              <Stack.Screen name="report-issue" options={{ headerShown: false }} />
               <Stack.Screen name="admin/organizations/licences" options={{ headerShown: false }} />
               <Stack.Screen name="research/index" options={{ headerShown: false }} />
               <Stack.Screen name="research/new" options={{ headerShown: false }} />

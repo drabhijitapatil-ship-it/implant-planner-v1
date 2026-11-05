@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as ScreenCapture from 'expo-screen-capture';
+import { isScreenshotWindowOpen, setScreenshotGuardWanted } from '../utils/screenshotWindow';
 
 /**
  * HIPAA safeguard — prevents screenshots and screen recording of PHI.
@@ -24,10 +25,14 @@ import * as ScreenCapture from 'expo-screen-capture';
  */
 export function useScreenCaptureProtection(enabled: boolean): void {
   useEffect(() => {
+    setScreenshotGuardWanted(enabled && Platform.OS !== 'web');
     if (!enabled) return;
     if (Platform.OS === 'web') return;
     let cancelled = false;
     const apply = () => {
+      // "Report an Issue" may have lifted the block for a few minutes; it
+      // re-applies itself when that window closes.
+      if (isScreenshotWindowOpen()) return;
       ScreenCapture.preventScreenCaptureAsync('hipaa-phi-guard').catch(() => {
         // Non-fatal — continue even if the native module isn't available
         // (e.g. in Expo Go on very old OS versions).

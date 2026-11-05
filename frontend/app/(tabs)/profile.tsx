@@ -647,6 +647,17 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
           <TouchableOpacity
+            style={styles.rowItem}
+            onPress={() => router.push('/report-issue?from=Profile' as any)}
+            data-testid="link-report-issue"
+          >
+            <View style={[styles.iconBadge, { backgroundColor: '#FFEBEE' }]}>
+              <Ionicons name="bug" size={20} color="#C62828" />
+            </View>
+            <Text style={styles.photoButtonText}>Report an Issue</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.rowItem, styles.rowItemLast]}
             onPress={() => router.push('/legal/terms')}
             data-testid="link-terms"

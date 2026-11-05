@@ -220,6 +220,11 @@ function DrawerMenu({
           key: 'archived', icon: 'archive' as const, label: 'Archived', route: '/archived',
           bg: '#E8EAF6', chip: '#C5CAE9', iconColor: '#3949AB',
         }]),
+    // Report an Issue — every role.
+    {
+      key: 'report-issue', icon: 'bug' as const, label: 'Report an Issue', route: '/report-issue',
+      bg: '#FFEBEE', chip: '#FFCDD2', iconColor: '#C62828',
+    },
   ];
 
   return (
@@ -694,7 +699,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="implant-selection"
           options={{
-            title: 'Catalog',
+            title: 'Implant',
             tabBarIcon: ({ color, focused }) => (
               <GlassTabIcon focused={focused}>
                 <ImplantIcon size={23} color={color} />
